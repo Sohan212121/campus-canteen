@@ -195,12 +195,14 @@ In-app order status and pickup alerts.
 
 1. **`set_updated_at()`**: Automatically maintains `updated_at` timestamps on row updates (`profiles`, `menu_items`).
 2. **`handle_new_user()`**: Triggered on `AFTER INSERT ON auth.users`. Hardcodes `role = 'student'` and creates the user profile automatically without trusting any client metadata for privilege assignment.
-3. **`prevent_profile_escalation()`**: Triggered on `BEFORE UPDATE ON public.profiles`.
+3. **`prevent_profile_escalation()`**: Triggered on `BEFORE UPDATE ON public.profiles` (`SECURITY INVOKER`).
    - Allows direct SQL Editor / migration executions where `auth.uid() IS NULL`.
+   - Allows internal / service_role / `SECURITY DEFINER` functions (`current_user NOT IN ('authenticated', 'anon')`).
    - Allows users with `role = 'admin'` to update all columns.
    - For authenticated non-admins (`auth.uid() IS NOT NULL AND role != 'admin'`), raises an exception if `role`, `canteen_id`, or `is_active` are altered.
-4. **`prevent_menu_item_unauthorized_update()`**: Triggered on `BEFORE UPDATE ON public.menu_items`.
+4. **`prevent_menu_item_unauthorized_update()`**: Triggered on `BEFORE UPDATE ON public.menu_items` (`SECURITY INVOKER`).
    - Allows SQL Editor / service_role updates (`auth.uid() IS NULL`).
+   - Allows internal / service_role / `SECURITY DEFINER` functions (`current_user NOT IN ('authenticated', 'anon')`), ensuring server-side stock decrements are not blocked.
    - Allows admins full update capability.
    - Restricts staff to altering **only** `is_available` and `stock`, and only for items belonging to their assigned `canteen_id`.
 

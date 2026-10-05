@@ -98,7 +98,7 @@ GRANT EXECUTE ON FUNCTION public.is_staff_or_admin() TO authenticated, service_r
 -- Block role, canteen_id, is_active modifications for authenticated non-admins
 CREATE OR REPLACE FUNCTION public.prevent_profile_escalation()
 RETURNS TRIGGER
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = ''
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -106,6 +106,11 @@ DECLARE
 BEGIN
   -- Allow direct SQL Editor / service role migrations (auth.uid() IS NULL)
   IF auth.uid() IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  -- Allow postgres / service_role / background processes / SECURITY DEFINER functions
+  IF current_user NOT IN ('authenticated', 'anon') THEN
     RETURN NEW;
   END IF;
 
@@ -142,7 +147,7 @@ CREATE TRIGGER trg_prevent_profile_escalation
 -- Non-admins (staff) can ONLY change is_available and stock for their own canteen.
 CREATE OR REPLACE FUNCTION public.prevent_menu_item_unauthorized_update()
 RETURNS TRIGGER
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = ''
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -151,6 +156,11 @@ DECLARE
 BEGIN
   -- Allow direct SQL Editor / service role (auth.uid() IS NULL)
   IF auth.uid() IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  -- Allow postgres / service_role / background processes / SECURITY DEFINER functions
+  IF current_user NOT IN ('authenticated', 'anon') THEN
     RETURN NEW;
   END IF;
 
@@ -420,9 +430,8 @@ GRANT UPDATE (is_read) ON public.notifications TO authenticated;
 
 -- Admin grants for menu/category management through authenticated admin client
 GRANT INSERT, DELETE ON public.categories, public.menu_items, public.pickup_slots, public.canteens TO authenticated;
+GRANT UPDATE ON public.categories, public.pickup_slots, public.canteens TO authenticated;
 
--- 5.5 Anon Role Grants (Public catalog preview only; zero sensitive access)
-GRANT SELECT ON public.canteens, public.categories, public.menu_items TO anon;
-
--- Explicitly ensure anon gets NO access to user or operational tables
-REVOKE ALL ON public.profiles, public.orders, public.order_items, public.notifications, public.pickup_slots FROM anon;
+-- 5.5 Anon Role Grants (Zero access to any public schema tables or sequences)
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon;

@@ -165,7 +165,6 @@ CREATE INDEX idx_pickup_slots_lookup ON public.pickup_slots(canteen_id, slot_dat
 CREATE INDEX idx_orders_user_id ON public.orders(user_id);
 CREATE INDEX idx_orders_canteen_status ON public.orders(canteen_id, status);
 CREATE INDEX idx_orders_slot_id ON public.orders(slot_id);
-CREATE INDEX idx_orders_pickup_token ON public.orders(pickup_token);
 CREATE INDEX idx_orders_placed_at ON public.orders(placed_at DESC);
 CREATE INDEX idx_order_items_order_id ON public.order_items(order_id);
 CREATE INDEX idx_notifications_user_id ON public.notifications(user_id, is_read, created_at DESC);
@@ -175,6 +174,7 @@ CREATE INDEX idx_notifications_user_id ON public.notifications(user_id, is_read,
 -- 6.1 Generic updated_at timestamp trigger
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER
+SET search_path = ''
 LANGUAGE plpgsql AS $$
 BEGIN
   NEW.updated_at = now();

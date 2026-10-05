@@ -24,44 +24,44 @@ BEGIN
   INSERT INTO public.canteens (name, location, is_active)
   VALUES ('Main Campus Canteen', 'Campus Central Block, Ground Floor', true)
   ON CONFLICT (name) DO UPDATE
-    SET location = EXCLUDED.location, is_active = EXCLUDED.is_active
+    SET name = EXCLUDED.name
   RETURNING id INTO v_canteen_id;
 
   -- 2. CATEGORIES (6 Categories)
   INSERT INTO public.categories (canteen_id, name, display_order, is_active)
   VALUES (v_canteen_id, 'Breakfast', 1, true)
   ON CONFLICT (canteen_id, name) DO UPDATE
-    SET display_order = EXCLUDED.display_order
+    SET name = EXCLUDED.name
   RETURNING id INTO v_cat_breakfast;
 
   INSERT INTO public.categories (canteen_id, name, display_order, is_active)
   VALUES (v_canteen_id, 'Snacks & Chaat', 2, true)
   ON CONFLICT (canteen_id, name) DO UPDATE
-    SET display_order = EXCLUDED.display_order
+    SET name = EXCLUDED.name
   RETURNING id INTO v_cat_snacks;
 
   INSERT INTO public.categories (canteen_id, name, display_order, is_active)
   VALUES (v_canteen_id, 'Beverages', 3, true)
   ON CONFLICT (canteen_id, name) DO UPDATE
-    SET display_order = EXCLUDED.display_order
+    SET name = EXCLUDED.name
   RETURNING id INTO v_cat_beverages;
 
   INSERT INTO public.categories (canteen_id, name, display_order, is_active)
   VALUES (v_canteen_id, 'Lunch & Thali', 4, true)
   ON CONFLICT (canteen_id, name) DO UPDATE
-    SET display_order = EXCLUDED.display_order
+    SET name = EXCLUDED.name
   RETURNING id INTO v_cat_lunch;
 
   INSERT INTO public.categories (canteen_id, name, display_order, is_active)
   VALUES (v_canteen_id, 'Fast Food', 5, true)
   ON CONFLICT (canteen_id, name) DO UPDATE
-    SET display_order = EXCLUDED.display_order
+    SET name = EXCLUDED.name
   RETURNING id INTO v_cat_fastfood;
 
   INSERT INTO public.categories (canteen_id, name, display_order, is_active)
   VALUES (v_canteen_id, 'Combos & Specials', 6, true)
   ON CONFLICT (canteen_id, name) DO UPDATE
-    SET display_order = EXCLUDED.display_order
+    SET name = EXCLUDED.name
   RETURNING id INTO v_cat_combos;
 
   -- 3. MENU ITEMS (Prices in Paise: e.g. 5000 = ₹50.00)
