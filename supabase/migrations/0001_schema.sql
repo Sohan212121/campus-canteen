@@ -228,11 +228,13 @@ SET search_path = ''
 LANGUAGE plpgsql AS $$
 DECLARE
   v_canteen record;
-  v_now_ist timestamptz;
+  v_now_ist timestamp;
   v_today_ist date;
   v_current_time_ist time;
-  v_req_ist timestamptz;
+  v_req_ist timestamp;
   v_req_time_ist time;
+  v_ready_ist timestamp;
+  v_ready_time_ist time;
   v_order_prep integer := 0;
   v_max_prep integer := 0;
   v_total_units integer := 0;
@@ -243,7 +245,6 @@ DECLARE
   v_earliest_ready timestamptz;
   v_final_ready timestamptz;
   v_final_window_end timestamptz;
-  v_ready_time_ist time;
   v_item record;
   v_menu_item record;
   v_item_id uuid;
@@ -251,11 +252,11 @@ DECLARE
 BEGIN
   -- 1. Fetch and validate canteen
   SELECT 
-    id, opens_at, closes_at, last_order_time, 
-    kitchen_capacity, min_lead_minutes, hold_minutes, is_active
+    c.id, c.opens_at, c.closes_at, c.last_order_time, 
+    c.kitchen_capacity, c.min_lead_minutes, c.hold_minutes, c.is_active
   INTO v_canteen
-  FROM public.canteens
-  WHERE id = p_canteen_id;
+  FROM public.canteens c
+  WHERE c.id = p_canteen_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Canteen % not found', p_canteen_id;
@@ -265,7 +266,7 @@ BEGIN
     RAISE EXCEPTION 'Canteen is currently inactive';
   END IF;
 
-  -- Time in Asia/Kolkata
+  -- Time in Asia/Kolkata (stored as wall-clock timestamp)
   v_now_ist := clock_timestamp() AT TIME ZONE 'Asia/Kolkata';
   v_today_ist := v_now_ist::date;
   v_current_time_ist := v_now_ist::time;
@@ -292,10 +293,10 @@ BEGIN
       RAISE EXCEPTION 'Invalid quantity % for item %', v_qty, v_item_id;
     END IF;
 
-    SELECT prep_minutes, is_available, is_active
+    SELECT m.prep_minutes, m.is_available, m.is_active
     INTO v_menu_item
-    FROM public.menu_items
-    WHERE id = v_item_id AND canteen_id = p_canteen_id;
+    FROM public.menu_items m
+    WHERE m.id = v_item_id AND m.canteen_id = p_canteen_id;
 
     IF NOT FOUND THEN
       RAISE EXCEPTION 'Menu item % does not exist in this canteen', v_item_id;
@@ -325,12 +326,13 @@ BEGIN
   END IF;
 
   -- 4. Calculate queued_load of active orders in this canteen up to cutoff_time
-  SELECT COALESCE(SUM(prep_minutes_total), 0)
+  -- Aliased as 'o' to avoid column ambiguity with RETURNS TABLE parameters
+  SELECT COALESCE(SUM(o.prep_minutes_total), 0)
   INTO v_queued_load
-  FROM public.orders
-  WHERE canteen_id = p_canteen_id
-    AND status IN ('PLACED'::public.order_status, 'ACCEPTED'::public.order_status, 'PREPARING'::public.order_status)
-    AND estimated_ready_at <= v_cutoff_time;
+  FROM public.orders o
+  WHERE o.canteen_id = p_canteen_id
+    AND o.status IN ('PLACED'::public.order_status, 'ACCEPTED'::public.order_status, 'PREPARING'::public.order_status)
+    AND o.estimated_ready_at <= v_cutoff_time;
 
   -- Wait from queue
   v_wait_minutes := ceil(v_queued_load::numeric / v_canteen.kitchen_capacity)::integer;
@@ -345,13 +347,13 @@ BEGIN
   ELSE
     -- Scheduled Mode: requested_pickup_at is desired ready time
     v_req_ist := p_requested_at AT TIME ZONE 'Asia/Kolkata';
+    v_req_time_ist := v_req_ist::time;
 
     -- Must be on the same IST day
     IF v_req_ist::date <> v_today_ist THEN
       RAISE EXCEPTION 'Scheduled pickup time must be on the same day (%)', v_today_ist;
     END IF;
 
-    v_req_time_ist := v_req_ist::time;
     IF v_req_time_ist < v_canteen.opens_at OR v_req_time_ist > v_canteen.closes_at THEN
       RAISE EXCEPTION 'Scheduled pickup time % IST is outside canteen operating hours (% to % IST)',
         v_req_time_ist, v_canteen.opens_at, v_canteen.closes_at;
@@ -361,14 +363,15 @@ BEGIN
       v_final_ready := p_requested_at;
     ELSE
       RAISE EXCEPTION 'Requested pickup time % is earlier than earliest achievable time %',
-        to_char(p_requested_at AT TIME ZONE 'Asia/Kolkata', 'HH24:MI:SS'),
+        to_char(v_req_ist, 'HH24:MI:SS'),
         to_char(v_earliest_ready AT TIME ZONE 'Asia/Kolkata', 'HH24:MI:SS')
         USING HINT = to_char(v_earliest_ready AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD"T"HH24:MI:SSOF');
     END IF;
   END IF;
 
   -- Validate ready time does not exceed closing time
-  v_ready_time_ist := (v_final_ready AT TIME ZONE 'Asia/Kolkata')::time;
+  v_ready_ist := v_final_ready AT TIME ZONE 'Asia/Kolkata';
+  v_ready_time_ist := v_ready_ist::time;
   IF v_ready_time_ist > v_canteen.closes_at THEN
     RAISE EXCEPTION 'Ready time % IST exceeds canteen closing time % IST',
       v_ready_time_ist, v_canteen.closes_at;
