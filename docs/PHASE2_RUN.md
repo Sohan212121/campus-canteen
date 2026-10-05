@@ -9,9 +9,9 @@ This document provides step-by-step instructions for running the database migrat
 Run the following three SQL files in order inside the **Supabase Dashboard → SQL Editor** (New Query):
 
 ```
-Step 1: supabase/migrations/0001_schema.sql  (Tables, enums, sequences, constraints, indexes, triggers)
-Step 2: supabase/migrations/0002_rls.sql     (Helper functions, RLS policies, column guards, grants)
-Step 3: supabase/seed.sql                   (Canteen, categories, 24 menu items, 7-day pickup slots)
+Step 1: supabase/migrations/0001_schema.sql  (Tables, enums, sequences, constraints, indexes, triggers, estimate_ready_time)
+Step 2: supabase/migrations/0002_rls.sql     (Helper functions, RLS policies, column guards, grants, default privileges)
+Step 3: supabase/seed.sql                   (Canteen with operating hours, categories, 24 menu items)
 ```
 
 ---
@@ -38,7 +38,7 @@ Step 3: supabase/seed.sql                   (Canteen, categories, 24 menu items,
 3. Click **Run**.
 4. Confirm output contains: `NOTICE: Seed completed successfully for canteen id: <uuid>`.
 
-> **Note on Idempotency**: `seed.sql` uses `ON CONFLICT DO NOTHING` / `DO UPDATE`. It is completely safe to run multiple times.
+> **Note on Idempotency**: `seed.sql` uses `ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name` for canteens and categories, and `DO NOTHING` for menu items. It is completely safe to run multiple times without mutating user data or creating duplicates.
 
 ---
 
@@ -47,7 +47,6 @@ Step 3: supabase/seed.sql                   (Canteen, categories, 24 menu items,
 Execute the queries below in the SQL Editor to verify the installation.
 
 ### 3.1 Verify Table Row Counts & Seed Integrity
-Run this query to check all seeded entities:
 
 ```sql
 SELECT 
@@ -55,20 +54,41 @@ SELECT
 UNION ALL
 SELECT 'categories', count(*) FROM public.categories
 UNION ALL
-SELECT 'menu_items', count(*) FROM public.menu_items
-UNION ALL
-SELECT 'pickup_slots', count(*) FROM public.pickup_slots;
+SELECT 'menu_items', count(*) FROM public.menu_items;
 ```
 
 **Expected Results:**
 - `canteens`: 1 ("Main Campus Canteen")
 - `categories`: 6
 - `menu_items`: 24
-- `pickup_slots`: 28 (4 slots/day × 7 days)
 
 ---
 
-### 3.2 Verify RLS is Enabled on All 8 Tables
+### 3.2 Verify Canteen Operating Hours & Capacity (IST)
+
+```sql
+SELECT 
+  name,
+  kitchen_capacity,
+  min_lead_minutes,
+  hold_minutes,
+  opens_at,
+  closes_at,
+  last_order_time
+FROM public.canteens;
+```
+
+**Expected Result:**
+- `kitchen_capacity`: 3
+- `min_lead_minutes`: 5
+- `hold_minutes`: 15
+- `opens_at`: `08:00:00`
+- `closes_at`: `17:00:00`
+- `last_order_time`: `16:30:00`
+
+---
+
+### 3.3 Verify RLS is Enabled on All 7 Tables
 
 ```sql
 SELECT
@@ -78,72 +98,58 @@ FROM pg_tables
 WHERE schemaname = 'public'
   AND tablename IN (
     'canteens', 'profiles', 'categories', 'menu_items',
-    'pickup_slots', 'orders', 'order_items', 'notifications'
+    'orders', 'order_items', 'notifications'
   )
 ORDER BY tablename;
 ```
 
-**Expected Result:** `rls_enabled` must be `true` for all 8 tables.
+**Expected Result:** `rls_enabled` must be `true` for all 7 tables.
 
 ---
 
-### 3.3 Verify Pickup Slot Dates and IST Timezone
+### 3.4 Test `estimate_ready_time` Function
+
+Run a test estimation query using an item from the seed (e.g. Masala Dosa):
 
 ```sql
-SELECT 
-  slot_date, 
-  start_time, 
-  end_time, 
-  max_orders, 
-  cutoff_minutes
-FROM public.pickup_slots
-ORDER BY slot_date, start_time
-LIMIT 8;
+DO $$
+DECLARE
+  v_canteen_id uuid;
+  v_item_id uuid;
+  v_result record;
+BEGIN
+  SELECT id INTO v_canteen_id FROM public.canteens LIMIT 1;
+  SELECT id INTO v_item_id FROM public.menu_items WHERE canteen_id = v_canteen_id LIMIT 1;
+
+  SELECT * INTO v_result 
+  FROM public.estimate_ready_time(
+    v_canteen_id,
+    jsonb_build_array(
+      jsonb_build_object('menu_item_id', v_item_id, 'quantity', 2)
+    ),
+    NULL -- ASAP mode
+  );
+
+  RAISE NOTICE 'ASAP Estimation -> Estimated Ready: %, Window End: %, Total Prep Mins: %',
+    v_result.estimated_ready_at, v_result.pickup_window_end, v_result.prep_minutes_total;
+END;
+$$;
 ```
 
-**Expected Result:**
-- Slots should span from today (`CURRENT_DATE` in Asia/Kolkata) for 7 consecutive days.
-- Times: `10:30:00 - 10:45:00`, `10:45:00 - 11:00:00`, `13:00:00 - 13:15:00`, `13:15:00 - 13:30:00`.
-- All `max_orders = 30` and `cutoff_minutes = 15`.
-
 ---
 
-### 3.4 Verify Menu Items and Pricing (in Paise)
+## 4. Security & Role Assignment Tests
+
+### 4.1 Promoting a User to Staff or Admin (Manual Operation)
+Since `current_user` in the Supabase Dashboard SQL Editor runs as `postgres` (which is not in `('authenticated', 'anon')`), the protective triggers will not block manual administrative promotions:
 
 ```sql
-SELECT 
-  m.name AS item_name,
-  c.name AS category_name,
-  m.price_paise,
-  (m.price_paise / 100.0) AS price_inr,
-  m.is_veg,
-  m.prep_minutes
-FROM public.menu_items m
-JOIN public.categories c ON c.id = m.category_id
-ORDER BY c.display_order, m.price_paise
-LIMIT 10;
-```
-
-**Expected Result:** Shows realistic Indian campus items formatted with prices in paise (e.g. ₹15 Chai = 1500, ₹50 Masala Dosa = 5000).
-
----
-
-## 4. Security & Constraint Tests
-
-### 4.1 Test Profile Creation on New Auth User
-Simulate auth user creation (or register a user through Supabase Auth):
-- The `handle_new_user` trigger automatically populates `public.profiles` with `role = 'student'`.
-
-### 4.2 Promoting a User to Staff or Admin (Manual Operation)
-Since `auth.uid() IS NULL` when executing SQL in the Dashboard SQL Editor, you can manually promote any user without triggering escalation barriers:
-
-```sql
--- Replace with actual user ID from auth.users or profiles
+-- Promote a user to Admin:
 UPDATE public.profiles
 SET role = 'admin'
 WHERE id = '<USER_UUID>';
 
--- Or assign staff to the main canteen:
+-- Assign a user to Staff for the Main Campus Canteen:
 UPDATE public.profiles
 SET 
   role = 'staff',
@@ -158,11 +164,11 @@ WHERE id = '<USER_UUID>';
 If you ever need to reset the schema during development:
 
 ```sql
--- Complete reset (drops all public canteen tables and types)
+-- Complete reset (drops all public canteen tables, functions, and types)
+DROP FUNCTION IF EXISTS public.estimate_ready_time(uuid, jsonb, timestamptz);
 DROP TABLE IF EXISTS public.notifications CASCADE;
 DROP TABLE IF EXISTS public.order_items CASCADE;
 DROP TABLE IF EXISTS public.orders CASCADE;
-DROP TABLE IF EXISTS public.pickup_slots CASCADE;
 DROP TABLE IF EXISTS public.menu_items CASCADE;
 DROP TABLE IF EXISTS public.categories CASCADE;
 DROP TABLE IF EXISTS public.profiles CASCADE;

@@ -1,10 +1,10 @@
 -- ==============================================================================
 -- Seed: seed.sql
 -- Description: Idempotent seed data for Campus Canteen
--- Canteen: Main Campus Canteen
+-- Canteen: Main Campus Canteen (with kitchen capacity and operating hours)
 -- Categories: 6 categories
 -- Menu Items: 24 realistic Indian campus food & drink items
--- Pickup Slots: 7 days of 15-minute break windows in Asia/Kolkata (IST)
+-- Dynamic Pickup Model: No static slots
 -- ==============================================================================
 
 DO $$
@@ -16,18 +16,21 @@ DECLARE
   v_cat_lunch uuid;
   v_cat_fastfood uuid;
   v_cat_combos uuid;
-  v_day_offset integer;
-  v_slot_date date;
-  v_today_ist date;
 BEGIN
-  -- 1. CANTEEN (Safe re-run with ON CONFLICT)
-  INSERT INTO public.canteens (name, location, is_active)
-  VALUES ('Main Campus Canteen', 'Campus Central Block, Ground Floor', true)
+  -- 1. CANTEEN (Safe re-run with no-op DO UPDATE preserving existing data)
+  INSERT INTO public.canteens (
+    name, location, kitchen_capacity, min_lead_minutes, hold_minutes,
+    opens_at, closes_at, last_order_time, is_active
+  )
+  VALUES (
+    'Main Campus Canteen', 'Campus Central Block, Ground Floor',
+    3, 5, 15, '08:00:00', '17:00:00', '16:30:00', true
+  )
   ON CONFLICT (name) DO UPDATE
     SET name = EXCLUDED.name
   RETURNING id INTO v_canteen_id;
 
-  -- 2. CATEGORIES (6 Categories)
+  -- 2. CATEGORIES (6 Categories with no-op DO UPDATE)
   INSERT INTO public.categories (canteen_id, name, display_order, is_active)
   VALUES (v_canteen_id, 'Breakfast', 1, true)
   ON CONFLICT (canteen_id, name) DO UPDATE
@@ -119,36 +122,6 @@ BEGIN
     (v_canteen_id, v_cat_combos, 'Break Fast-Track: Samosa & Chai', '1 Plate Samosa (2 pcs) paired with a piping hot cup of Masala Chai', 4000, true, true, 3, true),
     (v_canteen_id, v_cat_combos, 'South Indian Power Combo', 'Masala Dosa + 1 Medu Vada + South Indian Filter Coffee', 7500, true, true, 8, true)
   ON CONFLICT (canteen_id, name) DO NOTHING;
-
-  -- 4. PICKUP SLOTS (Next 7 days in Asia/Kolkata IST)
-  -- Windows:
-  -- Morning Break: 10:30-10:45 & 10:45-11:00
-  -- Lunch Break:   13:00-13:15 & 13:15-13:30
-  v_today_ist := (now() AT TIME ZONE 'Asia/Kolkata')::date;
-
-  FOR v_day_offset IN 0..6 LOOP
-    v_slot_date := v_today_ist + v_day_offset;
-
-    -- Morning Slot 1
-    INSERT INTO public.pickup_slots (canteen_id, slot_date, start_time, end_time, max_orders, cutoff_minutes, is_active)
-    VALUES (v_canteen_id, v_slot_date, '10:30:00', '10:45:00', 30, 15, true)
-    ON CONFLICT (canteen_id, slot_date, start_time, end_time) DO NOTHING;
-
-    -- Morning Slot 2
-    INSERT INTO public.pickup_slots (canteen_id, slot_date, start_time, end_time, max_orders, cutoff_minutes, is_active)
-    VALUES (v_canteen_id, v_slot_date, '10:45:00', '11:00:00', 30, 15, true)
-    ON CONFLICT (canteen_id, slot_date, start_time, end_time) DO NOTHING;
-
-    -- Lunch Slot 1
-    INSERT INTO public.pickup_slots (canteen_id, slot_date, start_time, end_time, max_orders, cutoff_minutes, is_active)
-    VALUES (v_canteen_id, v_slot_date, '13:00:00', '13:15:00', 30, 15, true)
-    ON CONFLICT (canteen_id, slot_date, start_time, end_time) DO NOTHING;
-
-    -- Lunch Slot 2
-    INSERT INTO public.pickup_slots (canteen_id, slot_date, start_time, end_time, max_orders, cutoff_minutes, is_active)
-    VALUES (v_canteen_id, v_slot_date, '13:15:00', '13:30:00', 30, 15, true)
-    ON CONFLICT (canteen_id, slot_date, start_time, end_time) DO NOTHING;
-  END LOOP;
 
   RAISE NOTICE 'Seed completed successfully for canteen id: %', v_canteen_id;
 END;

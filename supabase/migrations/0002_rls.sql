@@ -90,11 +90,14 @@ GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, service_role;
 REVOKE EXECUTE ON FUNCTION public.is_staff_or_admin() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_staff_or_admin() TO authenticated, service_role;
 
+REVOKE EXECUTE ON FUNCTION public.estimate_ready_time(uuid, jsonb, timestamptz) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.estimate_ready_time(uuid, jsonb, timestamptz) TO authenticated, service_role;
+
 
 -- 2. SECURITY TRIGGERS (Enforce column boundaries at DB level)
 
 -- 2.1 Profile escalation guard:
--- Allow changes when auth.uid() IS NULL (SQL Editor / migrations / service role)
+-- Bypass for postgres / service_role / background processes / SECURITY DEFINER functions
 -- Block role, canteen_id, is_active modifications for authenticated non-admins
 CREATE OR REPLACE FUNCTION public.prevent_profile_escalation()
 RETURNS TRIGGER
@@ -104,11 +107,6 @@ LANGUAGE plpgsql AS $$
 DECLARE
   v_caller_role public.user_role;
 BEGIN
-  -- Allow direct SQL Editor / service role migrations (auth.uid() IS NULL)
-  IF auth.uid() IS NULL THEN
-    RETURN NEW;
-  END IF;
-
   -- Allow postgres / service_role / background processes / SECURITY DEFINER functions
   IF current_user NOT IN ('authenticated', 'anon') THEN
     RETURN NEW;
@@ -144,6 +142,7 @@ CREATE TRIGGER trg_prevent_profile_escalation
   FOR EACH ROW EXECUTE FUNCTION public.prevent_profile_escalation();
 
 -- 2.2 Menu item update guard:
+-- Bypass for postgres / service_role / background processes / SECURITY DEFINER functions
 -- Non-admins (staff) can ONLY change is_available and stock for their own canteen.
 CREATE OR REPLACE FUNCTION public.prevent_menu_item_unauthorized_update()
 RETURNS TRIGGER
@@ -154,11 +153,6 @@ DECLARE
   v_caller_role public.user_role;
   v_caller_canteen uuid;
 BEGIN
-  -- Allow direct SQL Editor / service role (auth.uid() IS NULL)
-  IF auth.uid() IS NULL THEN
-    RETURN NEW;
-  END IF;
-
   -- Allow postgres / service_role / background processes / SECURITY DEFINER functions
   IF current_user NOT IN ('authenticated', 'anon') THEN
     RETURN NEW;
@@ -214,7 +208,6 @@ ALTER TABLE public.canteens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.menu_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.pickup_slots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
@@ -324,20 +317,7 @@ CREATE POLICY "menu_items_update_staff"
     AND canteen_id = public.current_user_canteen()
   );
 
--- 4.5 Pickup Slots
--- Readable by all authenticated; managed by admin
-CREATE POLICY "pickup_slots_select_authenticated"
-  ON public.pickup_slots FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "pickup_slots_all_admin"
-  ON public.pickup_slots FOR ALL
-  TO authenticated
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
-
--- 4.6 Orders
+-- 4.5 Orders
 -- Students read their own orders; staff read orders for their canteen; admin reads all
 -- Direct insert/update/delete blocked for students & staff (performed via server functions in Phase 5)
 CREATE POLICY "orders_select_self"
@@ -358,7 +338,7 @@ CREATE POLICY "orders_all_admin"
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
--- 4.7 Order Items
+-- 4.6 Order Items
 -- Students read items for their own orders; staff read items for their canteen's orders; admin reads all
 CREATE POLICY "order_items_select_self"
   ON public.order_items FOR SELECT
@@ -384,7 +364,7 @@ CREATE POLICY "order_items_all_admin"
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
--- 4.8 Notifications
+-- 4.7 Notifications
 -- Users read their own notifications; admin reads all; users update is_read only
 CREATE POLICY "notifications_select_self"
   ON public.notifications FOR SELECT
@@ -421,17 +401,21 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
 GRANT ALL ON ALL ROUTINES IN SCHEMA public TO service_role;
 
 -- 5.4 Authenticated Role Grants
-GRANT SELECT ON public.canteens, public.categories, public.menu_items, public.pickup_slots TO authenticated;
+GRANT SELECT ON public.canteens, public.categories, public.menu_items TO authenticated;
 GRANT SELECT, UPDATE ON public.profiles TO authenticated;
 GRANT UPDATE ON public.menu_items TO authenticated;
 GRANT SELECT ON public.orders, public.order_items TO authenticated;
 GRANT SELECT ON public.notifications TO authenticated;
 GRANT UPDATE (is_read) ON public.notifications TO authenticated;
 
--- Admin grants for menu/category management through authenticated admin client
-GRANT INSERT, DELETE ON public.categories, public.menu_items, public.pickup_slots, public.canteens TO authenticated;
-GRANT UPDATE ON public.categories, public.pickup_slots, public.canteens TO authenticated;
+-- Admin grants for menu/category/canteen management through authenticated admin client
+GRANT INSERT, UPDATE, DELETE ON public.categories, public.menu_items, public.canteens TO authenticated;
 
--- 5.5 Anon Role Grants (Zero access to any public schema tables or sequences)
+-- 5.5 Anon Role Grants (Zero access to any public schema data)
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon;
+REVOKE ALL ON ALL ROUTINES IN SCHEMA public FROM anon;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON ROUTINES FROM anon;
