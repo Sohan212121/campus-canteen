@@ -17,11 +17,12 @@ const loginSchema = z.object({
 });
 
 const signupSchema = z.object({
-  fullName: z.string().min(1, "Full name is required."),
-  email: z.string().email("Please enter a valid email address."),
+  fullName: z.string().trim().min(1, "Full name is required."),
+  collegeId: z.string().trim().min(1, "College ID is required."),
+  email: z.string().trim().email("Please enter a valid email address."),
   password: z
     .string()
-    .min(6, "Password must be at least 6 characters."),
+    .min(8, "Password must be at least 8 characters."),
 });
 
 // ---------------------------------------------------------------------------
@@ -96,6 +97,7 @@ export async function signupAction(
 ): Promise<AuthActionState> {
   const raw = {
     fullName: formData.get("fullName"),
+    collegeId: formData.get("collegeId"),
     email: formData.get("email"),
     password: formData.get("password"),
   };
@@ -113,13 +115,16 @@ export async function signupAction(
     options: {
       data: {
         full_name: parsed.data.fullName,
+        college_id: parsed.data.collegeId,
       },
     },
   });
 
   if (error) {
-    // Generic error — do not reveal if account exists.
-    return { error: "Invalid email or password" };
+    // Log the real error server-side only
+    console.error("Supabase signup error:", error);
+    // Generic error — never reveal whether an email is already registered
+    return { error: "Could not create account. Please try again." };
   }
 
   redirect("/");

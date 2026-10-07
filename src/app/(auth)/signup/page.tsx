@@ -54,6 +54,23 @@ export default function SignupPage() {
           </div>
 
           <div className="space-y-1.5">
+            <label htmlFor="collegeId" className="text-sm font-medium">
+              College ID
+            </label>
+            <Input
+              id="collegeId"
+              name="collegeId"
+              type="text"
+              placeholder="e.g. CS2024001"
+              required
+              autoComplete="username"
+            />
+            {state.fieldErrors?.collegeId && (
+              <p className="text-xs text-destructive">{state.fieldErrors.collegeId[0]}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
             <label htmlFor="email" className="text-sm font-medium">
               Email
             </label>
@@ -78,8 +95,9 @@ export default function SignupPage() {
               id="password"
               name="password"
               type="password"
-              placeholder="••••••••"
+              placeholder="At least 8 characters"
               required
+              minLength={8}
               autoComplete="new-password"
             />
             {state.fieldErrors?.password && (

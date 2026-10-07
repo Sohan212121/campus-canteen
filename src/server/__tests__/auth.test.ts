@@ -17,6 +17,7 @@ vi.mock("next/navigation", () => ({
 // Supabase mock helpers
 const mockGetUser = vi.fn();
 const mockFrom = vi.fn();
+const mockSignUp = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createReadOnlyClient: vi.fn().mockResolvedValue({
@@ -25,10 +26,16 @@ vi.mock("@/lib/supabase/server", () => ({
     },
     from: (...args: unknown[]) => mockFrom(...args),
   }),
+  createClient: vi.fn().mockResolvedValue({
+    auth: {
+      signUp: (...args: unknown[]) => mockSignUp(...args),
+    },
+  }),
 }));
 
-// Import module under test AFTER mocks are registered
+// Import modules under test AFTER mocks are registered
 import { getCurrentUser, requireRole } from "@/server/auth";
+import { signupAction } from "@/server/actions/auth";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -185,4 +192,50 @@ describe("server/auth", () => {
       expect(mockRedirect).not.toHaveBeenCalled();
     });
   });
+
+  // =========================================================================
+  // signupAction() validation
+  // =========================================================================
+
+  describe("signupAction() validation", () => {
+    it("returns inline field errors when required fields are missing or invalid", async () => {
+      const formData = new FormData();
+      formData.set("fullName", "");
+      formData.set("collegeId", "");
+      formData.set("email", "invalid-email");
+      formData.set("password", "short"); // < 8 characters
+
+      const result = await signupAction({}, formData);
+
+      expect(result.error).toBeUndefined();
+      expect(result.fieldErrors).toBeDefined();
+      expect(result.fieldErrors?.fullName).toContain("Full name is required.");
+      expect(result.fieldErrors?.collegeId).toContain("College ID is required.");
+      expect(result.fieldErrors?.email).toContain("Please enter a valid email address.");
+      expect(result.fieldErrors?.password).toContain("Password must be at least 8 characters.");
+      // Ensure it never calls supabase or returns a login error
+      expect(mockSignUp).not.toHaveBeenCalled();
+    });
+
+    it("logs error and returns generic signup error when Supabase fails", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      mockSignUp.mockResolvedValue({
+        error: { message: "User already registered" },
+      });
+
+      const formData = new FormData();
+      formData.set("fullName", "John Doe");
+      formData.set("collegeId", "CS2024001");
+      formData.set("email", "john@campus.edu");
+      formData.set("password", "securepassword123");
+
+      const result = await signupAction({}, formData);
+
+      expect(result.error).toBe("Could not create account. Please try again.");
+      expect(result.fieldErrors).toBeUndefined();
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+  });
 });
+

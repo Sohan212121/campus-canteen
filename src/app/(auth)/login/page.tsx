@@ -19,7 +19,7 @@ function LoginForm() {
   const errorParam = searchParams.get("error");
 
   const deactivatedMessage =
-    errorParam === "account_deactivated"
+    !state.error && errorParam === "account_deactivated"
       ? "Your account has been deactivated. Contact administration."
       : null;
 
