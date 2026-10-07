@@ -1,6 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+/**
+ * Full read-write Supabase client for Server Actions & Route Handlers.
+ * Can set cookies to refresh the session token.
+ */
 export async function createClient() {
   const cookieStore = await cookies();
 
@@ -19,7 +23,7 @@ export async function createClient() {
             );
           } catch {
             // The `setAll` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing user sessions.
+            // This can be ignored if you have a proxy refreshing user sessions.
           }
         },
       },
@@ -27,6 +31,34 @@ export async function createClient() {
   );
 }
 
+/**
+ * Read-only Supabase client for Server Components.
+ * Never writes cookies — safe to call from any RSC rendering context.
+ */
+export async function createReadOnlyClient() {
+  const cookieStore = await cookies();
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll() {
+          // Intentionally empty — this client is read-only and must never
+          // write cookies. It is used exclusively by Server Components.
+        },
+      },
+    }
+  );
+}
+
+/**
+ * Admin / service-role client — bypasses RLS.
+ * Must only be used in trusted server-side code.
+ */
 export function createAdminClient() {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
