@@ -19,6 +19,34 @@ export async function createClient() {
   const cookieStore = await cookies();
   const { url, key } = getSupabaseCredentials();
 
+  if (!url || !key) {
+    return {
+      auth: {
+        getUser: async () => ({ data: { user: null }, error: null }),
+        signInWithPassword: async () => ({
+          data: { user: null, session: null },
+          error: { message: "Invalid email or password" },
+        }),
+        signUp: async () => ({
+          data: { user: null, session: null },
+          error: { message: "Invalid email or password" },
+        }),
+        signOut: async () => ({ error: null }),
+        exchangeCodeForSession: async () => ({
+          data: { user: null, session: null },
+          error: { message: "Auth code error" },
+        }),
+      },
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            single: async () => ({ data: null, error: null }),
+          }),
+        }),
+      }),
+    } as unknown as ReturnType<typeof createServerClient>;
+  }
+
   return createServerClient(url, key, {
     cookies: {
       getAll() {
@@ -46,6 +74,21 @@ export async function createReadOnlyClient() {
   const cookieStore = await cookies();
   const { url, key } = getSupabaseCredentials();
 
+  if (!url || !key) {
+    return {
+      auth: {
+        getUser: async () => ({ data: { user: null }, error: null }),
+      },
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            single: async () => ({ data: null, error: null }),
+          }),
+        }),
+      }),
+    } as unknown as ReturnType<typeof createServerClient>;
+  }
+
   return createServerClient(url, key, {
     cookies: {
       getAll() {
@@ -66,6 +109,18 @@ export async function createReadOnlyClient() {
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
   const serviceKey = process.env.SUPABASE_SECRET_KEY?.trim() || "";
+
+  if (!url || !serviceKey) {
+    return {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            single: async () => ({ data: null, error: null }),
+          }),
+        }),
+      }),
+    } as unknown as ReturnType<typeof createServerClient>;
+  }
 
   return createServerClient(url, serviceKey, {
     cookies: {
