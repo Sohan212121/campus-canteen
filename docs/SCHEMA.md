@@ -278,3 +278,49 @@ public.estimate_ready_time(
   - `INSERT, UPDATE, DELETE` on `categories`, `menu_items`, `canteens` (guarded by admin RLS).
   - `EXECUTE` on `current_user_role()`, `current_user_canteen()`, `is_admin()`, `is_staff_or_admin()`, and `estimate_ready_time()`.
 - `service_role`: Unrestricted access across all tables, sequences, and routines.
+
+---
+
+## 8. Phase 5: Order Placement Procedure (`public.place_order`)
+
+Added in migration `0003_place_order.sql`:
+
+### 8.1 Function Signature
+```sql
+public.place_order(
+  p_canteen_id uuid,
+  p_items jsonb, -- array of {"menu_item_id": uuid, "quantity": integer}
+  p_payment_method public.payment_method,
+  p_idempotency_key text,
+  p_requested_at timestamptz DEFAULT NULL
+) RETURNS jsonb
+```
+- **Security**: `SECURITY DEFINER`, `SET search_path = ''`.
+- **Permissions**: Revoked from `PUBLIC`, `anon`; granted to `authenticated`, `service_role`.
+- **Caller Context**: Strictly derives user from `auth.uid()`. Does not accept an explicit user ID parameter.
+
+### 8.2 Execution Guarantees
+1. **Idempotency**: Dual-check pattern (evaluated at start and re-checked immediately after acquiring the canteen row lock). Concurrent race conditions on `(user_id, idempotency_key)` are caught by a sub-block `unique_violation` handler that returns the committed order with `was_duplicate = true` while rolling back stock decrements.
+2. **Active Order Limit**: Maximum 3 active orders per user (`PLACED`, `ACCEPTED`, `PREPARING`, `READY`).
+3. **Deadlock Prevention**: Target `menu_items` rows locked `FOR UPDATE ORDER BY id ASC`.
+4. **Price Integrity**: Prices calculated exclusively from locked database rows; client prices are completely untrusted.
+5. **Token Generation**: Generates a 6-digit numeric token (`(100000 + floor(random() * 900000)::int)::text`) with bounded retries.
+6. **Audit & Alerts**: Automatically creates a record in `public.notifications` upon successful placement.
+
+### 8.3 Error Codes Taxonomy
+| Error Code | Trigger Condition |
+|---|---|
+| `UNAUTHENTICATED` | `auth.uid()` is null |
+| `USER_INACTIVE` | Profile deactivated or not found |
+| `INVALID_PAYMENT_METHOD` | Payment method other than `PAY_AT_PICKUP` |
+| `INVALID_IDEMPOTENCY_KEY` | Key is null, empty, or exceeds 64 characters |
+| `INVALID_INPUT` | Empty items, > 20 distinct items, or item quantity not in 1..10 |
+| `CANTEEN_NOT_FOUND` | Specified canteen ID does not exist |
+| `CANTEEN_CLOSED` | Canteen is inactive or outside operating hours |
+| `ORDERS_CLOSED` | Pre-order cutoff time reached for today |
+| `TOO_MANY_ACTIVE_ORDERS` | User already has 3 active orders |
+| `ITEM_UNAVAILABLE` | Item inactive, unavailable, or belongs to another canteen |
+| `INSUFFICIENT_STOCK` | Requested quantity exceeds available daily stock |
+| `INVALID_SCHEDULE` | Scheduled pickup time not today or outside operating hours |
+| `SCHEDULE_TOO_EARLY` | Requested time is before earliest possible kitchen readiness (includes `HINT` with earliest IST timestamp) |
+

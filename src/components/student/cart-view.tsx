@@ -347,30 +347,40 @@ export function CartView() {
         </dl>
       </div>
 
-      {/* Checkout Button & Phase 5 Notice */}
+      {/* Checkout Button & Phase 5 Execution */}
       <div className="space-y-2 pt-2">
         {/*
           * =====================================================================
-          * PHASE 5 NOTE:
-          * Checkout and order creation will be implemented in Phase 5.
-          *
-          * In Phase 5, the server order-creation action MUST strictly re-read
-          * prices, availability, and kitchen capacity directly from the
-          * database inside an atomic transaction.
-          *
-          * Client-computed subtotals, item totals, and item details are
-          * completely untrusted and exist purely for UI presentation.
+          * PHASE 5 VERIFICATION NOTE:
+          * In Phase 5, the server order-creation action (placeOrderAction)
+          * strictly re-reads item prices, availability, and kitchen capacity
+          * directly from the database inside an atomic transaction.
+          * Client-computed subtotals and totals are untrusted and for display only.
           * =====================================================================
           */}
-        <Button
-          type="button"
-          disabled
-          className="w-full h-12 text-base font-semibold shadow-xs opacity-70 cursor-not-allowed"
-        >
-          Checkout (coming next)
-        </Button>
+        {hasUnavailableItems ? (
+          <Button
+            type="button"
+            disabled
+            className="w-full h-12 text-sm font-semibold opacity-60 cursor-not-allowed"
+          >
+            Remove unavailable items to checkout
+          </Button>
+        ) : (
+          <Link
+            href="/checkout"
+            className={buttonVariants({
+              size: "lg",
+              className:
+                "w-full h-12 text-base font-semibold shadow-xs inline-flex items-center justify-center gap-2",
+            })}
+          >
+            <span>Proceed to Checkout</span>
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        )}
         <p className="text-center text-[11px] text-muted-foreground">
-          Online pre-ordering & pickup window selection will be enabled in Phase 5.
+          You will select ASAP or scheduled pickup on the checkout screen.
         </p>
       </div>
     </div>
