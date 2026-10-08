@@ -32,6 +32,11 @@ Open and review [`supabase/migrations/0003_place_order.sql`](../supabase/migrati
 4. Paste the entire content of [`supabase/migrations/0003_place_order.sql`](../supabase/migrations/0003_place_order.sql).
 5. Click **Run**.
 6. Verify output confirms: `Success. No rows returned`.
+7. **Important**: Migration 0003 includes `NOTIFY pgrst, 'reload schema';` at the bottom. If PostgREST does not immediately recognize `place_order`, run this quick statement in the SQL Editor:
+   ```sql
+   NOTIFY pgrst, 'reload schema';
+   ```
+
 
 ---
 

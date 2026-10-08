@@ -551,5 +551,11 @@ END;
 $$;
 
 -- 3. PERMISSIONS
+REVOKE EXECUTE ON FUNCTION public.estimate_ready_time(uuid, jsonb, timestamptz) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.estimate_ready_time(uuid, jsonb, timestamptz) TO authenticated, service_role;
+
 REVOKE EXECUTE ON FUNCTION public.place_order(uuid, jsonb, public.payment_method, text, timestamptz) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.place_order(uuid, jsonb, public.payment_method, text, timestamptz) TO authenticated, service_role;
+
+-- 4. RELOAD SCHEMA CACHE
+NOTIFY pgrst, 'reload schema';

@@ -140,6 +140,26 @@ describe("placeOrderAction", () => {
     expect(result.code).toBe("TOO_MANY_ACTIVE_ORDERS");
   });
 
+  it("maps schema cache missing function error to DATABASE_MIGRATION_REQUIRED", async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: {
+        message: "Could not find the function public.place_order(p_canteen_id, p_idempotency_key, p_items, p_payment_method, p_requested_at) in the schema cache",
+      },
+    });
+
+    const result = await placeOrderAction({
+      canteenId: validCanteenId,
+      items: [{ menu_item_id: validItemId, quantity: 1 }],
+      paymentMethod: "PAY_AT_PICKUP",
+      idempotencyKey: "key-123",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe("DATABASE_MIGRATION_REQUIRED");
+    expect(result.error).toContain("0003_place_order.sql");
+  });
+
   it("returns order data successfully on place_order success", async () => {
     const mockOrderData = {
       order_id: "order-123",

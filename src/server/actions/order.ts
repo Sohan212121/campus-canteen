@@ -83,17 +83,32 @@ export async function placeOrderAction(rawInput: unknown): Promise<PlaceOrderRes
   // 3. Invoke public.place_order with user's session client
   const supabase = await createClient();
 
-  const { data, error } = await supabase.rpc("place_order", {
+  const rpcParams: Record<string, unknown> = {
     p_canteen_id: canteenId,
     p_items: items,
     p_payment_method: paymentMethod,
     p_idempotency_key: idempotencyKey,
-    p_requested_at: requestedAt || null,
-  });
+  };
+
+  // Only pass p_requested_at if non-empty to let Postgres use DEFAULT NULL cleanly
+  if (requestedAt) {
+    rpcParams.p_requested_at = requestedAt;
+  }
+
+  const { data, error } = await supabase.rpc("place_order", rpcParams);
 
   if (error) {
     const rawMsg = error.message || "";
     const rawHint = (error as { hint?: string | null }).hint || undefined;
+
+    // Detect missing database migration or stale PostgREST schema cache
+    if (rawMsg.includes("Could not find the function") || rawMsg.includes("schema cache")) {
+      return {
+        success: false,
+        code: "DATABASE_MIGRATION_REQUIRED",
+        error: "Database function place_order is missing or schema cache needs reloading. Please run 0003_place_order.sql in Supabase SQL Editor and execute: NOTIFY pgrst, 'reload schema';",
+      };
+    }
 
     // Map known database error codes
     if (rawMsg.includes("SCHEDULE_TOO_EARLY")) {
@@ -184,11 +199,16 @@ export async function getPickupEstimateAction(
 
   const supabase = await createClient();
 
-  const { data, error } = await supabase.rpc("estimate_ready_time", {
+  const rpcParams: Record<string, unknown> = {
     p_canteen_id: parsed.data.canteenId,
     p_items: parsed.data.items,
-    p_requested_at: parsed.data.requestedAt || null,
-  });
+  };
+
+  if (parsed.data.requestedAt) {
+    rpcParams.p_requested_at = parsed.data.requestedAt;
+  }
+
+  const { data, error } = await supabase.rpc("estimate_ready_time", rpcParams);
 
   if (error) {
     const rawMsg = error.message || "";

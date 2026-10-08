@@ -272,6 +272,12 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
         return;
       }
 
+      if (result.code === "DATABASE_MIGRATION_REQUIRED") {
+        toast.error(result.error);
+        setIsSubmitting(false);
+        return;
+      }
+
       toast.error(result.error || "Failed to place order.");
       // Regenerate idempotency key on logical rejection
       setIdempotencyKey(crypto.randomUUID());
