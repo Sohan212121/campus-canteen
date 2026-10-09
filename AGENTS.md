@@ -27,3 +27,13 @@ Campus Canteen is a campus-focused digital food pre-ordering and smart pickup pl
 6. **No features beyond the current phase**: Strictly implement features scoped to the active phase. Do not add future or out-of-scope capabilities prematurely.
 7. **Never commit secrets**: Keep environment variables and secret credentials out of source control. Use `.env.example` as a template.
 8. **Keep everything Vercel-compatible**: No local filesystem writes (`fs`), and no long-running background daemon processes.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

@@ -102,33 +102,3 @@ export async function createReadOnlyClient() {
   });
 }
 
-/**
- * Admin / service-role client — bypasses RLS.
- * Must only be used in trusted server-side code.
- */
-export function createAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
-  const serviceKey = process.env.SUPABASE_SECRET_KEY?.trim() || "";
-
-  if (!url || !serviceKey) {
-    return {
-      from: () => ({
-        select: () => ({
-          eq: () => ({
-            single: async () => ({ data: null, error: null }),
-          }),
-        }),
-      }),
-    } as unknown as ReturnType<typeof createServerClient>;
-  }
-
-  return createServerClient(url, serviceKey, {
-    cookies: {
-      getAll() {
-        return [];
-      },
-      setAll() {},
-    },
-  });
-}
-

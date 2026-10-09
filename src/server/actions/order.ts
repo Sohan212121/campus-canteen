@@ -14,7 +14,7 @@ const placeOrderSchema = z.object({
   canteenId: z.string().uuid("Invalid canteen ID"),
   items: z.array(placeOrderItemSchema).min(1, "Cart cannot be empty").max(20, "Maximum 20 items per order"),
   paymentMethod: z.literal("PAY_AT_PICKUP"),
-  idempotencyKey: z.string().min(1).max(64),
+  idempotencyKey: z.string().uuid("Invalid idempotency key"),
   requestedAt: z.string().datetime({ offset: true }).nullable().optional(),
 });
 

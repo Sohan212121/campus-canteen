@@ -17,6 +17,7 @@ import { placeOrderAction, getPickupEstimateAction } from "@/server/actions/orde
 describe("placeOrderAction", () => {
   const validCanteenId = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11";
   const validItemId = "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22";
+  const validIdempotencyKey = "c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33";
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -34,7 +35,7 @@ describe("placeOrderAction", () => {
       canteenId: validCanteenId,
       items: [{ menu_item_id: validItemId, quantity: 2 }],
       paymentMethod: "PAY_AT_PICKUP",
-      idempotencyKey: "key-123",
+      idempotencyKey: validIdempotencyKey,
       requestedAt: null,
     });
 
@@ -46,7 +47,7 @@ describe("placeOrderAction", () => {
       canteenId: validCanteenId,
       items: [],
       paymentMethod: "PAY_AT_PICKUP",
-      idempotencyKey: "key-123",
+      idempotencyKey: validIdempotencyKey,
     });
 
     expect(result.success).toBe(false);
@@ -59,7 +60,7 @@ describe("placeOrderAction", () => {
       canteenId: validCanteenId,
       items: [{ menu_item_id: validItemId, quantity: 11 }],
       paymentMethod: "PAY_AT_PICKUP",
-      idempotencyKey: "key-123",
+      idempotencyKey: validIdempotencyKey,
     });
 
     expect(result.success).toBe(false);
@@ -71,12 +72,25 @@ describe("placeOrderAction", () => {
       canteenId: validCanteenId,
       items: [{ menu_item_id: validItemId, quantity: 1 }],
       paymentMethod: "PAY_AT_PICKUP",
-      idempotencyKey: "key-123",
+      idempotencyKey: validIdempotencyKey,
       requestedAt: "2026-10-08T12:00:00", // missing offset
     });
 
     expect(result.success).toBe(false);
     expect(result.code).toBe("INVALID_INPUT");
+  });
+
+  it("fails validation when idempotencyKey is not a valid UUID", async () => {
+    const result = await placeOrderAction({
+      canteenId: validCanteenId,
+      items: [{ menu_item_id: validItemId, quantity: 1 }],
+      paymentMethod: "PAY_AT_PICKUP",
+      idempotencyKey: "not-a-uuid",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe("INVALID_INPUT");
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
   it("maps SCHEDULE_TOO_EARLY error and formats earliest hint with +05:30", async () => {
@@ -92,7 +106,7 @@ describe("placeOrderAction", () => {
       canteenId: validCanteenId,
       items: [{ menu_item_id: validItemId, quantity: 1 }],
       paymentMethod: "PAY_AT_PICKUP",
-      idempotencyKey: "key-123",
+      idempotencyKey: validIdempotencyKey,
       requestedAt: "2026-10-08T16:30:00+05:30",
     });
 
@@ -113,7 +127,7 @@ describe("placeOrderAction", () => {
       canteenId: validCanteenId,
       items: [{ menu_item_id: validItemId, quantity: 5 }],
       paymentMethod: "PAY_AT_PICKUP",
-      idempotencyKey: "key-123",
+      idempotencyKey: validIdempotencyKey,
     });
 
     expect(result.success).toBe(false);
@@ -133,7 +147,7 @@ describe("placeOrderAction", () => {
       canteenId: validCanteenId,
       items: [{ menu_item_id: validItemId, quantity: 1 }],
       paymentMethod: "PAY_AT_PICKUP",
-      idempotencyKey: "key-123",
+      idempotencyKey: validIdempotencyKey,
     });
 
     expect(result.success).toBe(false);
@@ -152,7 +166,7 @@ describe("placeOrderAction", () => {
       canteenId: validCanteenId,
       items: [{ menu_item_id: validItemId, quantity: 1 }],
       paymentMethod: "PAY_AT_PICKUP",
-      idempotencyKey: "key-123",
+      idempotencyKey: validIdempotencyKey,
     });
 
     expect(result.success).toBe(false);
@@ -181,7 +195,7 @@ describe("placeOrderAction", () => {
       canteenId: validCanteenId,
       items: [{ menu_item_id: validItemId, quantity: 1 }],
       paymentMethod: "PAY_AT_PICKUP",
-      idempotencyKey: "key-123",
+      idempotencyKey: validIdempotencyKey,
     });
 
     expect(result.success).toBe(true);
