@@ -1,40 +1,97 @@
-import Link from "next/link";
-import { Receipt, ArrowRight } from "lucide-react";
-
-import { buttonVariants } from "@/components/ui/button";
 import { requireRole } from "@/server/auth";
+import { createReadOnlyClient } from "@/lib/supabase/server";
+import { OrdersListView, type OrderSummaryItem } from "@/components/student/orders-list-view";
 
 export default async function OrdersPage() {
-  await requireRole(["student", "staff", "admin"]);
+  const profile = await requireRole(["student", "staff", "admin"]);
+  const supabase = await createReadOnlyClient();
+
+  // 1. Fetch active orders (PLACED, ACCEPTED, PREPARING, READY)
+  const { data: activeData } = await supabase
+    .from("orders")
+    .select(`
+      id,
+      order_code,
+      status,
+      total_paise,
+      placed_at,
+      estimated_ready_at,
+      pickup_window_end,
+      canteens (
+        name,
+        location
+      ),
+      order_items (
+        id,
+        name_snapshot,
+        quantity,
+        unit_price_paise
+      )
+    `)
+    .eq("user_id", profile.id)
+    .in("status", ["PLACED", "ACCEPTED", "PREPARING", "READY"])
+    .order("placed_at", { ascending: false });
+
+  // 2. Fetch past orders (first 20) with total count for pagination
+  const { data: pastData, count: pastCount } = await supabase
+    .from("orders")
+    .select(`
+      id,
+      order_code,
+      status,
+      total_paise,
+      placed_at,
+      estimated_ready_at,
+      pickup_window_end,
+      canteens (
+        name,
+        location
+      ),
+      order_items (
+        id,
+        name_snapshot,
+        quantity,
+        unit_price_paise
+      )
+    `, { count: "exact" })
+    .eq("user_id", profile.id)
+    .not("status", "in", '("PLACED","ACCEPTED","PREPARING","READY")')
+    .order("placed_at", { ascending: false })
+    .range(0, 19);
+
+  type RawOrderRow = {
+    id: string;
+    order_code: string;
+    status: string;
+    total_paise: number;
+    placed_at: string;
+    estimated_ready_at: string;
+    pickup_window_end: string;
+    canteens: { name: string; location: string | null } | Array<{ name: string; location: string | null }> | null;
+    order_items: Array<{ id: string; name_snapshot: string; quantity: number; unit_price_paise: number }> | null;
+  };
+
+  const rawActive = (activeData || []) as unknown as RawOrderRow[];
+  const rawPast = (pastData || []) as unknown as RawOrderRow[];
+
+  const initialActiveOrders: OrderSummaryItem[] = rawActive.map((o) => ({
+    ...o,
+    canteens: Array.isArray(o.canteens) ? o.canteens[0] : o.canteens,
+    order_items: o.order_items || [],
+  }));
+
+  const initialPastOrders: OrderSummaryItem[] = rawPast.map((o) => ({
+    ...o,
+    canteens: Array.isArray(o.canteens) ? o.canteens[0] : o.canteens,
+    order_items: o.order_items || [],
+  }));
 
   return (
-    <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-xl font-bold tracking-tight">Your Orders</h1>
-        <p className="text-xs text-muted-foreground">
-          Track active kitchen prep and view past pickup tokens.
-        </p>
-      </header>
-
-      <div className="rounded-2xl border border-dashed border-border/80 bg-card p-8 text-center space-y-4 my-8">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-          <Receipt className="h-7 w-7" />
-        </div>
-        <div className="space-y-1.5">
-          <h2 className="text-lg font-bold">No orders yet</h2>
-          <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-            When you place pre-orders, your live order status and pickup tokens will appear here.
-          </p>
-        </div>
-        <Link
-          href="/menu"
-          className={buttonVariants({
-            className: "rounded-xl h-11 px-6 font-semibold gap-2 inline-flex items-center",
-          })}
-        >
-          Browse Menu <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
-    </div>
+    <OrdersListView
+      userId={profile.id}
+      initialActiveOrders={initialActiveOrders}
+      initialPastOrders={initialPastOrders}
+      totalPastCount={pastCount ?? initialPastOrders.length}
+    />
   );
 }

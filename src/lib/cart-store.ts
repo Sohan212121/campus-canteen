@@ -16,6 +16,7 @@ export interface CartState {
   setHasHydrated: (hasHydrated: boolean) => void;
   syncUser: (currentUserId: string | null) => void;
   addItem: (menuItemId: string, quantity?: number) => void;
+  addItems: (items: CartItem[]) => void;
   removeItem: (menuItemId: string) => void;
   updateQuantity: (menuItemId: string, quantity: number) => void;
   clearCart: () => void;
@@ -87,6 +88,35 @@ export const useCartStore = create<CartState>()(
               },
             ],
           };
+        });
+      },
+
+      addItems: (newItems: CartItem[]) => {
+        if (!newItems || newItems.length === 0) return;
+        set((state) => {
+          const updated = [...state.items];
+          for (const item of newItems) {
+            if (item.quantity <= 0) continue;
+            const existingIndex = updated.findIndex(
+              (entry) => entry.menu_item_id === item.menu_item_id
+            );
+            if (existingIndex > -1) {
+              const newQty = Math.min(
+                MAX_ITEM_QUANTITY,
+                updated[existingIndex].quantity + item.quantity
+              );
+              updated[existingIndex] = {
+                ...updated[existingIndex],
+                quantity: newQty,
+              };
+            } else {
+              updated.push({
+                menu_item_id: item.menu_item_id,
+                quantity: Math.min(MAX_ITEM_QUANTITY, item.quantity),
+              });
+            }
+          }
+          return { items: updated };
         });
       },
 

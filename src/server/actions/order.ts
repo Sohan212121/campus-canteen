@@ -1,9 +1,11 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import * as z from "zod";
 
 import { requireRole } from "@/server/auth";
 import { createClient } from "@/lib/supabase/server";
+import { CANCELLABLE_STATUSES } from "@/lib/order-status";
 
 const placeOrderItemSchema = z.object({
   menu_item_id: z.string().uuid("Invalid item ID"),
@@ -256,5 +258,213 @@ export async function getPickupEstimateAction(
       pickup_window_end: row.pickup_window_end,
       prep_minutes_total: row.prep_minutes_total,
     },
+  };
+}
+
+const cancelOrderSchema = z.object({
+  orderId: z.string().uuid("Invalid order ID"),
+});
+
+export type CancelOrderResult = {
+  success: boolean;
+  code?: string;
+  error?: string;
+  data?: {
+    order_id: string;
+    order_code: string;
+    status: string;
+    was_already_cancelled: boolean;
+  };
+};
+
+export type ReorderItem = {
+  menu_item_id: string;
+  quantity: number;
+  name: string;
+};
+
+export type SkippedReorderItem = {
+  menu_item_id: string;
+  name: string;
+  reason: "unavailable" | "out_of_stock";
+};
+
+export type GetReorderItemsResult = {
+  success: boolean;
+  error?: string;
+  itemsToReorder: ReorderItem[];
+  skippedItems: SkippedReorderItem[];
+};
+
+/**
+ * Cancels an eligible PLACED order through public.cancel_order RPC.
+ */
+export async function cancelOrderAction(orderId: string): Promise<CancelOrderResult> {
+  // 1. Enforce authenticated role
+  await requireRole(["student", "staff", "admin"]);
+
+  // 2. Validate input with Zod
+  const parsed = cancelOrderSchema.safeParse({ orderId });
+  if (!parsed.success) {
+    return {
+      success: false,
+      code: "INVALID_INPUT",
+      error: parsed.error.issues[0]?.message || "Invalid order ID.",
+    };
+  }
+
+  // 3. Invoke public.cancel_order with user's session client
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("cancel_order", {
+    p_order_id: parsed.data.orderId,
+  });
+
+  if (error) {
+    const rawMsg = error.message || "";
+
+    if (rawMsg.includes("Could not find the function") || rawMsg.includes("schema cache")) {
+      return {
+        success: false,
+        code: "DATABASE_MIGRATION_REQUIRED",
+        error: "Database function cancel_order is missing or schema cache needs reloading. Please run 0004_order_tracking.sql in Supabase SQL Editor.",
+      };
+    }
+
+    if (rawMsg.includes("NOT_FOUND")) {
+      return {
+        success: false,
+        code: "NOT_FOUND",
+        error: "Order not found or you are not authorized to cancel it.",
+      };
+    }
+
+    if (rawMsg.includes("NOT_CANCELLABLE")) {
+      return {
+        success: false,
+        code: "NOT_CANCELLABLE",
+        error: `Only orders in ${CANCELLABLE_STATUSES.join(", ")} stage can be cancelled. This order is already being prepared or completed.`,
+      };
+    }
+
+    if (rawMsg.includes("UNAUTHENTICATED")) {
+      return {
+        success: false,
+        code: "UNAUTHENTICATED",
+        error: "You must be signed in to cancel an order.",
+      };
+    }
+
+    return {
+      success: false,
+      code: "UNKNOWN_ERROR",
+      error: rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Failed to cancel order.",
+    };
+  }
+
+  // Revalidate affected routes
+  revalidatePath("/orders/[orderId]", "page");
+  revalidatePath("/orders", "page");
+  revalidatePath("/", "page");
+
+  return {
+    success: true,
+    data: data as CancelOrderResult["data"],
+  };
+}
+
+/**
+ * Validates and retrieves order items for reordering against current menu availability.
+ * Clamps quantity to max 10 and available stock; skips unavailable items.
+ */
+export async function getReorderItemsAction(orderId: string): Promise<GetReorderItemsResult> {
+  await requireRole(["student", "staff", "admin"]);
+
+  const parsed = cancelOrderSchema.safeParse({ orderId });
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Invalid order ID.",
+      itemsToReorder: [],
+      skippedItems: [],
+    };
+  }
+
+  const supabase = await createClient();
+
+  const { data: orderItems, error: itemsError } = await supabase
+    .from("order_items")
+    .select(`
+      menu_item_id,
+      name_snapshot,
+      quantity,
+      menu_items (
+        id,
+        name,
+        is_active,
+        is_available,
+        stock
+      )
+    `)
+    .eq("order_id", parsed.data.orderId);
+
+  if (itemsError || !orderItems) {
+    return {
+      success: false,
+      error: "Could not retrieve order items.",
+      itemsToReorder: [],
+      skippedItems: [],
+    };
+  }
+
+  const itemsToReorder: ReorderItem[] = [];
+  const skippedItems: SkippedReorderItem[] = [];
+
+  for (const oi of orderItems) {
+    const rawMenuItem = oi.menu_items;
+    const menuItem = Array.isArray(rawMenuItem) ? rawMenuItem[0] : rawMenuItem;
+
+    if (!menuItem || !menuItem.is_active || !menuItem.is_available) {
+      skippedItems.push({
+        menu_item_id: oi.menu_item_id,
+        name: oi.name_snapshot,
+        reason: "unavailable",
+      });
+      continue;
+    }
+
+    if (menuItem.stock !== null && menuItem.stock <= 0) {
+      skippedItems.push({
+        menu_item_id: oi.menu_item_id,
+        name: oi.name_snapshot,
+        reason: "out_of_stock",
+      });
+      continue;
+    }
+
+    let targetQty = Math.min(oi.quantity, 10);
+    if (menuItem.stock !== null) {
+      targetQty = Math.min(targetQty, menuItem.stock);
+    }
+
+    if (targetQty <= 0) {
+      skippedItems.push({
+        menu_item_id: oi.menu_item_id,
+        name: oi.name_snapshot,
+        reason: "out_of_stock",
+      });
+      continue;
+    }
+
+    itemsToReorder.push({
+      menu_item_id: menuItem.id,
+      quantity: targetQty,
+      name: menuItem.name,
+    });
+  }
+
+  return {
+    success: true,
+    itemsToReorder,
+    skippedItems,
   };
 }

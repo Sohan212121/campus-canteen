@@ -2,22 +2,46 @@ import Link from "next/link";
 import { UtensilsCrossed, ArrowRight, Sparkles, Clock } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { requireRole } from "@/server/auth";
 import { getActiveCanteenId } from "@/server/canteen";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { formatPaise } from "@/lib/money";
+import { formatIstTime, getStatusBadgeConfig } from "@/lib/order-status";
 import { VegIndicator } from "@/components/student/veg-indicator";
 import { MenuItemImage } from "@/components/student/menu-item-image";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
+import { cn } from "@/lib/utils";
 
 export default async function StudentHomePage() {
   const profile = await requireRole(["student", "staff", "admin"]);
   const canteenId = await getActiveCanteenId();
 
+  const supabase = await createReadOnlyClient();
   let previewItems: MenuItemData[] = [];
+  let latestActiveOrder: {
+    id: string;
+    order_code: string;
+    status: string;
+    estimated_ready_at: string;
+    pickup_window_end: string;
+  } | null = null;
+
+  // Fetch student's latest active order
+  const { data: activeOrderData } = await supabase
+    .from("orders")
+    .select("id, order_code, status, estimated_ready_at, pickup_window_end")
+    .eq("user_id", profile.id)
+    .in("status", ["PLACED", "ACCEPTED", "PREPARING", "READY"])
+    .order("placed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (activeOrderData) {
+    latestActiveOrder = activeOrderData;
+  }
 
   if (canteenId) {
-    const supabase = await createReadOnlyClient();
     const { data } = await supabase
       .from("menu_items")
       .select(
@@ -48,6 +72,44 @@ export default async function StudentHomePage() {
           Pre-order fresh meals before your break and pick up without waiting.
         </p>
       </header>
+
+      {/* Active Order In-Flight Banner (PRD Section 14) */}
+      {latestActiveOrder && (
+        <section className="overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card p-4 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" /> Active Order
+            </span>
+            <Badge
+              variant={getStatusBadgeConfig(latestActiveOrder.status).variant}
+              className={cn("text-[10px]", getStatusBadgeConfig(latestActiveOrder.status).className)}
+            >
+              {getStatusBadgeConfig(latestActiveOrder.status).label}
+            </Badge>
+          </div>
+
+          <div className="flex items-baseline justify-between">
+            <div>
+              <span className="font-mono text-base font-bold text-foreground">
+                #{latestActiveOrder.order_code}
+              </span>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Expected ready at {formatIstTime(latestActiveOrder.estimated_ready_at)}
+              </p>
+            </div>
+            <Link
+              href={`/orders/${latestActiveOrder.id}`}
+              className={buttonVariants({
+                size: "sm",
+                className: "h-8 px-3 rounded-xl text-xs font-semibold gap-1 inline-flex items-center",
+              })}
+            >
+              <span>View Token</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* Prominent Order Now Hero Card */}
       <section className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-5 shadow-xs">
