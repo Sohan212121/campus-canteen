@@ -324,3 +324,56 @@ public.place_order(
 | `INVALID_SCHEDULE` | Scheduled pickup time not today or outside operating hours |
 | `SCHEDULE_TOO_EARLY` | Requested time is before earliest possible kitchen readiness (includes `HINT` with earliest IST timestamp) |
 
+---
+
+## 9. Phase 6: Order Tracking & Cancellation
+
+Added in migration `0004_order_tracking.sql`:
+
+### 9.1 Cancellation Procedure (`public.cancel_order`)
+- **Signature**: `public.cancel_order(p_order_id uuid) RETURNS jsonb`
+- **Security**: `SECURITY DEFINER`, `search_path = ''`.
+- **Allowed Statuses**: Strictly `PLACED`.
+- **Behavior**: Acquires `FOR UPDATE` lock, validates caller ownership (`auth.uid() = user_id`), restores stock (`menu_items FOR UPDATE ORDER BY id ASC`), inserts `Order Cancelled` notification, and excludes the order from active queue load automatically. Idempotent return if already `CANCELLED`.
+- **Status Change Trigger**: `trg_order_status_notification` triggers on `AFTER UPDATE OF status ON public.orders` for `ACCEPTED`, `PREPARING`, `READY`, `REJECTED` per PRD Section 13 copy.
+
+---
+
+## 10. Phase 7: Staff Kitchen Operations & Counter Pickup
+
+Added in migration `0005_staff_operations.sql`:
+
+### 10.1 Order Lifecycle Transition (`public.transition_order`)
+- **Signature**: `public.transition_order(p_order_id uuid, p_to_status public.order_status) RETURNS jsonb`
+- **Security**: `SECURITY DEFINER`, `search_path = ''`. Restricted to `authenticated` and `service_role`.
+- **Caller Context**: Strictly `auth.uid()`. Role must be `staff` or `admin`.
+- **Canteen Isolation**: Staff members are strictly validated against `order.canteen_id` using `IS DISTINCT FROM` (staff with NULL `canteen_id` receive `FORBIDDEN`). Admins can operate on any canteen.
+- **Allowed Lifecycle Transitions**:
+  - `PLACED` $\rightarrow$ `ACCEPTED` or `REJECTED`
+  - `ACCEPTED` $\rightarrow$ `PREPARING`
+  - `PREPARING` $\rightarrow$ `READY`
+  - `READY` $\rightarrow$ `COLLECTED`
+  - *Important Constraint*: **`ACCEPTED` orders cannot be rejected yet**; rejection is permitted only while an order is in `PLACED` stage.
+- **Idempotency**: Same-status requests return `{ "order_id": ..., "status": ..., "was_noop": true }` to absorb network retries and double-taps safely.
+- **Settlement & Side Effects**:
+  - Updates matching timestamp (`accepted_at`, `preparing_at`, `ready_at`, `collected_at`, `rejected_at`).
+  - On `COLLECTED`: If `payment_method = 'PAY_AT_PICKUP'`, automatically sets `payment_status = 'PAID'`.
+  - On `REJECTED`: Restores reserved stock via deadlock-free row locks on `menu_items`.
+
+### 10.2 Pickup Token Verification (`public.verify_pickup`)
+- **Signature**: `public.verify_pickup(p_canteen_id uuid, p_token text) RETURNS jsonb`
+- **Security**: `SECURITY DEFINER`, `search_path = ''`.
+- **Behavior**:
+  - Matches orders currently in status `READY` with matching `pickup_token`.
+  - On miss: logs failed attempt in `public.pickup_verify_attempts` and returns `{ "found": false }` (does not raise, ensuring failed attempt persists).
+  - Rate limiting: $\ge 10$ failed attempts in 5 minutes raises `RATE_LIMITED`.
+  - Returns order details, student name, total, and line items without changing status (status transition to `COLLECTED` is executed separately).
+
+### 10.3 Pickup Verify Attempts Ledger (`public.pickup_verify_attempts`)
+- Stores failed attempts for brute-force rate-limiting.
+- Protected by Row Level Security (RLS) with zero policies: accessible exclusively by service_role and `SECURITY DEFINER` routines.
+
+### 10.4 Staff RLS & Token Visibility Invariant
+- **Important Invariant**: Under database RLS (`0002_rls.sql`), canteen staff can SELECT `orders` belonging to their assigned canteen. Because `pickup_token` exists on `orders`, PostgreSQL allows staff to read it. **However, staff application code and queries must NEVER select `pickup_token`**. Counter collection verification must always occur through the student presenting the token or QR code to `public.verify_pickup`.
+
+

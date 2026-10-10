@@ -135,3 +135,22 @@ export function getStatusBadgeConfig(status: string): {
       };
   }
 }
+
+/**
+ * Calculates the time by which the kitchen must start preparing an order.
+ * Defined as estimated_ready_at minus (prep_minutes_total in milliseconds).
+ */
+export function calculateStartPreparingBy(
+  estimatedReadyAt: string | null | undefined,
+  prepMinutesTotal: number
+): string {
+  if (!estimatedReadyAt) return "--:--";
+  try {
+    const readyMs = new Date(estimatedReadyAt).getTime();
+    const startMs = readyMs - Math.max(0, prepMinutesTotal) * 60 * 1000;
+    return formatIstTime(new Date(startMs).toISOString());
+  } catch {
+    return "--:--";
+  }
+}
+
