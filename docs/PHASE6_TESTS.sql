@@ -7,10 +7,14 @@
 
 -- INSTRUCTIONS:
 -- 1. Open the Supabase SQL Editor.
--- 2. Paste this entire file into the query editor.
--- 3. Replace the placeholder UUIDs below with existing profiles if desired,
---    or let the setup block auto-discover active users.
--- 4. Run the script and inspect the "Messages / Notices" tab.
+-- 2. Paste this entire file into the query editor and click Run.
+-- 3. Review the output in the "Messages / Notices" tab.
+--
+-- NOTE ON OPERATING HOURS:
+-- Pre-order placement requires the canteen to be open right now in Asia/Kolkata (IST).
+-- If executing outside standard canteen operating hours (08:00 - 17:00 IST),
+-- temporarily widen the active canteen hours in Supabase SQL Editor before testing:
+--   UPDATE public.canteens SET opens_at = '00:00:00', closes_at = '23:59:59', last_order_time = '23:59:00';
 
 BEGIN;
 
@@ -29,6 +33,10 @@ CREATE TEMP TABLE IF NOT EXISTS _test_env (
   val_text text
 );
 
+-- Grant access on temp tables to authenticated role as defense-in-depth
+GRANT ALL ON TABLE _test_results TO authenticated;
+GRANT ALL ON TABLE _test_env TO authenticated;
+
 -- ==============================================================================
 -- SETUP BLOCK: Executed as postgres BEFORE SET LOCAL ROLE authenticated
 -- ==============================================================================
@@ -40,22 +48,45 @@ DECLARE
   v_item_id     uuid;
   v_item_stock  integer := 25;
 BEGIN
+  RESET ROLE;
+
   RAISE NOTICE '=====================================================';
   RAISE NOTICE 'PHASE 6 TEST SUITE: SETUP (Role: postgres)';
   RAISE NOTICE '=====================================================';
 
-  -- Find or configure primary test user 1
-  SELECT id INTO v_user1_id FROM public.profiles WHERE role = 'student' AND is_active = true LIMIT 1;
+  -- Find primary test student
+  SELECT id INTO v_user1_id 
+  FROM public.profiles 
+  WHERE role = 'student' AND is_active = true 
+  ORDER BY created_at ASC 
+  LIMIT 1;
+
   IF v_user1_id IS NULL THEN
-    SELECT id INTO v_user1_id FROM public.profiles WHERE is_active = true LIMIT 1;
+    SELECT id INTO v_user1_id 
+    FROM public.profiles 
+    WHERE is_active = true 
+    ORDER BY created_at ASC 
+    LIMIT 1;
   END IF;
 
   -- Find a second distinct user for cross-ownership checks
-  SELECT id INTO v_user2_id FROM public.profiles WHERE id != v_user1_id AND is_active = true LIMIT 1;
+  SELECT id INTO v_user2_id 
+  FROM public.profiles 
+  WHERE id != v_user1_id AND is_active = true 
+  ORDER BY created_at ASC 
+  LIMIT 1;
 
+  -- Enforce minimum test profile prerequisite
   IF v_user1_id IS NULL OR v_user2_id IS NULL THEN
-    RAISE EXCEPTION 'TEST SETUP FAILED: Need at least two active profiles in public.profiles to test ownership boundaries.';
+    RAISE EXCEPTION 'TEST SETUP FAILED: Sign up a second test user first. At least two active user profiles are required to test cross-user ownership isolation.';
   END IF;
+
+  -- Temporarily clear active orders for test users so the 3-active-order cap cannot interfere
+  -- (The entire script is wrapped in BEGIN ... ROLLBACK so changes are automatically reverted)
+  UPDATE public.orders
+  SET status = 'COLLECTED'::public.order_status
+  WHERE user_id IN (v_user1_id, v_user2_id)
+    AND status IN ('PLACED', 'ACCEPTED', 'PREPARING', 'READY');
 
   -- Locate active canteen
   SELECT id INTO v_canteen_id FROM public.canteens WHERE is_active = true LIMIT 1;
@@ -73,7 +104,7 @@ BEGIN
     RAISE EXCEPTION 'TEST SETUP FAILED: No active menu item found for canteen %', v_canteen_id;
   END IF;
 
-  -- Ensure item has stock enabled for stock restoration tests
+  -- Ensure item has initial stock set for restoration tests
   UPDATE public.menu_items SET stock = v_item_stock WHERE id = v_item_id;
 
   INSERT INTO _test_env (key, val_uuid, val_int) VALUES
@@ -104,36 +135,62 @@ DECLARE
   v_cancel_res   jsonb;
   v_notif_count  integer;
   v_status       public.order_status;
+  v_err_msg      text;
 BEGIN
+  RESET ROLE;
   SELECT val_uuid INTO v_user1_id FROM _test_env WHERE key = 'user1_id';
   SELECT val_uuid INTO v_canteen_id FROM _test_env WHERE key = 'canteen_id';
   SELECT val_uuid, val_int INTO v_item_id, v_stock_init FROM _test_env WHERE key = 'item_id';
 
-  -- Set caller session to user 1
+  -- 1. Call place_order as authenticated user 1
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_user1_id)::text, true);
   SET LOCAL ROLE authenticated;
 
-  -- Place order for 2 units
-  v_place_res := public.place_order(
-    v_canteen_id,
-    jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 2)),
-    'PAY_AT_PICKUP'::public.payment_method,
-    'test-p6-cancel-' || gen_random_uuid()::text,
-    NULL
-  );
-  v_order_id := (v_place_res->>'order_id')::uuid;
+  BEGIN
+    v_place_res := public.place_order(
+      v_canteen_id,
+      jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 2)),
+      'PAY_AT_PICKUP'::public.payment_method,
+      'test-p6-cancel-' || gen_random_uuid()::text,
+      NULL
+    );
+  EXCEPTION
+    WHEN OTHERS THEN
+      v_err_msg := SQLERRM;
+  END;
 
-  -- Stock should be v_stock_init - 2
-  SELECT stock INTO v_stock_mid FROM public.menu_items WHERE id = v_item_id;
-  IF v_stock_mid != (v_stock_init - 2) THEN
-    RAISE EXCEPTION 'Precondition failed: stock was not decremented on order placement (got %, expected %)', v_stock_mid, (v_stock_init - 2);
+  RESET ROLE;
+  IF v_err_msg IS NOT NULL THEN
+    INSERT INTO _test_results VALUES (1, 'Cancel PLACED order', false, 'place_order failed: ' || v_err_msg);
+    RETURN;
   END IF;
 
-  -- Save order ID for idempotent cancel test
+  v_order_id := (v_place_res->>'order_id')::uuid;
   INSERT INTO _test_env (key, val_uuid) VALUES ('order1_id', v_order_id);
 
-  -- Execute cancel_order
-  v_cancel_res := public.cancel_order(v_order_id);
+  -- Verify intermediate stock decrement
+  SELECT stock INTO v_stock_mid FROM public.menu_items WHERE id = v_item_id;
+  IF v_stock_mid != (v_stock_init - 2) THEN
+    INSERT INTO _test_results VALUES (1, 'Cancel PLACED order', false, 'Stock not decremented on placement. Got ' || coalesce(v_stock_mid::text, 'NULL') || ', expected ' || (v_stock_init - 2));
+    RETURN;
+  END IF;
+
+  -- 2. Call cancel_order as authenticated user 1
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_user1_id)::text, true);
+  SET LOCAL ROLE authenticated;
+
+  BEGIN
+    v_cancel_res := public.cancel_order(v_order_id);
+  EXCEPTION
+    WHEN OTHERS THEN
+      v_err_msg := SQLERRM;
+  END;
+
+  RESET ROLE;
+  IF v_err_msg IS NOT NULL THEN
+    INSERT INTO _test_results VALUES (1, 'Cancel PLACED order', false, 'cancel_order threw unexpected exception: ' || v_err_msg);
+    RETURN;
+  END IF;
 
   -- Verify return payload
   IF (v_cancel_res->>'status') != 'CANCELLED' OR (v_cancel_res->>'was_already_cancelled')::boolean != false THEN
@@ -144,18 +201,18 @@ BEGIN
   -- Verify order status in DB
   SELECT status INTO v_status FROM public.orders WHERE id = v_order_id;
   IF v_status != 'CANCELLED'::public.order_status THEN
-    INSERT INTO _test_results VALUES (1, 'Cancel PLACED order', false, 'DB order status is ' || v_status::text || ', expected CANCELLED');
+    INSERT INTO _test_results VALUES (1, 'Cancel PLACED order', false, 'DB status is ' || coalesce(v_status::text, 'NULL') || ', expected CANCELLED');
     RETURN;
   END IF;
 
-  -- Verify stock was restored by +2
+  -- Verify stock restoration (+2)
   SELECT stock INTO v_stock_after FROM public.menu_items WHERE id = v_item_id;
   IF v_stock_after != v_stock_init THEN
-    INSERT INTO _test_results VALUES (1, 'Cancel PLACED order', false, 'Stock not restored correctly. Got ' || v_stock_after || ', expected ' || v_stock_init);
+    INSERT INTO _test_results VALUES (1, 'Cancel PLACED order', false, 'Stock not restored. Got ' || coalesce(v_stock_after::text, 'NULL') || ', expected ' || v_stock_init);
     RETURN;
   END IF;
 
-  -- Verify notification was created
+  -- Verify cancellation notification
   SELECT count(*) INTO v_notif_count 
   FROM public.notifications 
   WHERE order_id = v_order_id AND title = 'Order Cancelled' AND user_id = v_user1_id;
@@ -179,16 +236,33 @@ DECLARE
   v_user1_id    uuid;
   v_order_id    uuid;
   v_cancel_res  jsonb;
+  v_err_msg     text;
 BEGIN
+  RESET ROLE;
   SELECT val_uuid INTO v_user1_id FROM _test_env WHERE key = 'user1_id';
   SELECT val_uuid INTO v_order_id FROM _test_env WHERE key = 'order1_id';
 
-  -- Set caller session to user 1
+  IF v_order_id IS NULL THEN
+    INSERT INTO _test_results VALUES (2, 'Double cancel idempotent', false, 'Test 1 order ID missing.');
+    RETURN;
+  END IF;
+
+  -- Call cancel_order a second time on the already cancelled order
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_user1_id)::text, true);
   SET LOCAL ROLE authenticated;
 
-  -- Call cancel_order a second time on the already cancelled order
-  v_cancel_res := public.cancel_order(v_order_id);
+  BEGIN
+    v_cancel_res := public.cancel_order(v_order_id);
+  EXCEPTION
+    WHEN OTHERS THEN
+      v_err_msg := SQLERRM;
+  END;
+
+  RESET ROLE;
+  IF v_err_msg IS NOT NULL THEN
+    INSERT INTO _test_results VALUES (2, 'Double cancel idempotent', false, 'Idempotent cancel_order failed with exception: ' || v_err_msg);
+    RETURN;
+  END IF;
 
   IF (v_cancel_res->>'status') = 'CANCELLED' AND (v_cancel_res->>'was_already_cancelled')::boolean = true THEN
     INSERT INTO _test_results VALUES (2, 'Double cancel idempotent', true, 'Idempotently returned already-cancelled order with was_already_cancelled = true');
@@ -213,6 +287,7 @@ DECLARE
   v_err_caught  boolean := false;
   v_err_msg     text := '';
 BEGIN
+  RESET ROLE;
   SELECT val_uuid INTO v_user1_id FROM _test_env WHERE key = 'user1_id';
   SELECT val_uuid INTO v_canteen_id FROM _test_env WHERE key = 'canteen_id';
   SELECT val_uuid INTO v_item_id FROM _test_env WHERE key = 'item_id';
@@ -221,24 +296,34 @@ BEGIN
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_user1_id)::text, true);
   SET LOCAL ROLE authenticated;
 
-  v_place_res := public.place_order(
-    v_canteen_id,
-    jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 1)),
-    'PAY_AT_PICKUP'::public.payment_method,
-    'test-p6-prep-' || gen_random_uuid()::text,
-    NULL
-  );
+  BEGIN
+    v_place_res := public.place_order(
+      v_canteen_id,
+      jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 1)),
+      'PAY_AT_PICKUP'::public.payment_method,
+      'test-p6-prep-' || gen_random_uuid()::text,
+      NULL
+    );
+  EXCEPTION
+    WHEN OTHERS THEN
+      v_err_msg := SQLERRM;
+  END;
+
+  RESET ROLE;
+  IF v_err_msg != '' THEN
+    INSERT INTO _test_results VALUES (3, 'Cancel PREPARING rejected', false, 'place_order failed: ' || v_err_msg);
+    RETURN;
+  END IF;
+
   v_order_id := (v_place_res->>'order_id')::uuid;
 
-  -- Advance order to PREPARING (simulating kitchen operation as postgres)
-  RESET ROLE;
+  -- Advance order to PREPARING as kitchen staff / postgres
   UPDATE public.orders SET status = 'PREPARING'::public.order_status WHERE id = v_order_id;
 
-  -- Switch back to student
+  -- Attempt cancellation as student
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_user1_id)::text, true);
   SET LOCAL ROLE authenticated;
 
-  -- Attempt cancellation
   BEGIN
     PERFORM public.cancel_order(v_order_id);
   EXCEPTION
@@ -247,11 +332,12 @@ BEGIN
       v_err_msg := SQLERRM;
   END;
 
+  RESET ROLE;
   IF v_err_caught AND v_err_msg LIKE '%NOT_CANCELLABLE%' THEN
     INSERT INTO _test_results VALUES (3, 'Cancel PREPARING rejected', true, 'Correctly rejected with NOT_CANCELLABLE: ' || v_err_msg);
     RAISE NOTICE 'PASS [Test 3]: Cancel PREPARING rejected with NOT_CANCELLABLE';
   ELSE
-    INSERT INTO _test_results VALUES (3, 'Cancel PREPARING rejected', false, 'Failed to reject or unexpected error: ' || v_err_msg);
+    INSERT INTO _test_results VALUES (3, 'Cancel PREPARING rejected', false, 'Failed to reject with NOT_CANCELLABLE. Error caught=' || v_err_caught::text || ' Msg: ' || v_err_msg);
   END IF;
 END;
 $$;
@@ -267,10 +353,16 @@ DECLARE
   v_err_caught  boolean := false;
   v_err_msg     text := '';
 BEGIN
+  RESET ROLE;
   SELECT val_uuid INTO v_user2_id FROM _test_env WHERE key = 'user2_id';
   SELECT val_uuid INTO v_order1_id FROM _test_env WHERE key = 'order1_id';
 
-  -- Call as user 2 on user 1's order
+  IF v_order1_id IS NULL THEN
+    INSERT INTO _test_results VALUES (4, 'Other user order NOT_FOUND', false, 'Test 1 order ID missing.');
+    RETURN;
+  END IF;
+
+  -- Call cancel_order as user 2 on user 1's order
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_user2_id)::text, true);
   SET LOCAL ROLE authenticated;
 
@@ -282,6 +374,7 @@ BEGIN
       v_err_msg := SQLERRM;
   END;
 
+  RESET ROLE;
   IF v_err_caught AND v_err_msg LIKE '%NOT_FOUND%' THEN
     INSERT INTO _test_results VALUES (4, 'Other user order NOT_FOUND', true, 'Correctly rejected cross-user order cancel with NOT_FOUND: ' || v_err_msg);
     RAISE NOTICE 'PASS [Test 4]: Other user order NOT_FOUND';
@@ -304,7 +397,9 @@ DECLARE
   v_place_res   jsonb;
   v_notif_title text;
   v_notif_body  text;
+  v_err_msg     text;
 BEGIN
+  RESET ROLE;
   SELECT val_uuid INTO v_user1_id FROM _test_env WHERE key = 'user1_id';
   SELECT val_uuid INTO v_canteen_id FROM _test_env WHERE key = 'canteen_id';
   SELECT val_uuid INTO v_item_id FROM _test_env WHERE key = 'item_id';
@@ -313,17 +408,28 @@ BEGIN
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_user1_id)::text, true);
   SET LOCAL ROLE authenticated;
 
-  v_place_res := public.place_order(
-    v_canteen_id,
-    jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 1)),
-    'PAY_AT_PICKUP'::public.payment_method,
-    'test-p6-ready-' || gen_random_uuid()::text,
-    NULL
-  );
+  BEGIN
+    v_place_res := public.place_order(
+      v_canteen_id,
+      jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 1)),
+      'PAY_AT_PICKUP'::public.payment_method,
+      'test-p6-ready-' || gen_random_uuid()::text,
+      NULL
+    );
+  EXCEPTION
+    WHEN OTHERS THEN
+      v_err_msg := SQLERRM;
+  END;
+
+  RESET ROLE;
+  IF v_err_msg IS NOT NULL THEN
+    INSERT INTO _test_results VALUES (5, 'READY trigger notification', false, 'place_order failed: ' || v_err_msg);
+    RETURN;
+  END IF;
+
   v_order_id := (v_place_res->>'order_id')::uuid;
 
   -- Update order to READY as kitchen staff / postgres
-  RESET ROLE;
   UPDATE public.orders SET status = 'READY'::public.order_status WHERE id = v_order_id;
 
   -- Verify notification was inserted by trg_order_status_notification
@@ -372,7 +478,9 @@ BEGIN
   END LOOP;
 
   IF v_fail_count > 0 THEN
-    RAISE EXCEPTION 'TEST SUITE FAILED: % out of % tests failed. Review output above.', v_fail_count, v_total;
+    RAISE EXCEPTION 'TEST SUITE FAILED: % out of % tests failed. Review notices above.', v_fail_count, v_total;
+  ELSIF v_total < 5 THEN
+    RAISE EXCEPTION 'TEST SUITE INCOMPLETE: Expected 5 tests, but only % ran.', v_total;
   ELSE
     RAISE NOTICE 'SUCCESS: All % Phase 6 test cases passed successfully.', v_pass_count;
   END IF;
