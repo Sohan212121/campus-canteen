@@ -376,4 +376,52 @@ Added in migration `0005_staff_operations.sql`:
 ### 10.4 Staff RLS & Token Visibility Invariant
 - **Important Invariant**: Under database RLS (`0002_rls.sql`), canteen staff can SELECT `orders` belonging to their assigned canteen. Because `pickup_token` exists on `orders`, PostgreSQL allows staff to read it. **However, staff application code and queries must NEVER select `pickup_token`**. Counter collection verification must always occur through the student presenting the token or QR code to `public.verify_pickup`.
 
+---
+
+## 11. Phase 8: Administrative Operations & Platform Analytics
+
+Added in migration `0006_admin_operations.sql`:
+
+### 11.1 Admin Audit Log (`public.admin_audit_log`)
+- Columns: `id`, `actor_id` (references `profiles(id)` ON DELETE SET NULL), `action`, `target_type`, `target_id`, `details` (jsonb), `created_at`.
+- Protected by RLS with zero user policies; access revoked from `PUBLIC`, `anon`, and `authenticated`.
+- Nullable `actor_id` with `ON DELETE SET NULL` ensures audit trail entries survive account deletions.
+
+### 11.2 Role & User Management Procedures
+- **`public.admin_set_user_role(p_user_id, p_role, p_canteen_id)`**:
+  - `SECURITY DEFINER`, caller must be active admin.
+  - Cannot modify own role (`CANNOT_MODIFY_SELF`).
+  - Last-admin protection: locks active admin rows `FOR UPDATE` before evaluating count; rejects demoting the last active admin (`LAST_ADMIN`).
+  - Staff role requires an existing `canteen_id`; student and admin roles automatically clear `canteen_id` to `NULL`.
+  - Trigger `prevent_profile_escalation` does not block this procedure because `current_user` inside `SECURITY DEFINER` routines is the routine owner, not `authenticated` or `anon`.
+- **`public.admin_set_user_active(p_user_id, p_active)`**:
+  - Cannot deactivate own account (`CANNOT_MODIFY_SELF`).
+  - Cannot deactivate the last remaining active admin (`LAST_ADMIN`).
+
+### 11.3 Canteen Operational Settings
+- **`public.admin_update_canteen_settings(p_canteen_id, p_opens_at, p_closes_at, p_last_order_time, p_kitchen_capacity, p_min_lead_minutes, p_hold_minutes)`**:
+  - Validates capacity (1..50), lead buffer (0..120 min), hold window (0..120 min), `closes_at > opens_at`, and `last_order_time` within operating hours. Returns clean `INVALID_INPUT` messages.
+
+### 11.4 Dashboard Analytics & Listings
+- **`public.admin_dashboard_stats(p_from, p_to)`**:
+  - Date range capped at 92 days.
+  - Status counts and top items computed using `placed_at`.
+  - Revenue computed using `collected_at` strictly for `COLLECTED` orders.
+  - Returns orders by hour across all 24 hours (0..23) in `Asia/Kolkata` timezone with zero fill.
+- **`public.admin_list_orders(...)`**:
+  - Clamps limit to 1..100, offset to $\ge 0$.
+  - Escapes `\`, `%`, and `_` with explicit `ESCAPE '\'`.
+  - **Security Invariant**: Strictly never selects or exposes `pickup_token`.
+- **`public.admin_list_users(...)`**:
+  - Joins `profiles` with `auth.users` to return only the user's `email` along with profile metadata.
+
+### 11.5 Storage Bucket & Object Security
+- Public bucket `menu-images` configured with 2 MB limit and allowed MIME types (`image/jpeg`, `image/png`, `image/webp`).
+- Read allowed publicly; write/update/delete restricted to active admins via `public.is_admin()`.
+
+### 11.6 Price Immutability & Menu Item Archiving
+- **Price Changes Do Not Affect Past Orders**: `order_items` stores historical snapshots (`name_snapshot`, `unit_price_paise`) captured at checkout time. Updating `menu_items.price_paise` has zero impact on previous orders.
+- **Archival vs Deletion**: `order_items.menu_item_id` enforces `ON DELETE RESTRICT`. Menu items that have ever been ordered cannot be hard deleted and must be archived via `is_active = false`. Archived items and categories are automatically hidden from student menus.
+
+
 

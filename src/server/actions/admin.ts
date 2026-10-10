@@ -1,0 +1,800 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import * as z from "zod";
+
+import { requireRole } from "@/server/auth";
+import { getActiveCanteenId } from "@/server/canteen";
+import { createClient } from "@/lib/supabase/server";
+import { parseRupeesToPaise } from "@/lib/money";
+import {
+  validateImageBytes,
+  isAllowedMenuImageUrl,
+  extractStorageFilename,
+} from "@/lib/image-upload";
+
+const uuidSchema = z.string().uuid("Invalid ID format");
+
+export type ActionResult<T = unknown> =
+  | { success: true; data: T }
+  | { success: false; error: string; code?: string };
+
+// ---------------------------------------------------------------------------
+// 1. Dashboard & Analytics
+// ---------------------------------------------------------------------------
+
+export type DashboardStats = {
+  orders_by_status: Record<string, number>;
+  revenue_paise: number;
+  top_items: Array<{
+    name: string;
+    quantity: number;
+    revenue_paise: number;
+  }>;
+  orders_by_hour: Array<{
+    hour: number;
+    count: number;
+  }>;
+  total_placed: number;
+  total_cancelled: number;
+  cancellation_rate: number;
+  avg_prep_minutes: number;
+};
+
+/**
+ * Computes Asia/Kolkata day boundaries on the server and loads dashboard stats.
+ * Client sends a preset ("today", "7d", "30d") or a specific IST date ("YYYY-MM-DD").
+ */
+export async function getAdminDashboardStatsAction(
+  rangeParam: string = "today"
+): Promise<ActionResult<DashboardStats>> {
+  await requireRole(["admin"]);
+
+  // Calculate IST timestamps (+05:30)
+  const nowUtc = new Date();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const nowIst = new Date(nowUtc.getTime() + istOffsetMs);
+
+  let fromIst: Date;
+  let toIst: Date;
+
+  if (rangeParam === "7d") {
+    // Last 7 days in IST
+    fromIst = new Date(nowIst);
+    fromIst.setUTCDate(fromIst.getUTCDate() - 6);
+    fromIst.setUTCHours(0, 0, 0, 0);
+
+    toIst = new Date(nowIst);
+    toIst.setUTCHours(23, 59, 59, 999);
+  } else if (rangeParam === "30d") {
+    // Last 30 days in IST
+    fromIst = new Date(nowIst);
+    fromIst.setUTCDate(fromIst.getUTCDate() - 29);
+    fromIst.setUTCHours(0, 0, 0, 0);
+
+    toIst = new Date(nowIst);
+    toIst.setUTCHours(23, 59, 59, 999);
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(rangeParam)) {
+    // Specific IST date
+    const [year, month, day] = rangeParam.split("-").map(Number);
+    fromIst = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    toIst = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+  } else {
+    // Default: Today in IST
+    fromIst = new Date(nowIst);
+    fromIst.setUTCHours(0, 0, 0, 0);
+
+    toIst = new Date(nowIst);
+    toIst.setUTCHours(23, 59, 59, 999);
+  }
+
+  // Convert IST calendar boundaries back to UTC timestamptz for PostgreSQL
+  const fromUtc = new Date(fromIst.getTime() - istOffsetMs);
+  const toUtc = new Date(toIst.getTime() - istOffsetMs);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_dashboard_stats", {
+    p_from: fromUtc.toISOString(),
+    p_to: toUtc.toISOString(),
+  });
+
+  if (error) {
+    return {
+      success: false,
+      error: error.message || "Failed to load dashboard metrics.",
+      code: "METRICS_FAILED",
+    };
+  }
+
+  return {
+    success: true,
+    data: data as DashboardStats,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 2. Orders Monitor
+// ---------------------------------------------------------------------------
+
+export type AdminOrderRow = {
+  id: string;
+  order_code: string;
+  status: string;
+  total_paise: number;
+  payment_method: string;
+  payment_status: string;
+  placed_at: string;
+  estimated_ready_at: string;
+  canteen_name: string;
+  student_name: string;
+  item_count: number;
+};
+
+export type AdminOrdersListResult = {
+  total_count: number;
+  orders: AdminOrderRow[];
+};
+
+export async function getAdminOrdersAction(params: {
+  from?: string;
+  to?: string;
+  status?: string[];
+  search?: string;
+  page?: number;
+  limit?: number;
+}): Promise<ActionResult<AdminOrdersListResult>> {
+  await requireRole(["admin"]);
+
+  const limit = Math.max(1, Math.min(params.limit || 25, 100));
+  const page = Math.max(1, params.page || 1);
+  const offset = (page - 1) * limit;
+
+  // Default to today if from/to are not supplied
+  const fromIso = params.from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const toIso = params.to || new Date().toISOString();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_list_orders", {
+    p_from: fromIso,
+    p_to: toIso,
+    p_status: params.status && params.status.length > 0 ? params.status : null,
+    p_search: params.search?.trim() || null,
+    p_limit: limit,
+    p_offset: offset,
+  });
+
+  if (error) {
+    return {
+      success: false,
+      error: error.message || "Failed to list orders.",
+      code: "ORDERS_FAILED",
+    };
+  }
+
+  return {
+    success: true,
+    data: data as AdminOrdersListResult,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 3. User & Staff Management
+// ---------------------------------------------------------------------------
+
+export type AdminUserRow = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  college_id: string | null;
+  role: string;
+  canteen_id: string | null;
+  canteen_name: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type AdminUsersListResult = {
+  total_count: number;
+  users: AdminUserRow[];
+};
+
+export async function getAdminUsersAction(params: {
+  search?: string;
+  role?: string;
+  page?: number;
+  limit?: number;
+}): Promise<ActionResult<AdminUsersListResult>> {
+  await requireRole(["admin"]);
+
+  const limit = Math.max(1, Math.min(params.limit || 25, 100));
+  const page = Math.max(1, params.page || 1);
+  const offset = (page - 1) * limit;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_list_users", {
+    p_search: params.search?.trim() || null,
+    p_role: params.role || null,
+    p_limit: limit,
+    p_offset: offset,
+  });
+
+  if (error) {
+    return {
+      success: false,
+      error: error.message || "Failed to list users.",
+      code: "USERS_FAILED",
+    };
+  }
+
+  return {
+    success: true,
+    data: data as AdminUsersListResult,
+  };
+}
+
+export async function adminSetUserRoleAction(
+  userId: string,
+  role: "student" | "staff" | "admin",
+  canteenId?: string | null
+): Promise<ActionResult> {
+  await requireRole(["admin"]);
+
+  const parsedId = uuidSchema.safeParse(userId);
+  if (!parsedId.success) {
+    return { success: false, error: "Invalid user ID.", code: "INVALID_INPUT" };
+  }
+
+  if (role === "staff" && (!canteenId || !uuidSchema.safeParse(canteenId).success)) {
+    return {
+      success: false,
+      error: "Staff accounts must be assigned to an active canteen.",
+      code: "INVALID_INPUT",
+    };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_set_user_role", {
+    p_user_id: parsedId.data,
+    p_role: role,
+    p_canteen_id: role === "staff" ? canteenId : null,
+  });
+
+  if (error) {
+    const rawMsg = error.message || "";
+    if (rawMsg.includes("CANNOT_MODIFY_SELF")) {
+      return {
+        success: false,
+        code: "CANNOT_MODIFY_SELF",
+        error: "You cannot change your own administrator role.",
+      };
+    }
+    if (rawMsg.includes("LAST_ADMIN")) {
+      return {
+        success: false,
+        code: "LAST_ADMIN",
+        error: "Cannot demote the last remaining active administrator.",
+      };
+    }
+    if (rawMsg.includes("INVALID_INPUT")) {
+      return {
+        success: false,
+        code: "INVALID_INPUT",
+        error: rawMsg.replace(/^[A-Z_]+:\s*/, ""),
+      };
+    }
+    return {
+      success: false,
+      code: "UPDATE_FAILED",
+      error: rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Failed to update user role.",
+    };
+  }
+
+  revalidatePath("/admin/users");
+  return { success: true, data: undefined };
+}
+
+export async function adminSetUserActiveAction(
+  userId: string,
+  active: boolean
+): Promise<ActionResult> {
+  await requireRole(["admin"]);
+
+  const parsedId = uuidSchema.safeParse(userId);
+  if (!parsedId.success) {
+    return { success: false, error: "Invalid user ID.", code: "INVALID_INPUT" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_set_user_active", {
+    p_user_id: parsedId.data,
+    p_active: active,
+  });
+
+  if (error) {
+    const rawMsg = error.message || "";
+    if (rawMsg.includes("CANNOT_MODIFY_SELF")) {
+      return {
+        success: false,
+        code: "CANNOT_MODIFY_SELF",
+        error: "You cannot deactivate your own administrator account.",
+      };
+    }
+    if (rawMsg.includes("LAST_ADMIN")) {
+      return {
+        success: false,
+        code: "LAST_ADMIN",
+        error: "Cannot deactivate the last remaining active administrator.",
+      };
+    }
+    return {
+      success: false,
+      code: "UPDATE_FAILED",
+      error: rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Failed to toggle user status.",
+    };
+  }
+
+  revalidatePath("/admin/users");
+  return { success: true, data: undefined };
+}
+
+// ---------------------------------------------------------------------------
+// 4. Canteen Settings
+// ---------------------------------------------------------------------------
+
+export type CanteenData = {
+  id: string;
+  name: string;
+  location: string | null;
+  opens_at: string;
+  closes_at: string;
+  last_order_time: string;
+  kitchen_capacity: number;
+  min_lead_minutes: number;
+  hold_minutes: number;
+  is_active: boolean;
+};
+
+export async function getAdminCanteensAction(): Promise<ActionResult<CanteenData[]>> {
+  await requireRole(["admin"]);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("canteens")
+    .select("id, name, location, opens_at, closes_at, last_order_time, kitchen_capacity, min_lead_minutes, hold_minutes, is_active")
+    .order("name", { ascending: true });
+
+  if (error) {
+    return { success: false, error: error.message || "Failed to load canteens." };
+  }
+
+  return { success: true, data: data as CanteenData[] };
+}
+
+export async function adminUpdateCanteenSettingsAction(
+  canteenId: string,
+  settings: {
+    opens_at: string;
+    closes_at: string;
+    last_order_time: string;
+    kitchen_capacity: number;
+    min_lead_minutes: number;
+    hold_minutes: number;
+  }
+): Promise<ActionResult> {
+  await requireRole(["admin"]);
+
+  const parsedId = uuidSchema.safeParse(canteenId);
+  if (!parsedId.success) {
+    return { success: false, error: "Invalid canteen ID." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_update_canteen_settings", {
+    p_canteen_id: parsedId.data,
+    p_opens_at: settings.opens_at,
+    p_closes_at: settings.closes_at,
+    p_last_order_time: settings.last_order_time,
+    p_kitchen_capacity: settings.kitchen_capacity,
+    p_min_lead_minutes: settings.min_lead_minutes,
+    p_hold_minutes: settings.hold_minutes,
+  });
+
+  if (error) {
+    return {
+      success: false,
+      code: "SETTINGS_FAILED",
+      error: error.message.replace(/^[A-Z_]+:\s*/, "") || "Failed to update canteen settings.",
+    };
+  }
+
+  revalidatePath("/admin/settings");
+  revalidatePath("/admin");
+  revalidatePath("/menu");
+  return { success: true, data: undefined };
+}
+
+// ---------------------------------------------------------------------------
+// 5. Menu & Category Management
+// ---------------------------------------------------------------------------
+
+export type AdminCategory = {
+  id: string;
+  canteen_id: string;
+  name: string;
+  display_order: number;
+  is_active: boolean;
+};
+
+export type AdminMenuItem = {
+  id: string;
+  canteen_id: string;
+  category_id: string | null;
+  name: string;
+  description: string | null;
+  price_paise: number;
+  image_url: string | null;
+  is_veg: boolean;
+  is_available: boolean;
+  stock: number | null;
+  prep_minutes: number;
+  is_active: boolean;
+};
+
+export async function getAdminMenuDataAction(
+  canteenId?: string
+): Promise<ActionResult<{ categories: AdminCategory[]; items: AdminMenuItem[]; selectedCanteenId: string }>> {
+  await requireRole(["admin"]);
+
+  const activeCanteenId = canteenId || (await getActiveCanteenId());
+  if (!activeCanteenId) {
+    return { success: false, error: "No canteen selected or available." };
+  }
+
+  const supabase = await createClient();
+
+  const [categoriesRes, itemsRes] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("id, canteen_id, name, display_order, is_active")
+      .eq("canteen_id", activeCanteenId)
+      .order("display_order", { ascending: true }),
+
+    supabase
+      .from("menu_items")
+      .select(
+        "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active"
+      )
+      .eq("canteen_id", activeCanteenId)
+      .order("name", { ascending: true }),
+  ]);
+
+  if (categoriesRes.error || itemsRes.error) {
+    return {
+      success: false,
+      error: categoriesRes.error?.message || itemsRes.error?.message || "Failed to load menu data.",
+    };
+  }
+
+  return {
+    success: true,
+    data: {
+      categories: (categoriesRes.data || []) as AdminCategory[],
+      items: (itemsRes.data || []) as AdminMenuItem[],
+      selectedCanteenId: activeCanteenId,
+    },
+  };
+}
+
+export async function adminCreateCategoryAction(
+  canteenId: string,
+  name: string,
+  displayOrder: number = 0
+): Promise<ActionResult<AdminCategory>> {
+  await requireRole(["admin"]);
+
+  const cleanName = name.trim();
+  if (!cleanName) {
+    return { success: false, error: "Category name is required." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("categories")
+    .insert({
+      canteen_id: canteenId,
+      name: cleanName,
+      display_order: displayOrder,
+      is_active: true,
+    })
+    .select("id, canteen_id, name, display_order, is_active")
+    .single();
+
+  if (error) {
+    if (error.code === "23505" || error.message?.includes("duplicate key")) {
+      return {
+        success: false,
+        error: "A category with this name already exists in this canteen.",
+        code: "UNIQUE_VIOLATION",
+      };
+    }
+    return { success: false, error: error.message || "Failed to create category." };
+  }
+
+  revalidatePath("/admin/menu");
+  revalidatePath("/menu");
+  return { success: true, data: data as AdminCategory };
+}
+
+export async function adminUpdateCategoryAction(
+  categoryId: string,
+  name: string,
+  displayOrder: number,
+  isActive: boolean = true
+): Promise<ActionResult> {
+  await requireRole(["admin"]);
+
+  const cleanName = name.trim();
+  if (!cleanName) {
+    return { success: false, error: "Category name is required." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("categories")
+    .update({
+      name: cleanName,
+      display_order: displayOrder,
+      is_active: isActive,
+    })
+    .eq("id", categoryId);
+
+  if (error) {
+    if (error.code === "23505" || error.message?.includes("duplicate key")) {
+      return {
+        success: false,
+        error: "A category with this name already exists in this canteen.",
+        code: "UNIQUE_VIOLATION",
+      };
+    }
+    return { success: false, error: error.message || "Failed to update category." };
+  }
+
+  revalidatePath("/admin/menu");
+  revalidatePath("/menu");
+  return { success: true, data: undefined };
+}
+
+export async function adminArchiveCategoryAction(categoryId: string): Promise<ActionResult> {
+  await requireRole(["admin"]);
+
+  const supabase = await createClient();
+  // Safe archive instead of hard delete
+  const { error } = await supabase
+    .from("categories")
+    .update({ is_active: false })
+    .eq("id", categoryId);
+
+  if (error) {
+    return { success: false, error: error.message || "Failed to archive category." };
+  }
+
+  revalidatePath("/admin/menu");
+  revalidatePath("/menu");
+  return { success: true, data: undefined };
+}
+
+export interface MenuItemInput {
+  canteen_id: string;
+  category_id: string;
+  name: string;
+  description?: string | null;
+  price_rupees: string | number;
+  image_url?: string | null;
+  is_veg: boolean;
+  is_available: boolean;
+  stock?: number | null;
+  prep_minutes: number;
+}
+
+export async function adminCreateMenuItemAction(
+  item: MenuItemInput
+): Promise<ActionResult<AdminMenuItem>> {
+  await requireRole(["admin"]);
+
+  const cleanName = item.name.trim();
+  if (!cleanName) {
+    return { success: false, error: "Item name is required." };
+  }
+
+  const priceParsed = parseRupeesToPaise(item.price_rupees);
+  if (!priceParsed.success || priceParsed.paise === undefined) {
+    return { success: false, error: priceParsed.error || "Invalid item price." };
+  }
+
+  if (item.image_url && !isAllowedMenuImageUrl(item.image_url)) {
+    return {
+      success: false,
+      error: "Image URL must point to the canteen menu-images storage bucket.",
+    };
+  }
+
+  const prepMins = Math.max(1, Math.min(item.prep_minutes || 5, 180));
+  const stockVal = item.stock !== undefined && item.stock !== null ? Math.max(0, item.stock) : null;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("menu_items")
+    .insert({
+      canteen_id: item.canteen_id,
+      category_id: item.category_id,
+      name: cleanName,
+      description: item.description?.trim() || null,
+      price_paise: priceParsed.paise,
+      image_url: item.image_url?.trim() || null,
+      is_veg: item.is_veg,
+      is_available: item.is_available,
+      stock: stockVal,
+      prep_minutes: prepMins,
+      is_active: true,
+    })
+    .select(
+      "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active"
+    )
+    .single();
+
+  if (error) {
+    if (error.code === "23505" || error.message?.includes("duplicate key")) {
+      return {
+        success: false,
+        error: "A menu item with this name already exists in this category/canteen.",
+        code: "UNIQUE_VIOLATION",
+      };
+    }
+    return { success: false, error: error.message || "Failed to create menu item." };
+  }
+
+  revalidatePath("/admin/menu");
+  revalidatePath("/menu");
+  return { success: true, data: data as AdminMenuItem };
+}
+
+export async function adminUpdateMenuItemAction(
+  itemId: string,
+  item: MenuItemInput,
+  oldImageUrl?: string | null
+): Promise<ActionResult> {
+  await requireRole(["admin"]);
+
+  const cleanName = item.name.trim();
+  if (!cleanName) {
+    return { success: false, error: "Item name is required." };
+  }
+
+  const priceParsed = parseRupeesToPaise(item.price_rupees);
+  if (!priceParsed.success || priceParsed.paise === undefined) {
+    return { success: false, error: priceParsed.error || "Invalid item price." };
+  }
+
+  if (item.image_url && !isAllowedMenuImageUrl(item.image_url)) {
+    return {
+      success: false,
+      error: "Image URL must point to the canteen menu-images storage bucket.",
+    };
+  }
+
+  const prepMins = Math.max(1, Math.min(item.prep_minutes || 5, 180));
+  const stockVal = item.stock !== undefined && item.stock !== null ? Math.max(0, item.stock) : null;
+
+  const supabase = await createClient();
+
+  // If old image is replaced or removed, safely clean up old storage object
+  if (oldImageUrl && oldImageUrl !== item.image_url) {
+    const filenameToDelete = extractStorageFilename(oldImageUrl);
+    if (filenameToDelete) {
+      await supabase.storage.from("menu-images").remove([filenameToDelete]);
+    }
+  }
+
+  const { error } = await supabase
+    .from("menu_items")
+    .update({
+      category_id: item.category_id,
+      name: cleanName,
+      description: item.description?.trim() || null,
+      price_paise: priceParsed.paise,
+      image_url: item.image_url?.trim() || null,
+      is_veg: item.is_veg,
+      is_available: item.is_available,
+      stock: stockVal,
+      prep_minutes: prepMins,
+    })
+    .eq("id", itemId);
+
+  if (error) {
+    if (error.code === "23505" || error.message?.includes("duplicate key")) {
+      return {
+        success: false,
+        error: "A menu item with this name already exists in this category/canteen.",
+        code: "UNIQUE_VIOLATION",
+      };
+    }
+    return { success: false, error: error.message || "Failed to update menu item." };
+  }
+
+  revalidatePath("/admin/menu");
+  revalidatePath("/menu");
+  return { success: true, data: undefined };
+}
+
+export async function adminArchiveMenuItemAction(itemId: string): Promise<ActionResult> {
+  await requireRole(["admin"]);
+
+  const supabase = await createClient();
+  // Safe archive instead of hard delete (FK is ON DELETE RESTRICT on order_items)
+  const { error } = await supabase
+    .from("menu_items")
+    .update({ is_active: false })
+    .eq("id", itemId);
+
+  if (error) {
+    return { success: false, error: error.message || "Failed to archive menu item." };
+  }
+
+  revalidatePath("/admin/menu");
+  revalidatePath("/menu");
+  return { success: true, data: undefined };
+}
+
+// ---------------------------------------------------------------------------
+// 6. Image Upload Action
+// ---------------------------------------------------------------------------
+
+export async function uploadMenuImageAction(
+  formData: FormData
+): Promise<ActionResult<{ publicUrl: string }>> {
+  await requireRole(["admin"]);
+
+  const file = formData.get("file") as File | null;
+  if (!file) {
+    return { success: false, error: "No image file provided." };
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+
+  const validation = validateImageBytes(bytes);
+  if (!validation.valid || !validation.extension) {
+    return {
+      success: false,
+      error: validation.error || "Invalid image file.",
+    };
+  }
+
+  // Generate unique filename
+  const filename = `${crypto.randomUUID()}.${validation.extension}`;
+
+  const supabase = await createClient();
+  const { error: uploadError } = await supabase.storage
+    .from("menu-images")
+    .upload(filename, bytes, {
+      contentType: validation.mimeType,
+      cacheControl: "31536000",
+      upsert: false,
+    });
+
+  if (uploadError) {
+    return {
+      success: false,
+      error: uploadError.message || "Failed to upload image to storage.",
+    };
+  }
+
+  const { data: publicUrlData } = supabase.storage
+    .from("menu-images")
+    .getPublicUrl(filename);
+
+  return {
+    success: true,
+    data: { publicUrl: publicUrlData.publicUrl },
+  };
+}
