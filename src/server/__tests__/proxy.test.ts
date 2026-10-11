@@ -17,9 +17,15 @@ vi.mock("@supabase/ssr", () => ({
 import { proxy } from "@/proxy";
 import { ROLE_HOME } from "@/server/auth";
 
-function createMockRequest(pathname: string): NextRequest {
+function createMockRequest(
+  pathname: string,
+  options?: { method?: string; headers?: Record<string, string> }
+): NextRequest {
   const url = new URL(`https://example.com${pathname}`);
+  const headers = new Headers(options?.headers);
   return {
+    method: options?.method ?? "GET",
+    headers,
     nextUrl: {
       pathname,
       clone: () => new URL(url.toString()),
@@ -47,6 +53,26 @@ describe("proxy (UX redirects & loop invariants)", () => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://mock.supabase.co";
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "mock-anon-key";
+  });
+
+  describe("Server Action and non-GET bypass (page routes only)", () => {
+    it("passes Server Action requests through without redirecting", async () => {
+      const req = createMockRequest("/admin", {
+        method: "POST",
+        headers: { "next-action": "some-action-id" },
+      });
+      const res = await proxy(req);
+      expect(res.headers.get("location")).toBeNull();
+      // Should not query profiles
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it("passes non-GET mutation requests through without redirecting", async () => {
+      const req = createMockRequest("/orders", { method: "POST" });
+      const res = await proxy(req);
+      expect(res.headers.get("location")).toBeNull();
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
   });
 
   describe("bypass routes (never redirected)", () => {

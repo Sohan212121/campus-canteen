@@ -16,8 +16,6 @@ import { createServerClient } from "@supabase/ssr";
 import { ROLE_HOME, type UserRole } from "@/server/auth";
 
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const supabaseKey = (
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
@@ -26,7 +24,7 @@ export async function proxy(request: NextRequest) {
 
   // If Supabase credentials are not configured, skip auth redirects
   if (!supabaseUrl || !supabaseKey) {
-    return supabaseResponse;
+    return NextResponse.next();
   }
 
   const { pathname } = request.nextUrl;
@@ -37,8 +35,18 @@ export async function proxy(request: NextRequest) {
     pathname === "/auth/deactivated" ||
     pathname === "/auth/callback"
   ) {
-    return supabaseResponse;
+    return NextResponse.next();
   }
+
+  // Only run UX redirects on page routes (skip Server Actions and mutation requests)
+  if (
+    request.headers.has("next-action") ||
+    (request.method !== "GET" && request.method !== "HEAD")
+  ) {
+    return NextResponse.next();
+  }
+
+  let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
