@@ -9,7 +9,7 @@ export default async function StudentLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const profile = await requireRole(["student", "staff", "admin"]);
+  const profile = await requireRole(["student"]);
 
   // Fetch initial unread notifications count for header badge
   const supabase = await createReadOnlyClient();

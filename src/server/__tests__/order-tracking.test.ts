@@ -57,7 +57,7 @@ describe("Phase 6 Order Tracking & Cancellation", () => {
       });
 
       await cancelOrderAction(validOrderId);
-      expect(mockRequireRole).toHaveBeenCalledWith(["student", "staff", "admin"]);
+      expect(mockRequireRole).toHaveBeenCalledWith(["student"]);
     });
 
     it("fails validation when orderId is not a valid UUID", async () => {

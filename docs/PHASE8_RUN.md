@@ -38,3 +38,20 @@ This runbook guides execution of the Phase 8 migration and test suite in the Sup
    ```text
    SUCCESS: All 8 Phase 8 test cases passed successfully.
    ```
+
+---
+
+## Phase 8 Role Separation & Migration `0007_role_isolation.sql` Notes
+
+### Architecture & Operational Boundaries
+- **Strict Role Boundaries**:
+  - **Student (`/`)**: Can only access the customer pre-ordering flows (`/`, `/menu`, `/cart`, `/checkout`, `/orders`, `/profile`, `/notifications`). Cannot access `/staff` or `/admin`.
+  - **Staff (`/staff`)**: Can only operate the kitchen board, inventory stock/availability toggles, and counter pickup scanner for their assigned canteen. Cannot pre-order or access `/admin`.
+  - **Admin (`/admin`)**: Dedicated administrator interface managing menu items, categories, canteen settings, user roles, deactivations, live orders audit, and platform analytics. Admin accounts **no longer operate the staff kitchen board** directly.
+- **Deployment Sequence**:
+  - `0007_role_isolation.sql` **must be applied after the application code is deployed**.
+  - Deploying the frontend and server action role guards first guarantees that active admins and staff will already be routed through their dedicated interfaces (`/admin` and `/staff`), ensuring zero operational downtime or disruption before database procedure tightening.
+- **Post-Deployment Verification**:
+  - Verify that staff accounts with NULL canteen still see the graceful "No canteen assigned" notice and do not crash.
+  - Verify that admins manage the entire platform from `/admin` while students pre-order from `/`.
+

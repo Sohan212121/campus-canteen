@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import * as z from "zod";
 
 import { createClient } from "@/lib/supabase/server";
+import { ROLE_HOME, type UserRole } from "@/server/auth";
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -73,7 +74,7 @@ export async function loginAction(
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_active")
+      .select("is_active, role")
       .eq("id", user.id)
       .single();
 
@@ -81,6 +82,10 @@ export async function loginAction(
       // Account is deactivated — sign them out immediately.
       await supabase.auth.signOut();
       redirect("/login?error=account_deactivated");
+    }
+
+    if (profile?.role && profile.role in ROLE_HOME) {
+      redirect(ROLE_HOME[profile.role as UserRole]);
     }
   }
 

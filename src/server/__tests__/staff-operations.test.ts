@@ -47,7 +47,7 @@ describe("Phase 7 Staff Operations", () => {
   });
 
   describe("transitionOrderAction", () => {
-    it("enforces staff or admin role check", async () => {
+    it("enforces staff role check", async () => {
       mockRpc.mockResolvedValue({
         data: {
           order_id: validOrderId,
@@ -58,7 +58,7 @@ describe("Phase 7 Staff Operations", () => {
       });
 
       await transitionOrderAction(validOrderId, "ACCEPTED");
-      expect(mockRequireRole).toHaveBeenCalledWith(["staff", "admin"]);
+      expect(mockRequireRole).toHaveBeenCalledWith(["staff"]);
       expect(mockRpc).toHaveBeenCalledWith("transition_order", {
         p_order_id: validOrderId,
         p_to_status: "ACCEPTED",

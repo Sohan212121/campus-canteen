@@ -13,6 +13,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+import { ROLE_HOME, type UserRole } from "@/server/auth";
+
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -22,9 +24,19 @@ export async function proxy(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   )?.trim();
 
-  // If Supabase credentials are not configured (e.g., initial local setup before .env.local is filled),
-  // skip auth redirects to avoid crashing the server on every request.
+  // If Supabase credentials are not configured, skip auth redirects
   if (!supabaseUrl || !supabaseKey) {
+    return supabaseResponse;
+  }
+
+  const { pathname } = request.nextUrl;
+
+  // Never redirect health check or dedicated auth handlers
+  if (
+    pathname === "/api/health" ||
+    pathname === "/auth/deactivated" ||
+    pathname === "/auth/callback"
+  ) {
     return supabaseResponse;
   }
 
@@ -45,27 +57,82 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // Refresh the session — this is critical to keep the auth token alive.
-  // IMPORTANT: uses getUser() (validates JWT against Auth server), not
-  // getSession() which only reads the local token without validation.
+  // Refresh session via getUser()
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-
-  // Redirect unauthenticated users away from protected routes to /login.
-  // Public routes (/login, /signup) are excluded via the matcher below.
+  // Handle unauthenticated visitors
   if (!user) {
+    if (pathname === "/login" || pathname === "/signup") {
+      return supabaseResponse;
+    }
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);
   }
 
-  // Redirect authenticated users away from auth pages to home.
-  if (user && (pathname === "/login" || pathname === "/signup")) {
+  // Look up profile role & status for authenticated page navigation
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, is_active")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile) {
+    return supabaseResponse;
+  }
+
+  // Deactivated user -> redirect to sign-out handler
+  if (!profile.is_active) {
+    const deactUrl = request.nextUrl.clone();
+    deactUrl.pathname = "/auth/deactivated";
+    return NextResponse.redirect(deactUrl);
+  }
+
+  const userRole = profile.role as UserRole;
+  const userHome = ROLE_HOME[userRole] ?? "/";
+
+  // Redirect signed-in users away from /login and /signup to their own home
+  if (pathname === "/login" || pathname === "/signup") {
     const homeUrl = request.nextUrl.clone();
-    homeUrl.pathname = "/";
+    homeUrl.pathname = userHome;
+    return NextResponse.redirect(homeUrl);
+  }
+
+  // Student area: /, /menu, /cart, /checkout, /orders, /profile, /notifications
+  const isStudentRoute =
+    pathname === "/" ||
+    pathname === "/menu" ||
+    pathname.startsWith("/menu/") ||
+    pathname === "/cart" ||
+    pathname.startsWith("/cart/") ||
+    pathname === "/checkout" ||
+    pathname.startsWith("/checkout/") ||
+    pathname === "/orders" ||
+    pathname.startsWith("/orders/") ||
+    pathname === "/profile" ||
+    pathname.startsWith("/profile/") ||
+    pathname === "/notifications" ||
+    pathname.startsWith("/notifications/");
+
+  if (isStudentRoute && userRole !== "student") {
+    const homeUrl = request.nextUrl.clone();
+    homeUrl.pathname = userHome;
+    return NextResponse.redirect(homeUrl);
+  }
+
+  // Staff area (/staff/*)
+  if (pathname.startsWith("/staff") && userRole !== "staff") {
+    const homeUrl = request.nextUrl.clone();
+    homeUrl.pathname = userHome;
+    return NextResponse.redirect(homeUrl);
+  }
+
+  // Admin area (/admin/*)
+  if (pathname.startsWith("/admin") && userRole !== "admin") {
+    const homeUrl = request.nextUrl.clone();
+    homeUrl.pathname = userHome;
     return NextResponse.redirect(homeUrl);
   }
 
@@ -82,8 +149,7 @@ export const config = {
      * - Common image file extensions
      * - /api/health (health check endpoint)
      * - manifest and icon files (PWA assets)
-     * - /login and /signup (public auth pages)
      */
-    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$|api/health|manifest\\.json|site\\.webmanifest|.*\\.(?:xml|txt)$|login|signup).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$|api/health|manifest\\.json|site\\.webmanifest|.*\\.(?:xml|txt)$).*)",
   ],
 };

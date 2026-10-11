@@ -11,10 +11,9 @@ import { cn } from "@/lib/utils";
 interface StaffNavProps {
   canteenName: string | null;
   canteenId: string | null;
-  userRole: string;
 }
 
-export function StaffNav({ canteenName, canteenId, userRole }: StaffNavProps) {
+export function StaffNav({ canteenName, canteenId }: StaffNavProps) {
   const pathname = usePathname();
 
   const navItems = [
@@ -37,7 +36,7 @@ export function StaffNav({ canteenName, canteenId, userRole }: StaffNavProps) {
                 Kitchen Counter
               </span>
               <span className="text-[11px] text-muted-foreground font-medium">
-                Staff Portal {userRole === "admin" && "(Admin)"}
+                Staff Portal
               </span>
             </div>
           </Link>

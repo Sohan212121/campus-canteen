@@ -37,7 +37,7 @@ export type CartItemDetailsResult = {
 export async function getCartItemDetailsAction(
   itemIds: string[]
 ): Promise<CartItemDetailsResult> {
-  await requireRole(["student", "staff", "admin"]);
+  await requireRole(["student"]);
 
   const parsed = cartItemIdsSchema.safeParse(itemIds);
   if (!parsed.success) {

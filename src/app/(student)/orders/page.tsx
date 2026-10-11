@@ -3,7 +3,7 @@ import { createReadOnlyClient } from "@/lib/supabase/server";
 import { OrdersListView, type OrderSummaryItem } from "@/components/student/orders-list-view";
 
 export default async function OrdersPage() {
-  const profile = await requireRole(["student", "staff", "admin"]);
+  const profile = await requireRole(["student"]);
   const supabase = await createReadOnlyClient();
 
   // 1. Fetch active orders (PLACED, ACCEPTED, PREPARING, READY)

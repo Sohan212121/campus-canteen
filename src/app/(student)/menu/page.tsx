@@ -5,7 +5,7 @@ import { MenuView, type CategoryData } from "@/components/student/menu-view";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
 
 export default async function MenuPage() {
-  await requireRole(["student", "staff", "admin"]);
+  await requireRole(["student"]);
   const canteenId = await getActiveCanteenId();
 
   let categories: CategoryData[] = [];

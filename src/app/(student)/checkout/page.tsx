@@ -4,7 +4,7 @@ import { getActiveCanteenId } from "@/server/canteen";
 import { CheckoutView } from "@/components/student/checkout-view";
 
 export default async function CheckoutPage() {
-  await requireRole(["student", "staff", "admin"]);
+  await requireRole(["student"]);
   const canteenId = await getActiveCanteenId();
 
   if (!canteenId) {

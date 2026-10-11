@@ -42,6 +42,14 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
   return profile as UserProfile;
 }
 
+export const ROLE_HOME = {
+  student: "/",
+  staff: "/staff",
+  admin: "/admin",
+} as const;
+
+export type UserRole = keyof typeof ROLE_HOME;
+
 /**
  * Server-side role gate for protected pages.
  *
@@ -50,7 +58,8 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
  *   `/auth/deactivated` route handler which signs them out and sends them
  *   to `/login?error=account_deactivated`.
  * - If no user is found, redirects to `/login`.
- * - If the user's role is not in the allowed list, redirects to `/`.
+ * - If the user's role is not in the allowed list, redirects to their own home:
+ *   student -> /, staff -> /staff, admin -> /admin.
  *
  * Role is always read from `public.profiles`, never from JWT claims.
  */
@@ -68,7 +77,7 @@ export async function requireRole(
   }
 
   if (!allowedRoles.includes(profile.role)) {
-    redirect("/");
+    redirect(ROLE_HOME[profile.role] ?? "/");
   }
 
   return profile;

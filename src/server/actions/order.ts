@@ -68,7 +68,7 @@ function normalizeIstHint(hint: string | null | undefined): string | undefined {
  */
 export async function placeOrderAction(rawInput: unknown): Promise<PlaceOrderResult> {
   // 1. Enforce authenticated role
-  await requireRole(["student", "staff", "admin"]);
+  await requireRole(["student"]);
 
   // 2. Validate input with Zod
   const parsed = placeOrderSchema.safeParse(rawInput);
@@ -183,7 +183,7 @@ export async function getPickupEstimateAction(
   items: Array<{ menu_item_id: string; quantity: number }>,
   requestedAt?: string | null
 ): Promise<EstimatePickupResult> {
-  await requireRole(["student", "staff", "admin"]);
+  await requireRole(["student"]);
 
   const parsed = placeOrderSchema.pick({ canteenId: true, items: true, requestedAt: true }).safeParse({
     canteenId,
@@ -301,7 +301,7 @@ export type GetReorderItemsResult = {
  */
 export async function cancelOrderAction(orderId: string): Promise<CancelOrderResult> {
   // 1. Enforce authenticated role
-  await requireRole(["student", "staff", "admin"]);
+  await requireRole(["student"]);
 
   // 2. Validate input with Zod
   const parsed = cancelOrderSchema.safeParse({ orderId });
@@ -377,7 +377,7 @@ export async function cancelOrderAction(orderId: string): Promise<CancelOrderRes
  * Clamps quantity to max 10 and available stock; skips unavailable items.
  */
 export async function getReorderItemsAction(orderId: string): Promise<GetReorderItemsResult> {
-  await requireRole(["student", "staff", "admin"]);
+  await requireRole(["student"]);
 
   const parsed = cancelOrderSchema.safeParse({ orderId });
   if (!parsed.success) {

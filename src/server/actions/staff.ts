@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import * as z from "zod";
 
 import { requireRole } from "@/server/auth";
-import { getActiveCanteenId } from "@/server/canteen";
 import { createClient } from "@/lib/supabase/server";
 
 const uuidSchema = z.string().uuid("Invalid ID format");
@@ -73,13 +72,7 @@ export type VerifiedPickupOrder = {
  * Never accepts canteen ID from untrusted client input.
  */
 async function resolveStaffCanteen(profile: { role: string; canteen_id: string | null }): Promise<string | null> {
-  if (profile.role === "staff") {
-    return profile.canteen_id;
-  }
-  if (profile.role === "admin") {
-    return (await getActiveCanteenId()) ?? profile.canteen_id;
-  }
-  return null;
+  return profile.canteen_id;
 }
 
 /**
@@ -99,7 +92,7 @@ export async function transitionOrderAction(
     was_noop: boolean;
   };
 }> {
-  await requireRole(["staff", "admin"]);
+  await requireRole(["staff"]);
 
   const parsedId = uuidSchema.safeParse(orderId);
   const parsedStatus = orderStatusSchema.safeParse(toStatus);
@@ -178,7 +171,7 @@ export async function verifyPickupAction(
   data?: VerifiedPickupOrder;
   order?: VerifiedPickupOrder;
 }> {
-  const profile = await requireRole(["staff", "admin"]);
+  const profile = await requireRole(["staff"]);
   const canteenId = await resolveStaffCanteen(profile);
 
   if (!canteenId) {
@@ -261,7 +254,7 @@ export async function setItemAvailabilityAction(
   itemId: string,
   isAvailable: boolean
 ): Promise<{ success: boolean; code?: string; error?: string }> {
-  await requireRole(["staff", "admin"]);
+  await requireRole(["staff"]);
 
   const parsedId = uuidSchema.safeParse(itemId);
   if (!parsedId.success) {
@@ -300,7 +293,7 @@ export async function setItemAvailabilityAction(
  * SECURITY INVARIANT: NEVER selects pickup_token.
  */
 export async function getStaffBoardDataAction(): Promise<StaffBoardData> {
-  const profile = await requireRole(["staff", "admin"]);
+  const profile = await requireRole(["staff"]);
   const canteenId = await resolveStaffCanteen(profile);
 
   if (!canteenId) {
@@ -455,7 +448,7 @@ export async function getStaffInventoryItemsAction(): Promise<{
     category_name: string | null;
   }>;
 }> {
-  const profile = await requireRole(["staff", "admin"]);
+  const profile = await requireRole(["staff"]);
   const canteenId = await resolveStaffCanteen(profile);
 
   if (!canteenId) {

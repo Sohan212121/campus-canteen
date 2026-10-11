@@ -32,7 +32,7 @@ describe("getCartItemDetailsAction", () => {
     });
 
     await getCartItemDetailsAction([]);
-    expect(mockRequireRole).toHaveBeenCalledWith(["student", "staff", "admin"]);
+    expect(mockRequireRole).toHaveBeenCalledWith(["student"]);
   });
 
   it("returns error if input array contains non-UUID strings", async () => {

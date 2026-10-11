@@ -29,7 +29,7 @@ export type GetNotificationsResult = {
  * Retrieves in-app notifications for the authenticated user with unread tally.
  */
 export async function getNotificationsAction(limit = 40): Promise<GetNotificationsResult> {
-  await requireRole(["student", "staff", "admin"]);
+  await requireRole(["student"]);
 
   const supabase = await createClient();
 
@@ -63,7 +63,7 @@ export async function getNotificationsAction(limit = 40): Promise<GetNotificatio
  * Governed strictly by RLS and column-level grant: only alters is_read on user's own rows.
  */
 export async function markNotificationReadAction(notificationId: string): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["student", "staff", "admin"]);
+  await requireRole(["student"]);
 
   const parsed = uuidSchema.safeParse(notificationId);
   if (!parsed.success) {
@@ -89,7 +89,7 @@ export async function markNotificationReadAction(notificationId: string): Promis
  * Marks all unread notifications as read for the authenticated user.
  */
 export async function markAllNotificationsReadAction(): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["student", "staff", "admin"]);
+  await requireRole(["student"]);
 
   const supabase = await createClient();
 

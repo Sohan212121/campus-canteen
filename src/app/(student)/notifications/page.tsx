@@ -3,7 +3,7 @@ import { getNotificationsAction } from "@/server/actions/notifications";
 import { NotificationsView } from "@/components/student/notifications-view";
 
 export default async function NotificationsPage() {
-  const profile = await requireRole(["student", "staff", "admin"]);
+  const profile = await requireRole(["student"]);
   const res = await getNotificationsAction(40);
 
   return (

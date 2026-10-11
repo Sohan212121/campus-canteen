@@ -6,7 +6,7 @@ import { requireRole } from "@/server/auth";
 import { signOutAction } from "@/server/actions/auth";
 
 export default async function ProfilePage() {
-  const profile = await requireRole(["student", "staff", "admin"]);
+  const profile = await requireRole(["student"]);
 
   return (
     <div className="space-y-6">

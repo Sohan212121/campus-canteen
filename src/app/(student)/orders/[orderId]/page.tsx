@@ -13,7 +13,7 @@ export default async function OrderDetailPage({
 }: {
   params: Promise<{ orderId: string }>;
 }) {
-  await requireRole(["student", "staff", "admin"]);
+  await requireRole(["student"]);
   const { orderId } = await params;
 
   // 1. Validate UUID format

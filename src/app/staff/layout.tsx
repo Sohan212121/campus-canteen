@@ -1,5 +1,4 @@
 import { requireRole } from "@/server/auth";
-import { getActiveCanteenId } from "@/server/canteen";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { StaffNav } from "@/components/staff/staff-nav";
 
@@ -8,16 +7,10 @@ export default async function StaffLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const profile = await requireRole(["staff", "admin"]);
+  const profile = await requireRole(["staff"]);
 
-  let canteenId: string | null = null;
+  const canteenId: string | null = profile.canteen_id;
   let canteenName: string | null = null;
-
-  if (profile.role === "staff") {
-    canteenId = profile.canteen_id;
-  } else if (profile.role === "admin") {
-    canteenId = (await getActiveCanteenId()) ?? profile.canteen_id;
-  }
 
   if (canteenId) {
     const supabase = await createReadOnlyClient();
@@ -37,7 +30,6 @@ export default async function StaffLayout({
       <StaffNav
         canteenName={canteenName}
         canteenId={canteenId}
-        userRole={profile.role}
       />
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-4 sm:px-6">
         {children}

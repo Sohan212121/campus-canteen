@@ -14,7 +14,7 @@ import type { MenuItemData } from "@/components/student/item-detail-sheet";
 import { cn } from "@/lib/utils";
 
 export default async function StudentHomePage() {
-  const profile = await requireRole(["student", "staff", "admin"]);
+  const profile = await requireRole(["student"]);
   const canteenId = await getActiveCanteenId();
 
   const supabase = await createReadOnlyClient();

@@ -39,7 +39,7 @@ describe("placeOrderAction", () => {
       requestedAt: null,
     });
 
-    expect(mockRequireRole).toHaveBeenCalledWith(["student", "staff", "admin"]);
+    expect(mockRequireRole).toHaveBeenCalledWith(["student"]);
   });
 
   it("fails validation when items array is empty", async () => {

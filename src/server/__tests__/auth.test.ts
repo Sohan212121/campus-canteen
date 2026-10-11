@@ -18,6 +18,8 @@ vi.mock("next/navigation", () => ({
 const mockGetUser = vi.fn();
 const mockFrom = vi.fn();
 const mockSignUp = vi.fn();
+const mockSignInWithPassword = vi.fn();
+const mockSignOut = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createReadOnlyClient: vi.fn().mockResolvedValue({
@@ -29,13 +31,17 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn().mockResolvedValue({
     auth: {
       signUp: (...args: unknown[]) => mockSignUp(...args),
+      signInWithPassword: (...args: unknown[]) => mockSignInWithPassword(...args),
+      signOut: (...args: unknown[]) => mockSignOut(...args),
+      getUser: (...args: unknown[]) => mockGetUser(...args),
     },
+    from: (...args: unknown[]) => mockFrom(...args),
   }),
 }));
 
 // Import modules under test AFTER mocks are registered
-import { getCurrentUser, requireRole } from "@/server/auth";
-import { signupAction } from "@/server/actions/auth";
+import { getCurrentUser, requireRole, ROLE_HOME, type UserProfile } from "@/server/auth";
+import { signupAction, loginAction } from "@/server/actions/auth";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,6 +68,40 @@ function mockSupabaseProfile(profile: Record<string, unknown> | null) {
 describe("server/auth", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  // =========================================================================
+  // ROLE_HOME Map & Loop Invariant
+  // =========================================================================
+
+  describe("ROLE_HOME map & invariants", () => {
+    it("defines the canonical homes for all roles", () => {
+      expect(ROLE_HOME.student).toBe("/");
+      expect(ROLE_HOME.staff).toBe("/staff");
+      expect(ROLE_HOME.admin).toBe("/admin");
+    });
+
+    it("ensures each role home is unique and non-overlapping", () => {
+      const homes = Object.values(ROLE_HOME);
+      const uniqueHomes = new Set(homes);
+      expect(uniqueHomes.size).toBe(homes.length);
+    });
+
+    it("ensures no role home path causes a self-redirecting loop", () => {
+      // In proxy / requireRole logic, a user at their home path is allowed through
+      // and never redirected away from their own home.
+      for (const [role, home] of Object.entries(ROLE_HOME)) {
+        // A user of this role visiting their home path is permitted
+        const allowedRolesForHome: Record<string, UserProfile["role"][]> = {
+          "/": ["student"],
+          "/staff": ["staff"],
+          "/admin": ["admin"],
+        };
+
+        const allowed = allowedRolesForHome[home];
+        expect(allowed).toContain(role);
+      }
+    });
   });
 
   // =========================================================================
@@ -116,8 +156,6 @@ describe("server/auth", () => {
       // auth.getUser() must have been called
       expect(mockGetUser).toHaveBeenCalledTimes(1);
 
-      // Ensure there is no getSession call — we verify this by checking the mock
-      // object does NOT contain getSession at all (it was never added to the mock).
       const { createReadOnlyClient } = await import("@/lib/supabase/server");
       const client = await createReadOnlyClient();
       expect(client.auth).not.toHaveProperty("getSession");
@@ -125,7 +163,7 @@ describe("server/auth", () => {
   });
 
   // =========================================================================
-  // requireRole()
+  // requireRole() - 3x3 Role Separation Matrix
   // =========================================================================
 
   describe("requireRole()", () => {
@@ -154,42 +192,168 @@ describe("server/auth", () => {
       expect(mockRedirect).toHaveBeenCalledWith("/auth/deactivated");
     });
 
-    it("redirects to / when user's role is not in the allowed list", async () => {
-      const fakeUser = { id: "user-abc" };
+    // -----------------------------------------------------------------------
+    // Student Tests
+    // -----------------------------------------------------------------------
+    describe("student role checks", () => {
+      const studentProfile = {
+        id: "student-1",
+        full_name: "Student User",
+        college_id: "ST001",
+        role: "student",
+        canteen_id: null,
+        is_active: true,
+      };
+
+      beforeEach(() => {
+        mockGetUser.mockResolvedValue({ data: { user: { id: "student-1" } } });
+        mockSupabaseProfile(studentProfile);
+      });
+
+      it("permits student on student-guarded routes", async () => {
+        const result = await requireRole(["student"]);
+        expect(result).toEqual(studentProfile);
+        expect(mockRedirect).not.toHaveBeenCalled();
+      });
+
+      it("redirects student away from staff-guarded routes to /", async () => {
+        await expect(requireRole(["staff"])).rejects.toThrow("NEXT_REDIRECT");
+        expect(mockRedirect).toHaveBeenCalledWith("/");
+      });
+
+      it("redirects student away from admin-guarded routes to /", async () => {
+        await expect(requireRole(["admin"])).rejects.toThrow("NEXT_REDIRECT");
+        expect(mockRedirect).toHaveBeenCalledWith("/");
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Staff Tests
+    // -----------------------------------------------------------------------
+    describe("staff role checks", () => {
       const staffProfile = {
-        id: "user-abc",
-        full_name: "Staff Member",
-        college_id: null,
+        id: "staff-1",
+        full_name: "Staff User",
+        college_id: "EMP001",
         role: "staff",
         canteen_id: "canteen-1",
         is_active: true,
       };
 
-      mockGetUser.mockResolvedValue({ data: { user: fakeUser } });
-      mockSupabaseProfile(staffProfile);
+      beforeEach(() => {
+        mockGetUser.mockResolvedValue({ data: { user: { id: "staff-1" } } });
+        mockSupabaseProfile(staffProfile);
+      });
 
-      await expect(requireRole(["admin"])).rejects.toThrow("NEXT_REDIRECT");
-      expect(mockRedirect).toHaveBeenCalledWith("/");
+      it("permits staff on staff-guarded routes", async () => {
+        const result = await requireRole(["staff"]);
+        expect(result).toEqual(staffProfile);
+        expect(mockRedirect).not.toHaveBeenCalled();
+      });
+
+      it("redirects staff away from student-guarded routes to /staff", async () => {
+        await expect(requireRole(["student"])).rejects.toThrow("NEXT_REDIRECT");
+        expect(mockRedirect).toHaveBeenCalledWith("/staff");
+      });
+
+      it("redirects staff away from admin-guarded routes to /staff", async () => {
+        await expect(requireRole(["admin"])).rejects.toThrow("NEXT_REDIRECT");
+        expect(mockRedirect).toHaveBeenCalledWith("/staff");
+      });
     });
 
-    it("returns the profile when user has an allowed role", async () => {
-      const fakeUser = { id: "user-ok" };
+    // -----------------------------------------------------------------------
+    // Admin Tests
+    // -----------------------------------------------------------------------
+    describe("admin role checks", () => {
       const adminProfile = {
-        id: "user-ok",
-        full_name: "Admin Boss",
+        id: "admin-1",
+        full_name: "Admin User",
         college_id: null,
         role: "admin",
         canteen_id: null,
         is_active: true,
       };
 
-      mockGetUser.mockResolvedValue({ data: { user: fakeUser } });
-      mockSupabaseProfile(adminProfile);
+      beforeEach(() => {
+        mockGetUser.mockResolvedValue({ data: { user: { id: "admin-1" } } });
+        mockSupabaseProfile(adminProfile);
+      });
 
-      const result = await requireRole(["admin", "staff"]);
+      it("permits admin on admin-guarded routes", async () => {
+        const result = await requireRole(["admin"]);
+        expect(result).toEqual(adminProfile);
+        expect(mockRedirect).not.toHaveBeenCalled();
+      });
 
-      expect(result).toEqual(adminProfile);
-      expect(mockRedirect).not.toHaveBeenCalled();
+      it("redirects admin away from student-guarded routes to /admin", async () => {
+        await expect(requireRole(["student"])).rejects.toThrow("NEXT_REDIRECT");
+        expect(mockRedirect).toHaveBeenCalledWith("/admin");
+      });
+
+      it("redirects admin away from staff-guarded routes to /admin", async () => {
+        await expect(requireRole(["staff"])).rejects.toThrow("NEXT_REDIRECT");
+        expect(mockRedirect).toHaveBeenCalledWith("/admin");
+      });
+    });
+  });
+
+  // =========================================================================
+  // loginAction() Role Redirection & Inactive Account
+  // =========================================================================
+
+  describe("loginAction() role redirects", () => {
+    it("redirects student to / after login", async () => {
+      mockSignInWithPassword.mockResolvedValue({ error: null });
+      mockGetUser.mockResolvedValue({ data: { user: { id: "student-1" } } });
+      mockSupabaseProfile({ id: "student-1", role: "student", is_active: true });
+
+      const formData = new FormData();
+      formData.set("email", "student@campus.edu");
+      formData.set("password", "password123");
+
+      await expect(loginAction({}, formData)).rejects.toThrow("NEXT_REDIRECT");
+      expect(mockRedirect).toHaveBeenCalledWith("/");
+    });
+
+    it("redirects staff to /staff after login", async () => {
+      mockSignInWithPassword.mockResolvedValue({ error: null });
+      mockGetUser.mockResolvedValue({ data: { user: { id: "staff-1" } } });
+      mockSupabaseProfile({ id: "staff-1", role: "staff", is_active: true });
+
+      const formData = new FormData();
+      formData.set("email", "staff@campus.edu");
+      formData.set("password", "password123");
+
+      await expect(loginAction({}, formData)).rejects.toThrow("NEXT_REDIRECT");
+      expect(mockRedirect).toHaveBeenCalledWith("/staff");
+    });
+
+    it("redirects admin to /admin after login", async () => {
+      mockSignInWithPassword.mockResolvedValue({ error: null });
+      mockGetUser.mockResolvedValue({ data: { user: { id: "admin-1" } } });
+      mockSupabaseProfile({ id: "admin-1", role: "admin", is_active: true });
+
+      const formData = new FormData();
+      formData.set("email", "admin@campus.edu");
+      formData.set("password", "password123");
+
+      await expect(loginAction({}, formData)).rejects.toThrow("NEXT_REDIRECT");
+      expect(mockRedirect).toHaveBeenCalledWith("/admin");
+    });
+
+    it("signs out deactivated user and redirects to /login?error=account_deactivated", async () => {
+      mockSignInWithPassword.mockResolvedValue({ error: null });
+      mockGetUser.mockResolvedValue({ data: { user: { id: "deactivated-1" } } });
+      mockSupabaseProfile({ id: "deactivated-1", role: "student", is_active: false });
+
+      const formData = new FormData();
+      formData.set("email", "banned@campus.edu");
+      formData.set("password", "password123");
+
+      await expect(loginAction({}, formData)).rejects.toThrow("NEXT_REDIRECT");
+      expect(mockSignOut).toHaveBeenCalled();
+      expect(mockRedirect).toHaveBeenCalledWith("/login?error=account_deactivated");
     });
   });
 
@@ -213,7 +377,6 @@ describe("server/auth", () => {
       expect(result.fieldErrors?.collegeId).toContain("College ID is required.");
       expect(result.fieldErrors?.email).toContain("Please enter a valid email address.");
       expect(result.fieldErrors?.password).toContain("Password must be at least 8 characters.");
-      // Ensure it never calls supabase or returns a login error
       expect(mockSignUp).not.toHaveBeenCalled();
     });
 
@@ -238,4 +401,3 @@ describe("server/auth", () => {
     });
   });
 });
-
