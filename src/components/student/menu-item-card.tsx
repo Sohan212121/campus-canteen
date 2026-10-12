@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { VegIndicator } from "@/components/student/veg-indicator";
 import { MenuItemImage } from "@/components/student/menu-item-image";
+import { StarRatingDisplay } from "@/components/student/star-rating";
 import { formatPaise } from "@/lib/money";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
@@ -72,6 +73,13 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
               <Badge variant="warning" className="text-[10px] py-0 px-1.5 font-normal">
                 {item.stock} left
               </Badge>
+            )}
+            {item.rating_count !== undefined && item.rating_count !== null && item.rating_count > 0 && (
+              <StarRatingDisplay
+                rating={item.rating_avg}
+                count={item.rating_count}
+                size="sm"
+              />
             )}
           </div>
 

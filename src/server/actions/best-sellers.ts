@@ -87,7 +87,7 @@ export async function getBestSellersAction(
     const { data: itemRows, error: itemsError } = await supabase
       .from("menu_items")
       .select(
-        "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active"
+        "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count"
       )
       .eq("canteen_id", canteenId)
       .in("id", itemIds)

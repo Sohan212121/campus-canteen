@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Menu as MenuIcon,
   X,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "@/server/actions/auth";
@@ -21,6 +22,7 @@ const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "Menu", href: "/admin/menu", icon: UtensilsCrossed },
   { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
+  { label: "Reviews", href: "/admin/reviews", icon: MessageSquare },
   { label: "Users", href: "/admin/users", icon: Users },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];

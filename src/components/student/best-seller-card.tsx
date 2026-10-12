@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { VegIndicator } from "@/components/student/veg-indicator";
 import { MenuItemImage } from "@/components/student/menu-item-image";
+import { StarRatingDisplay } from "@/components/student/star-rating";
 import { formatPaise } from "@/lib/money";
 import { formatBestSellerBadge, formatUnitsSoldBadge } from "@/lib/best-sellers";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
@@ -103,11 +104,20 @@ export function BestSellerCard({
 
         {/* Info */}
         <div className="mt-2.5 space-y-1">
-          <div className="flex items-center gap-1.5">
-            <VegIndicator isVeg={item.is_veg} />
-            <span className="text-xs font-bold text-foreground">
-              {formatPaise(item.price_paise)}
-            </span>
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <VegIndicator isVeg={item.is_veg} />
+              <span className="text-xs font-bold text-foreground">
+                {formatPaise(item.price_paise)}
+              </span>
+            </div>
+            {item.rating_count !== undefined && item.rating_count !== null && item.rating_count > 0 && (
+              <StarRatingDisplay
+                rating={item.rating_avg}
+                count={item.rating_count}
+                size="sm"
+              />
+            )}
           </div>
 
           <h3 className="font-semibold text-foreground text-sm leading-snug line-clamp-1 group-hover:text-primary transition-colors">

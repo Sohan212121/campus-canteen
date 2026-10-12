@@ -60,7 +60,7 @@ export default async function StudentHomePage() {
       const { data } = await supabase
         .from("menu_items")
         .select(
-          "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active"
+          "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count"
         )
         .eq("canteen_id", canteenId)
         .eq("is_active", true)

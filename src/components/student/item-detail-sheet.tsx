@@ -10,6 +10,8 @@ import { VegIndicator } from "@/components/student/veg-indicator";
 import { MenuItemImage } from "@/components/student/menu-item-image";
 import { formatPaise } from "@/lib/money";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
+import { StarRatingDisplay } from "@/components/student/star-rating";
+import { ItemReviewsSection } from "@/components/student/item-reviews-section";
 
 export type MenuItemData = {
   id: string;
@@ -24,6 +26,8 @@ export type MenuItemData = {
   stock: number | null;
   prep_minutes: number;
   is_active: boolean;
+  rating_avg?: number | null;
+  rating_count?: number;
 };
 
 interface ItemDetailSheetProps {
@@ -154,6 +158,13 @@ function ItemDetailDialogContent({
               <h2 id="item-detail-title" className="text-xl font-bold tracking-tight">
                 {item.name}
               </h2>
+              <div className="pt-0.5">
+                <StarRatingDisplay
+                  rating={item.rating_avg}
+                  count={item.rating_count}
+                  size="sm"
+                />
+              </div>
             </div>
             <div className="text-right shrink-0">
               <span className="text-xl font-bold text-foreground">
@@ -182,6 +193,9 @@ function ItemDetailDialogContent({
               </span>
             </div>
           )}
+
+          {/* Customer Reviews Section */}
+          <ItemReviewsSection menuItemId={item.id} itemName={item.name} />
         </div>
 
         {/* Footer with quantity stepper and add to cart */}

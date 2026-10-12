@@ -34,6 +34,7 @@ import {
 } from "@/lib/order-status";
 import { cancelOrderAction, getReorderItemsAction } from "@/server/actions/order";
 import { MenuItemImage } from "@/components/ui/menu-item-image";
+import { RateOrderItemsSection } from "@/components/student/rate-order-items-section";
 import { cn } from "@/lib/utils";
 
 export interface OrderDetailData {
@@ -437,6 +438,11 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
           <span className="text-primary text-base">{formatPaise(order.total_paise)}</span>
         </div>
       </section>
+
+      {/* Rate Your Items Section (Available only in COLLECTED stage) */}
+      {order.status === "COLLECTED" && (
+        <RateOrderItemsSection orderItems={order.order_items} />
+      )}
 
       {/* Cancellation Section (Available only in PLACED stage) */}
       {cancellable && (
