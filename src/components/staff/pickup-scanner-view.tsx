@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import dynamic from "next/dynamic";
 import { z } from "zod";
 import { toast } from "sonner";
 import {
@@ -26,11 +25,7 @@ import {
 } from "@/server/actions/staff";
 import { formatPaise } from "@/lib/money";
 
-// Dynamic import for Scanner to prevent SSR hydration errors
-const Scanner = dynamic(
-  () => import("@yudiel/react-qr-scanner").then((mod) => mod.Scanner),
-  { ssr: false }
-);
+import { LazyQrScanner } from "./lazy-qr-scanner";
 
 const tokenSchema = z
   .string()
@@ -166,13 +161,13 @@ export function PickupScannerView() {
               setMode("camera");
               resetState();
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+            className={`flex min-h-[44px] items-center gap-2 px-4 text-xs font-bold rounded-lg transition-colors ${
               mode === "camera"
                 ? "bg-background text-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <Camera className="h-3.5 w-3.5" />
+            <Camera className="h-4 w-4" />
             Scanner
           </button>
           <button
@@ -181,13 +176,13 @@ export function PickupScannerView() {
               setMode("manual");
               resetState();
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+            className={`flex min-h-[44px] items-center gap-2 px-4 text-xs font-bold rounded-lg transition-colors ${
               mode === "manual"
                 ? "bg-background text-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <Keyboard className="h-3.5 w-3.5" />
+            <Keyboard className="h-4 w-4" />
             Manual Entry
           </button>
         </div>
@@ -296,9 +291,9 @@ export function PickupScannerView() {
               </div>
               <Button
                 size="sm"
-                variant="ghost"
+                variant="outline"
                 onClick={resetState}
-                className="h-8 text-xs text-destructive hover:bg-destructive/10"
+                className="min-h-[44px] px-3.5 text-xs font-bold text-destructive hover:bg-destructive/10"
               >
                 Try Again
               </Button>
@@ -320,7 +315,7 @@ export function PickupScannerView() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="relative aspect-square max-w-sm mx-auto overflow-hidden rounded-xl border bg-black/90">
-                  <Scanner
+                  <LazyQrScanner
                     onScan={handleScan}
                     onError={handleCameraError}
                     paused={paused || isVerifying}

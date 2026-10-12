@@ -101,7 +101,7 @@ export default async function StudentHomePage() {
               href={`/orders/${latestActiveOrder.id}`}
               className={buttonVariants({
                 size: "sm",
-                className: "h-8 px-3 rounded-xl text-xs font-semibold gap-1 inline-flex items-center",
+                className: "min-h-[44px] h-11 px-3.5 rounded-xl text-xs font-bold gap-1.5 inline-flex items-center",
               })}
             >
               <span>View Token</span>
@@ -145,7 +145,7 @@ export default async function StudentHomePage() {
             <h2 className="text-base font-bold tracking-tight">Today&apos;s Specials</h2>
             <Link
               href="/menu"
-              className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+              className="text-xs font-semibold text-primary hover:underline flex min-h-[44px] items-center gap-1 px-1"
             >
               View Menu <ArrowRight className="h-3.5 w-3.5" />
             </Link>

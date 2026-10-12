@@ -72,7 +72,7 @@ export function StaffNav({ canteenName, canteenId }: StaffNavProps) {
                     variant: isActive ? "default" : "ghost",
                     size: "sm",
                   }),
-                  "h-9 px-3 rounded-xl text-xs font-semibold gap-1.5 transition-all",
+                  "min-h-[44px] h-11 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold gap-2 transition-all",
                   isActive
                     ? "shadow-2xs font-bold"
                     : "text-muted-foreground hover:text-foreground"
@@ -92,7 +92,7 @@ export function StaffNav({ canteenName, canteenId }: StaffNavProps) {
               variant="outline"
               size="sm"
               type="submit"
-              className="h-9 px-3 rounded-xl text-xs font-semibold gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted"
+              className="min-h-[44px] h-11 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold gap-2 text-muted-foreground hover:text-foreground hover:bg-muted"
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Sign Out</span>

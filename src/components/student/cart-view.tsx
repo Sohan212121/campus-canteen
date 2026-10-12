@@ -9,7 +9,6 @@ import {
   ShoppingBag,
   AlertTriangle,
   ArrowRight,
-  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -130,9 +129,36 @@ export function CartView() {
 
   if (!hasHydrated || (isLoading && Object.keys(serverDetails).length === 0)) {
     return (
-      <div className="space-y-4 py-8 text-center">
-        <RefreshCw className="mx-auto h-7 w-7 animate-spin text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Loading your cart items...</p>
+      <div className="space-y-4 py-4 animate-in fade-in duration-150" aria-label="Loading cart">
+        <div className="flex items-center justify-between pb-2 border-b border-border/40">
+          <div className="h-6 w-24 bg-muted animate-pulse rounded-lg" />
+          <div className="h-6 w-16 bg-muted animate-pulse rounded-lg" />
+        </div>
+        <div className="space-y-3">
+          {[1, 2].map((i) => (
+            <div key={i} className="flex gap-3 rounded-xl border border-border/60 bg-card p-3.5">
+              <div className="h-16 w-16 rounded-lg bg-muted animate-pulse shrink-0" />
+              <div className="flex-1 space-y-2 py-1">
+                <div className="h-4 w-3/4 bg-muted animate-pulse rounded" />
+                <div className="h-3 w-1/3 bg-muted animate-pulse rounded" />
+                <div className="h-4 w-1/4 bg-muted animate-pulse rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
+          <div className="h-4 w-28 bg-muted animate-pulse rounded" />
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+              <div className="h-3 w-12 bg-muted animate-pulse rounded" />
+            </div>
+            <div className="flex justify-between">
+              <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+              <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -240,7 +266,7 @@ export function CartView() {
                         removeItem(cartItem.menu_item_id);
                         toast.info("Removed from cart");
                       }}
-                      className="text-muted-foreground hover:text-destructive p-1 min-h-[32px] min-w-[32px] flex items-center justify-center -mr-1 -mt-1"
+                      className="text-muted-foreground hover:text-destructive min-h-[44px] min-w-[44px] flex items-center justify-center -mr-2 -mt-2 transition-colors"
                       aria-label="Remove item"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -274,18 +300,18 @@ export function CartView() {
                 {/* Bottom row: Stepper + Line Total */}
                 <div className="mt-2.5 flex items-center justify-between">
                   {!isInvalid ? (
-                    <div className="flex items-center rounded-lg border border-border bg-background p-0.5">
+                    <div className="flex items-center rounded-xl border border-border bg-background p-0.5">
                       <button
                         type="button"
                         onClick={() =>
                           updateQuantity(cartItem.menu_item_id, cartItem.quantity - 1)
                         }
-                        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted text-foreground transition-colors"
+                        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg hover:bg-muted text-foreground transition-colors"
                         aria-label="Decrease quantity"
                       >
-                        <Minus className="h-3.5 w-3.5" />
+                        <Minus className="h-4 w-4" />
                       </button>
-                      <span className="w-7 text-center text-xs font-bold select-none">
+                      <span className="w-8 text-center text-xs font-bold select-none">
                         {cartItem.quantity}
                       </span>
                       <button
@@ -294,17 +320,17 @@ export function CartView() {
                           updateQuantity(cartItem.menu_item_id, cartItem.quantity + 1)
                         }
                         disabled={cartItem.quantity >= maxAvailable || cartItem.quantity >= MAX_ITEM_QUANTITY}
-                        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted text-foreground disabled:opacity-40 transition-colors"
+                        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg hover:bg-muted text-foreground disabled:opacity-40 transition-colors"
                         aria-label="Increase quantity"
                       >
-                        <Plus className="h-3.5 w-3.5" />
+                        <Plus className="h-4 w-4" />
                       </button>
                     </div>
                   ) : (
                     <button
                       type="button"
                       onClick={() => removeItem(cartItem.menu_item_id)}
-                      className="text-xs text-destructive hover:underline font-medium min-h-[36px] flex items-center"
+                      className="text-xs text-destructive hover:underline font-semibold min-h-[44px] flex items-center px-1"
                     >
                       Remove from cart
                     </button>

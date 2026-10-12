@@ -121,7 +121,7 @@ function ItemDetailDialogContent({
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+            className="absolute top-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -182,16 +182,16 @@ function ItemDetailDialogContent({
         </div>
 
         {/* Footer with quantity stepper and add to cart */}
-        <div className="p-4 border-t border-border bg-card/95 safe-area-bottom flex items-center gap-3">
+        <div className="p-4 border-t border-border bg-card/95 pb-[max(1rem,env(safe-area-inset-bottom,0px))] flex items-center gap-3">
           {!isOutOfStock ? (
             <>
               {/* Stepper (min 44px touch targets) */}
-              <div className="flex items-center rounded-lg border border-border bg-background p-1 shrink-0">
+              <div className="flex items-center rounded-xl border border-border bg-background p-0.5 shrink-0">
                 <button
                   type="button"
                   onClick={handleDecrement}
                   disabled={quantity <= 1}
-                  className="flex h-10 w-10 items-center justify-center rounded-md text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
                   aria-label="Decrease quantity"
                 >
                   <Minus className="h-4 w-4" />
@@ -203,7 +203,7 @@ function ItemDetailDialogContent({
                   type="button"
                   onClick={handleIncrement}
                   disabled={quantity >= effectiveMaxQty}
-                  className="flex h-10 w-10 items-center justify-center rounded-md text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
                   aria-label="Increase quantity"
                 >
                   <Plus className="h-4 w-4" />

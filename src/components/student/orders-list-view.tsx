@@ -323,7 +323,7 @@ export function OrdersListView({
                     href={`/orders/${order.id}`}
                     className={buttonVariants({
                       className: cn(
-                        "w-full h-10 text-xs font-semibold rounded-xl gap-2 inline-flex items-center justify-center shadow-xs",
+                        "w-full min-h-[44px] h-11 text-xs font-bold rounded-xl gap-2 inline-flex items-center justify-center shadow-xs",
                         isReady
                           ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                           : ""
@@ -390,7 +390,7 @@ export function OrdersListView({
                   <div className="flex items-center justify-between pt-1 gap-2 border-t border-border/60">
                     <Link
                       href={`/orders/${order.id}`}
-                      className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+                      className="text-xs font-semibold text-primary hover:underline min-h-[44px] inline-flex items-center gap-1 px-1"
                     >
                       View Details &rarr;
                     </Link>
@@ -400,7 +400,7 @@ export function OrdersListView({
                       size="sm"
                       onClick={() => handleReorder(order.id)}
                       disabled={isReorderingThis}
-                      className="h-8 px-3 rounded-lg text-xs font-semibold gap-1.5"
+                      className="min-h-[44px] h-11 px-3.5 rounded-xl text-xs font-bold gap-1.5"
                     >
                       {isReorderingThis ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -423,7 +423,7 @@ export function OrdersListView({
                 size="sm"
                 onClick={handleLoadMorePast}
                 disabled={isLoadingMore}
-                className="w-full h-10 rounded-xl text-xs font-semibold gap-2"
+                className="w-full min-h-[44px] h-11 rounded-xl text-xs font-bold gap-2"
               >
                 {isLoadingMore && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 <span>Load More Past Orders</span>

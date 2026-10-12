@@ -140,9 +140,9 @@ export function NotificationsView({ userId, initialNotifications }: Notification
             size="sm"
             onClick={handleMarkAllRead}
             disabled={isMarkingAll}
-            className="h-8 text-xs font-semibold gap-1.5 text-primary hover:text-primary"
+            className="min-h-[44px] px-3 text-xs font-semibold gap-1.5 text-primary hover:text-primary"
           >
-            <CheckCheck className="h-3.5 w-3.5" />
+            <CheckCheck className="h-4 w-4" />
             <span>Mark all read</span>
           </Button>
         )}
@@ -150,8 +150,8 @@ export function NotificationsView({ userId, initialNotifications }: Notification
 
       {notifications.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border/80 bg-card p-8 text-center space-y-3 my-6">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-            <Bell className="h-6 w-6" />
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+            <Bell className="h-7 w-7" />
           </div>
           <div className="space-y-1">
             <h2 className="text-sm font-bold">No notifications yet</h2>
@@ -159,12 +159,14 @@ export function NotificationsView({ userId, initialNotifications }: Notification
               You will receive live alerts here when your orders are accepted, prepared, and ready for pickup.
             </p>
           </div>
-          <Link
-            href="/menu"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline pt-2"
-          >
-            Browse Menu &rarr;
-          </Link>
+          <div className="pt-2">
+            <Link
+              href="/menu"
+              className="inline-flex min-h-[44px] items-center gap-1.5 px-4 text-xs font-semibold text-primary hover:underline"
+            >
+              Browse Menu &rarr;
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -174,11 +176,13 @@ export function NotificationsView({ userId, initialNotifications }: Notification
               notif.body.toLowerCase().includes("ready");
 
             return (
-              <div
+              <button
                 key={notif.id}
+                type="button"
                 onClick={() => handleNotificationClick(notif)}
+                aria-label={`${notif.title}: ${notif.body}`}
                 className={cn(
-                  "relative group cursor-pointer overflow-hidden rounded-xl border p-3.5 transition-all text-left",
+                  "relative group w-full cursor-pointer overflow-hidden rounded-xl border p-3.5 transition-all text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]",
                   isReady
                     ? "border-emerald-500/30 bg-emerald-500/10 hover:border-emerald-500/50 shadow-2xs"
                     : notif.is_read
@@ -194,7 +198,7 @@ export function NotificationsView({ userId, initialNotifications }: Notification
                 <div className="flex items-start gap-3">
                   <div
                     className={cn(
-                      "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                      "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
                       isReady
                         ? "bg-emerald-600 text-white shadow-2xs"
                         : notif.is_read
@@ -251,7 +255,7 @@ export function NotificationsView({ userId, initialNotifications }: Notification
                     </div>
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>

@@ -95,8 +95,8 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
 
   return (
     <header className="flex items-center justify-between pb-3 mb-2 border-b border-border/60">
-      <Link href="/" className="flex items-center gap-2 group">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-2xs group-hover:scale-105 transition-transform">
+      <Link href="/" className="flex items-center gap-2 group min-h-[44px] py-1">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-2xs group-hover:scale-105 transition-transform">
           <UtensilsCrossed className="h-4 w-4" />
         </div>
         <div className="flex flex-col">
@@ -113,11 +113,11 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
         <Link
           href="/notifications"
           className={cn(
-            "relative flex h-9 w-9 items-center justify-center rounded-xl border border-border/80 bg-card text-muted-foreground transition-colors hover:text-foreground hover:bg-muted active:scale-95"
+            "relative flex h-11 w-11 items-center justify-center rounded-xl border border-border/80 bg-card text-muted-foreground transition-colors hover:text-foreground hover:bg-muted active:scale-95"
           )}
           aria-label={`Notifications (${unreadCount} unread)`}
         >
-          <Bell className="h-4 w-4" />
+          <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground shadow-xs animate-in zoom-in-75">
               {unreadCount > 99 ? "99+" : unreadCount}

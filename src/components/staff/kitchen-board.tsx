@@ -240,7 +240,7 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
                 toast.info("Kitchen audio alerts muted");
               }
             }}
-            className="h-9 px-3 rounded-xl text-xs font-semibold gap-1.5"
+            className="min-h-[44px] px-3.5 rounded-xl text-xs sm:text-sm font-bold gap-2"
           >
             {audioEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             <span className="hidden sm:inline">
@@ -254,7 +254,7 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
             size="sm"
             onClick={refreshBoard}
             disabled={isRefreshing}
-            className="h-9 px-3 rounded-xl text-xs font-semibold gap-1.5"
+            className="min-h-[44px] px-3.5 rounded-xl text-xs sm:text-sm font-bold gap-2"
           >
             <RotateCcw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
             <span className="hidden sm:inline">Refresh</span>
@@ -280,12 +280,12 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
                 handleQuickTransition(order.id, "ACCEPTED");
               }}
               disabled={transitioningId === order.id}
-              className="w-full h-10 rounded-xl text-xs font-bold gap-1.5 shadow-2xs"
+              className="w-full min-h-[44px] h-11 sm:h-12 rounded-xl text-xs sm:text-sm font-bold gap-2 shadow-xs"
             >
               {transitioningId === order.id ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                <Check className="h-4 w-4 stroke-[2.5]" />
               )}
               <span>Accept Order</span>
             </Button>
@@ -309,12 +309,12 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
                   handleQuickTransition(order.id, "PREPARING");
                 }}
                 disabled={transitioningId === order.id}
-                className="w-full h-10 rounded-xl text-xs font-bold gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shadow-2xs"
+                className="w-full min-h-[44px] h-11 sm:h-12 rounded-xl text-xs sm:text-sm font-bold gap-2 bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
               >
                 {transitioningId === order.id ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <CookingPot className="h-3.5 w-3.5" />
+                  <CookingPot className="h-4 w-4" />
                 )}
                 <span>Start Preparing</span>
               </Button>
@@ -326,12 +326,12 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
                   handleQuickTransition(order.id, "READY");
                 }}
                 disabled={transitioningId === order.id}
-                className="w-full h-10 rounded-xl text-xs font-bold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                className="w-full min-h-[44px] h-11 sm:h-12 rounded-xl text-xs sm:text-sm font-bold gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
               >
                 {transitioningId === order.id ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <CheckCircle2 className="h-4 w-4" />
                 )}
                 <span>Mark Ready</span>
               </Button>
@@ -353,10 +353,10 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
               onClick={(e) => e.stopPropagation()}
               className={buttonVariants({
                 size: "sm",
-                className: "w-full h-10 rounded-xl text-xs font-bold gap-1.5 shadow-2xs bg-primary text-primary-foreground",
+                className: "w-full min-h-[44px] h-11 sm:h-12 rounded-xl text-xs sm:text-sm font-bold gap-2 shadow-xs bg-primary text-primary-foreground",
               })}
             >
-              <QrCode className="h-3.5 w-3.5" />
+              <QrCode className="h-4 w-4" />
               <span>Verify & Collect</span>
             </Link>
           )}

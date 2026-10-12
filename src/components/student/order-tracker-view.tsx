@@ -231,12 +231,12 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
           size="sm"
           onClick={handleReorder}
           disabled={isReordering}
-          className="h-9 gap-1.5 text-xs font-semibold rounded-xl"
+          className="min-h-[44px] h-11 px-3.5 gap-2 text-xs font-bold rounded-xl"
         >
           {isReordering ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <RotateCcw className="h-3.5 w-3.5" />
+            <RotateCcw className="h-4 w-4" />
           )}
           <span>Reorder</span>
         </Button>
@@ -345,13 +345,13 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
                 variant="ghost"
                 size="sm"
                 onClick={copyTokenToClipboard}
-                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                className="h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-xl text-muted-foreground hover:text-foreground"
                 aria-label="Copy token"
               >
                 {hasCopiedToken ? (
-                  <Check className="h-4 w-4 text-emerald-600" />
+                  <Check className="h-5 w-5 text-emerald-600" />
                 ) : (
-                  <Copy className="h-4 w-4" />
+                  <Copy className="h-5 w-5" />
                 )}
               </Button>
             </div>
@@ -440,27 +440,27 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
                 variant="destructive"
                 size="sm"
                 onClick={() => setShowCancelConfirm(true)}
-                className="rounded-xl h-8 text-xs font-semibold"
+                className="rounded-xl min-h-[44px] h-11 px-4 text-xs font-semibold"
               >
                 Cancel Order
               </Button>
             </div>
           ) : (
-            <div className="space-y-3 p-2 rounded-xl bg-destructive/10 border border-destructive/20 animate-in fade-in">
+            <div className="space-y-3 p-3 rounded-xl bg-destructive/10 border border-destructive/20 animate-in fade-in">
               <div className="flex items-center gap-2 text-xs font-bold text-destructive">
-                <AlertCircle className="h-4 w-4" />
+                <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>Confirm Order Cancellation</span>
               </div>
               <p className="text-xs text-destructive/90">
                 Are you sure you want to cancel order #{order.order_code}? This will release the food items back into stock.
               </p>
-              <div className="flex items-center justify-end gap-2 pt-1">
+              <div className="flex items-center justify-end gap-2 pt-1 flex-wrap sm:flex-nowrap">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setShowCancelConfirm(false)}
                   disabled={isCancelling}
-                  className="rounded-lg h-8 text-xs"
+                  className="rounded-xl min-h-[44px] h-11 px-4 text-xs"
                 >
                   Keep Order
                 </Button>
@@ -469,9 +469,9 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
                   size="sm"
                   onClick={handleCancelOrder}
                   disabled={isCancelling}
-                  className="rounded-lg h-8 text-xs font-semibold gap-1.5"
+                  className="rounded-xl min-h-[44px] h-11 px-4 text-xs font-semibold gap-1.5"
                 >
-                  {isCancelling && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {isCancelling && <Loader2 className="h-4 w-4 animate-spin" />}
                   Confirm Cancel
                 </Button>
               </div>
@@ -487,7 +487,7 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
           className={buttonVariants({
             variant: "outline",
             size: "lg",
-            className: "w-full h-11 text-xs font-semibold rounded-xl gap-2 inline-flex items-center justify-center",
+            className: "w-full min-h-[44px] h-11 text-xs font-semibold rounded-xl gap-2 inline-flex items-center justify-center",
           })}
         >
           <span>View All Orders</span>
@@ -497,10 +497,10 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
           className={buttonVariants({
             variant: "ghost",
             size: "sm",
-            className: "w-full h-9 text-xs font-semibold text-muted-foreground hover:text-foreground",
+            className: "w-full min-h-[44px] h-11 text-xs font-semibold text-muted-foreground hover:text-foreground inline-flex items-center justify-center",
           })}
         >
-          <UtensilsCrossed className="h-3.5 w-3.5 mr-1.5" />
+          <UtensilsCrossed className="h-4 w-4 mr-1.5" />
           <span>Back to Menu</span>
         </Link>
       </div>

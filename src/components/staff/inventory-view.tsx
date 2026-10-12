@@ -118,9 +118,10 @@ export function InventoryView({ initialItems }: InventoryViewProps) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search items by name..."
+            aria-label="Search items by name"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-10"
+            className="pl-9 h-11 text-sm rounded-xl"
           />
         </div>
 
@@ -131,7 +132,7 @@ export function InventoryView({ initialItems }: InventoryViewProps) {
               key={cat}
               type="button"
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors border ${
+              className={`min-h-[44px] px-3.5 text-xs font-semibold rounded-xl whitespace-nowrap transition-colors border ${
                 selectedCategory === cat
                   ? "bg-primary text-primary-foreground border-primary"
                   : "bg-card text-muted-foreground border-border/60 hover:text-foreground"
@@ -202,7 +203,7 @@ export function InventoryView({ initialItems }: InventoryViewProps) {
                       type="button"
                       disabled={isPending}
                       onClick={() => handleToggle(item.id, item.is_available)}
-                      className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all shadow-2xs ${
+                      className={`w-full min-h-[44px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-2xs ${
                         item.is_available
                           ? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400 border border-emerald-500/30"
                           : "bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 dark:text-rose-400 border border-rose-500/30"

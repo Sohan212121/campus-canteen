@@ -61,9 +61,9 @@ export function AdminNav({ adminName }: { adminName?: string | null }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                  className={`flex min-h-[44px] items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-colors ${
                     isActive
-                      ? "bg-primary text-primary-foreground shadow-2xs"
+                      ? "bg-primary text-primary-foreground shadow-2xs font-bold"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
@@ -89,9 +89,9 @@ export function AdminNav({ adminName }: { adminName?: string | null }) {
               variant="outline"
               size="sm"
               type="submit"
-              className="h-8 gap-1.5 text-xs font-medium"
+              className="min-h-[44px] h-10 px-3.5 gap-2 text-xs sm:text-sm font-semibold rounded-xl"
             >
-              <LogOut className="h-3.5 w-3.5" />
+              <LogOut className="h-4 w-4" />
               Sign Out
             </Button>
           </form>
@@ -100,7 +100,7 @@ export function AdminNav({ adminName }: { adminName?: string | null }) {
           <button
             type="button"
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden p-2 rounded-lg text-muted-foreground hover:bg-muted"
+            className="md:hidden flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted transition-colors"
             aria-label="Toggle navigation menu"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
@@ -123,9 +123,9 @@ export function AdminNav({ adminName }: { adminName?: string | null }) {
                 key={item.href}
                 href={item.href}
                 onClick={() => setMobileOpen(false)}
-                className={`flex items-center gap-2.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors ${
+                className={`flex min-h-[44px] items-center gap-2.5 px-3.5 py-2 text-sm font-semibold rounded-xl transition-colors ${
                   isActive
-                    ? "bg-primary text-primary-foreground shadow-2xs"
+                    ? "bg-primary text-primary-foreground shadow-2xs font-bold"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
@@ -136,7 +136,7 @@ export function AdminNav({ adminName }: { adminName?: string | null }) {
           })}
 
           <div className="pt-2 border-t mt-2 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground font-medium">
               {adminName || "Administrator"}
             </span>
             <form action={signOutAction}>
@@ -144,9 +144,9 @@ export function AdminNav({ adminName }: { adminName?: string | null }) {
                 variant="outline"
                 size="sm"
                 type="submit"
-                className="h-8 gap-1.5 text-xs font-medium"
+                className="min-h-[44px] h-10 px-3.5 gap-2 text-xs font-semibold rounded-xl"
               >
-                <LogOut className="h-3.5 w-3.5" />
+                <LogOut className="h-4 w-4" />
                 Sign Out
               </Button>
             </form>

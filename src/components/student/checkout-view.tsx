@@ -312,9 +312,30 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
 
   if (!hasHydrated || isLoadingDetails) {
     return (
-      <div className="space-y-4 py-12 text-center">
-        <RefreshCw className="mx-auto h-7 w-7 animate-spin text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Preparing checkout...</p>
+      <div className="space-y-5 py-4 animate-in fade-in duration-150" aria-label="Preparing checkout">
+        <div className="flex items-center gap-3">
+          <div className="h-11 w-11 rounded-xl bg-muted animate-pulse" />
+          <div className="h-6 w-32 rounded-lg bg-muted animate-pulse" />
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card p-4 space-y-3">
+          <div className="h-5 w-28 bg-muted animate-pulse rounded" />
+          <div className="grid grid-cols-2 gap-2 h-11">
+            <div className="rounded-lg bg-muted animate-pulse" />
+            <div className="rounded-lg bg-muted animate-pulse" />
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card p-4 space-y-2">
+          <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+          <div className="h-10 w-full bg-muted animate-pulse rounded-xl" />
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card p-4 space-y-3">
+          <div className="h-4 w-28 bg-muted animate-pulse rounded" />
+          <div className="space-y-2">
+            <div className="h-4 w-full bg-muted animate-pulse rounded" />
+            <div className="h-4 w-full bg-muted animate-pulse rounded" />
+          </div>
+        </div>
+        <div className="h-12 w-full rounded-xl bg-muted animate-pulse" />
       </div>
     );
   }
@@ -325,10 +346,10 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
       <div className="flex items-center gap-2">
         <Link
           href="/cart"
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          className="flex h-11 w-11 items-center justify-center rounded-xl border border-border/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Back to Cart"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-5 w-5" />
         </Link>
         <h1 className="text-xl font-bold tracking-tight">Checkout</h1>
       </div>
@@ -349,9 +370,9 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
             type="button"
             onClick={handlePlaceOrder}
             disabled={isSubmitting}
-            className="w-full h-10 font-semibold text-xs gap-1.5"
+            className="w-full min-h-[44px] h-11 font-bold text-xs sm:text-sm gap-2"
           >
-            <RotateCcw className="h-3.5 w-3.5" />
+            <RotateCcw className="h-4 w-4" />
             Tap to Retry Order
           </Button>
         </div>
@@ -428,7 +449,7 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
                 <button
                   type="button"
                   onClick={handleApplySuggestedTime}
-                  className="font-bold underline hover:no-underline text-primary"
+                  className="font-bold underline hover:no-underline text-primary min-h-[44px] inline-flex items-center"
                 >
                   Use earliest available time ({formatTimeDisplay(suggestedEarliestAt)})
                 </button>
@@ -466,7 +487,7 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
               <button
                 type="button"
                 onClick={() => fetchEstimate(requestedAtIso)}
-                className="underline font-bold"
+                className="underline font-bold min-h-[44px] inline-flex items-center px-2 -mr-2"
               >
                 Refresh
               </button>

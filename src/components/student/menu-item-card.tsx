@@ -31,41 +31,34 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
     item.stock !== null ? Math.max(1, item.stock) : MAX_ITEM_QUANTITY
   );
 
-  const handleQuickAdd = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleQuickAdd = () => {
     if (isOutOfStock) return;
     addItem(item.id, 1);
     toast.success(`Added ${item.name} to cart`);
   };
 
-  const handleIncrement = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleIncrement = () => {
     if (isOutOfStock || currentQuantity >= effectiveMax) return;
     updateQuantity(item.id, currentQuantity + 1);
   };
 
-  const handleDecrement = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDecrement = () => {
     updateQuantity(item.id, currentQuantity - 1);
   };
 
   return (
     <div
-      onClick={() => onOpenDetail(item)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpenDetail(item);
-        }
-      }}
-      className={`group relative flex w-full gap-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-2xs transition-all hover:border-foreground/20 hover:shadow-xs active:scale-[0.99] text-left cursor-pointer ${
-        isOutOfStock ? "opacity-70 bg-muted/30" : ""
+      className={`group relative flex w-full gap-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-2xs transition-all hover:border-foreground/20 hover:shadow-xs text-left ${
+        isOutOfStock ? "opacity-75 bg-muted/30" : ""
       }`}
     >
-      {/* Left side: Information */}
-      <div className="flex flex-1 flex-col justify-between min-w-0 pr-1">
+      {/* Clickable Information Area (non-nested real button) */}
+      <button
+        type="button"
+        onClick={() => onOpenDetail(item)}
+        className="flex flex-1 flex-col justify-between min-w-0 pr-1 text-left cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+        aria-label={`View details for ${item.name}`}
+      >
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5 flex-wrap">
             <VegIndicator isVeg={item.is_veg} />
@@ -82,7 +75,7 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
             )}
           </div>
 
-          <h3 className="font-semibold text-foreground text-sm sm:text-base leading-snug line-clamp-2">
+          <h3 className="font-semibold text-foreground text-sm sm:text-base leading-snug line-clamp-2 group-hover:text-primary transition-colors">
             {item.name}
           </h3>
 
@@ -103,11 +96,16 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
             </span>
           )}
         </div>
-      </div>
+      </button>
 
-      {/* Right side: Image + Add/Stepper button */}
+      {/* Right side: Image + Separate Non-Nested Action button */}
       <div className="relative flex flex-col items-center justify-between shrink-0 w-24 sm:w-28">
-        <div className="relative h-20 w-24 sm:h-22 sm:w-28 overflow-hidden rounded-lg bg-muted">
+        <button
+          type="button"
+          onClick={() => onOpenDetail(item)}
+          className="relative h-20 w-24 sm:h-22 sm:w-28 overflow-hidden rounded-lg bg-muted cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`View ${item.name} image`}
+        >
           <MenuItemImage
             src={item.image_url}
             alt={item.name}
@@ -121,9 +119,9 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
               </span>
             </div>
           )}
-        </div>
+        </button>
 
-        {/* Action button positioned below image */}
+        {/* Action button positioned below image (>= 44px touch targets) */}
         <div className="mt-2 w-full flex justify-center">
           {isOutOfStock ? (
             <Button
@@ -131,22 +129,21 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
               variant="outline"
               size="sm"
               disabled
-              className="h-8 w-full text-xs font-medium opacity-50 cursor-not-allowed"
+              className="min-h-[44px] w-full text-xs font-medium opacity-50 cursor-not-allowed"
             >
               Add
             </Button>
           ) : currentQuantity > 0 ? (
             <div
-              className="flex h-8 w-full items-center justify-between rounded-lg border border-primary bg-primary text-primary-foreground px-1 shadow-2xs"
-              onClick={(e) => e.stopPropagation()}
+              className="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-primary bg-primary text-primary-foreground px-1 shadow-2xs"
             >
               <button
                 type="button"
                 onClick={handleDecrement}
-                className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-primary-foreground/20 text-primary-foreground transition-colors"
+                className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-primary-foreground/20 text-primary-foreground transition-colors"
                 aria-label={`Decrease ${item.name} quantity`}
               >
-                <Minus className="h-3.5 w-3.5" />
+                <Minus className="h-4 w-4" />
               </button>
               <span className="text-xs font-bold px-1 select-none">
                 {currentQuantity}
@@ -155,10 +152,10 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
                 type="button"
                 onClick={handleIncrement}
                 disabled={currentQuantity >= effectiveMax}
-                className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-primary-foreground/20 text-primary-foreground disabled:opacity-40 transition-colors"
+                className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-primary-foreground/20 text-primary-foreground disabled:opacity-40 transition-colors"
                 aria-label={`Increase ${item.name} quantity`}
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-4 w-4" />
               </button>
             </div>
           ) : (
@@ -167,7 +164,7 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
               variant="outline"
               size="sm"
               onClick={handleQuickAdd}
-              className="h-8 w-full border-primary/40 font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-all text-xs"
+              className="min-h-[44px] w-full border-primary/40 font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-all text-xs"
             >
               <Plus className="mr-1 h-3.5 w-3.5" />
               Add

@@ -29,11 +29,14 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Never redirect health check or dedicated auth handlers
+  // Never redirect health check, dedicated auth handlers, or public PWA assets
   if (
     pathname === "/api/health" ||
     pathname === "/auth/deactivated" ||
-    pathname === "/auth/callback"
+    pathname === "/auth/callback" ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/offline" ||
+    pathname.startsWith("/icons/")
   ) {
     return NextResponse.next();
   }
@@ -156,8 +159,8 @@ export const config = {
      * - favicon.ico
      * - Common image file extensions
      * - /api/health (health check endpoint)
-     * - manifest and icon files (PWA assets)
+     * - /manifest.webmanifest, /offline, /icons/* (exact PWA exclusions)
      */
-    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$|api/health|manifest\\.json|site\\.webmanifest|.*\\.(?:xml|txt)$).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$|api/health|manifest\\.webmanifest|manifest\\.json|site\\.webmanifest|offline|icons/.*|.*\\.(?:xml|txt)$).*)",
   ],
 };

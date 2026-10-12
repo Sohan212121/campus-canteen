@@ -124,11 +124,11 @@
     @apply border-border outline-ring/50;
   }
   html {
-    @apply font-sans;
+    @apply font-sans overflow-x-hidden;
     font-family: var(--font-sans);
   }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans overflow-x-hidden;
     font-family: var(--font-sans);
   }
 }
