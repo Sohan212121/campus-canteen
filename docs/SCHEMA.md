@@ -423,5 +423,43 @@ Added in migration `0006_admin_operations.sql`:
 - **Price Changes Do Not Affect Past Orders**: `order_items` stores historical snapshots (`name_snapshot`, `unit_price_paise`) captured at checkout time. Updating `menu_items.price_paise` has zero impact on previous orders.
 - **Archival vs Deletion**: `order_items.menu_item_id` enforces `ON DELETE RESTRICT`. Menu items that have ever been ordered cannot be hard deleted and must be archived via `is_active = false`. Archived items and categories are automatically hidden from student menus.
 
+---
+
+## 12. Best Sellers Real-Time Aggregation & Indexing
+
+Added in migration `0008_best_sellers.sql`:
+
+### 12.1 Procedure: `public.get_best_sellers`
+- **Signature**: `public.get_best_sellers(p_canteen_id uuid, p_days int DEFAULT 30, p_limit int DEFAULT 8) RETURNS jsonb`
+- **Security & Scope**: `SECURITY DEFINER`, `SET search_path = ''`.
+- **Permissions**: Revoked from `PUBLIC` and `anon`; granted to `authenticated` and `service_role`.
+- **Role Isolation**: Strictly restricted to active users with `role = 'student'` (following the 0007 pattern). Unauthenticated or inactive users receive exceptions; non-student roles receive `FORBIDDEN`.
+- **Parameter Clamping**:
+  - `p_days` clamped to `1..90` (defaults to 30) evaluated via `make_interval(days => v_days)`.
+  - `p_limit` clamped to `1..20` (defaults to 8).
+- **Ranking Logic**:
+  - Aggregates `SUM(quantity)` from `order_items` joined to `orders` where `status = 'COLLECTED'` and `collected_at >= now() - make_interval(days => v_days)`.
+  - Filtered by `menu_items.canteen_id = p_canteen_id`, `is_active = true`, and `is_available = true`.
+  - Tied units broken alphabetically by item name (`ORDER BY total_sold DESC, mi.name ASC`).
+  - Rank assigned with `ROW_NUMBER() OVER (ORDER BY total_sold DESC, mi.name ASC)`.
+- **Threshold Rule**:
+  - The 3-item threshold is evaluated across the full qualifying set (after item availability filtering, BEFORE applying `p_limit`).
+  - If fewer than 3 items qualify across the canteen, returns `'[]'::jsonb` so the UI hides the section.
+- **Units Sold Bucketing & Privacy Invariant**:
+  - Units sold are bucketed into labels (`'500+'`, `'100+'`, `'50+'`, `'25+'`, `'10+'`, `'5+'`, `'Popular'`).
+  - Returns strictly `menu_item_id`, `rank`, and `units_sold`.
+  - Never leaks revenue, order IDs, user IDs, or exact low-volume quantities.
+
+### 12.2 Indexing Strategy
+- **Partial Composite Index**:
+  ```sql
+  CREATE INDEX IF NOT EXISTS idx_orders_best_sellers_collected
+  ON public.orders(canteen_id, collected_at DESC)
+  WHERE status = 'COLLECTED';
+  ```
+  - Targets only `status = 'COLLECTED'` rows sorted by `collected_at DESC`, enabling an index range scan directly on the time window for the given canteen.
+- **Join Index**:
+  - `idx_order_items_order_id` on `public.order_items(order_id)` already covers the join between `orders` and `order_items`. No additional `order_items` index is needed.
+
 
 

@@ -1,6 +1,7 @@
 import { requireRole } from "@/server/auth";
 import { getActiveCanteenId } from "@/server/canteen";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { getBestSellersAction, type BestSellerItem } from "@/server/actions/best-sellers";
 import { MenuView, type CategoryData } from "@/components/student/menu-view";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
 
@@ -10,11 +11,12 @@ export default async function MenuPage() {
 
   let categories: CategoryData[] = [];
   let menuItems: MenuItemData[] = [];
+  let bestSellers: BestSellerItem[] = [];
 
   if (canteenId) {
     const supabase = await createReadOnlyClient();
 
-    const [categoriesRes, itemsRes] = await Promise.all([
+    const [categoriesRes, itemsRes, bestSellersRes] = await Promise.all([
       supabase
         .from("categories")
         .select("id, name, display_order, is_active")
@@ -30,6 +32,11 @@ export default async function MenuPage() {
         .eq("canteen_id", canteenId)
         .eq("is_active", true)
         .order("name", { ascending: true }),
+
+      getBestSellersAction().catch((err) => {
+        console.error("Failed to load best sellers on menu page:", err);
+        return { success: true, data: [] };
+      }),
     ]);
 
     if (categoriesRes.data) {
@@ -37,6 +44,9 @@ export default async function MenuPage() {
     }
     if (itemsRes.data) {
       menuItems = itemsRes.data as MenuItemData[];
+    }
+    if (bestSellersRes.success && bestSellersRes.data) {
+      bestSellers = bestSellersRes.data;
     }
   }
 
@@ -49,7 +59,11 @@ export default async function MenuPage() {
         </p>
       </header>
 
-      <MenuView categories={categories} initialItems={menuItems} />
+      <MenuView
+        categories={categories}
+        initialItems={menuItems}
+        bestSellers={bestSellers}
+      />
     </div>
   );
 }

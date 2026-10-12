@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MenuItemCard } from "@/components/student/menu-item-card";
 import { ItemDetailSheet, type MenuItemData } from "@/components/student/item-detail-sheet";
+import { BestSellersRow } from "@/components/student/best-sellers-row";
+import type { BestSellerItem } from "@/server/actions/best-sellers";
 
 export type CategoryData = {
   id: string;
@@ -18,9 +20,10 @@ export type CategoryData = {
 interface MenuViewProps {
   categories: CategoryData[];
   initialItems: MenuItemData[];
+  bestSellers?: BestSellerItem[];
 }
 
-export function MenuView({ categories, initialItems }: MenuViewProps) {
+export function MenuView({ categories, initialItems, bestSellers = [] }: MenuViewProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [vegFilter, setVegFilter] = useState<"all" | "veg" | "non-veg">("all");
@@ -156,6 +159,14 @@ export function MenuView({ categories, initialItems }: MenuViewProps) {
           <span>In Stock Only</span>
         </button>
       </div>
+
+      {/* Best Sellers Row: shown only when no search or filter is active and >= 3 items returned */}
+      {!hasActiveFilters && bestSellers.length >= 3 && (
+        <BestSellersRow
+          bestSellers={bestSellers}
+          onOpenDetail={(item) => setSelectedItem(item)}
+        />
+      )}
 
       {/* Horizontal Category Scroll Tabs */}
       <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-1">

@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { UtensilsCrossed, ArrowRight, Sparkles, Clock } from "lucide-react";
+import { UtensilsCrossed, ArrowRight, Sparkles, Clock, TrendingUp } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { requireRole } from "@/server/auth";
 import { getActiveCanteenId } from "@/server/canteen";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { getBestSellersAction, type BestSellerItem } from "@/server/actions/best-sellers";
 import { formatPaise } from "@/lib/money";
 import { formatIstTime, getStatusBadgeConfig } from "@/lib/order-status";
+import { formatBestSellerBadge, formatUnitsSoldBadge } from "@/lib/best-sellers";
 import { VegIndicator } from "@/components/student/veg-indicator";
 import { MenuItemImage } from "@/components/student/menu-item-image";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
@@ -19,6 +21,7 @@ export default async function StudentHomePage() {
 
   const supabase = await createReadOnlyClient();
   let previewItems: MenuItemData[] = [];
+  let bestSellers: BestSellerItem[] = [];
   let latestActiveOrder: {
     id: string;
     order_code: string;
@@ -42,19 +45,32 @@ export default async function StudentHomePage() {
   }
 
   if (canteenId) {
-    const { data } = await supabase
-      .from("menu_items")
-      .select(
-        "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active"
-      )
-      .eq("canteen_id", canteenId)
-      .eq("is_active", true)
-      .eq("is_available", true)
-      .order("name", { ascending: true })
-      .limit(4);
+    // 1. Fetch best sellers (wrapped in try/catch to degrade silently)
+    try {
+      const bestSellersRes = await getBestSellersAction();
+      if (bestSellersRes.success && bestSellersRes.data && bestSellersRes.data.length >= 3) {
+        bestSellers = bestSellersRes.data;
+      }
+    } catch (err) {
+      console.error("Failed to load best sellers on home page:", err);
+    }
 
-    if (data) {
-      previewItems = data as MenuItemData[];
+    // 2. Fetch fallback preview items if best sellers not available
+    if (bestSellers.length < 3) {
+      const { data } = await supabase
+        .from("menu_items")
+        .select(
+          "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active"
+        )
+        .eq("canteen_id", canteenId)
+        .eq("is_active", true)
+        .eq("is_available", true)
+        .order("name", { ascending: true })
+        .limit(4);
+
+      if (data) {
+        previewItems = data as MenuItemData[];
+      }
     }
   }
 
@@ -138,11 +154,85 @@ export default async function StudentHomePage() {
         </div>
       </section>
 
-      {/* Menu Preview Section */}
-      {previewItems.length > 0 && (
-        <section className="space-y-3">
+      {/* Best Sellers Section (Replaces Today's Specials when available) */}
+      {bestSellers.length >= 3 ? (
+        <section className="space-y-3" aria-labelledby="home-bestsellers-heading">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold tracking-tight">Today&apos;s Specials</h2>
+            <div className="flex items-center gap-1.5">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                <TrendingUp className="h-3.5 w-3.5" />
+              </div>
+              <h2 id="home-bestsellers-heading" className="text-base font-bold tracking-tight">
+                Best Sellers
+              </h2>
+            </div>
+            <Link
+              href="/menu"
+              className="text-xs font-semibold text-primary hover:underline flex min-h-[44px] items-center gap-1 px-1"
+            >
+              View Menu <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {bestSellers.slice(0, 4).map(({ item, rank, units_sold }) => (
+              <Link
+                key={item.id}
+                href="/menu"
+                className="group flex flex-col justify-between overflow-hidden rounded-xl border border-border/80 bg-card p-3 shadow-2xs transition-all hover:border-foreground/20 hover:shadow-xs"
+              >
+                <div className="space-y-2">
+                  <div className="relative h-24 w-full overflow-hidden rounded-lg bg-muted">
+                    <MenuItemImage
+                      src={item.image_url}
+                      alt={item.name}
+                      aspect="4/3"
+                      sizes="(max-width: 640px) 50vw, 200px"
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      containerClassName="h-full w-full"
+                    />
+                    <div className="absolute top-1.5 left-1.5 flex items-center gap-1 rounded-full bg-background/95 backdrop-blur-xs px-1.5 py-0.5 text-[9px] font-bold text-foreground shadow-2xs border border-border/60">
+                      <TrendingUp className="h-2.5 w-2.5 text-amber-500" />
+                      <span>{formatBestSellerBadge(rank)}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <VegIndicator isVeg={item.is_veg} />
+                        {item.prep_minutes > 0 && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                            <Clock className="h-2.5 w-2.5" />
+                            ~{item.prep_minutes}m
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[9px] font-medium text-muted-foreground">
+                        {formatUnitsSoldBadge(units_sold)}
+                      </span>
+                    </div>
+                    <h3 className="text-xs font-semibold leading-snug line-clamp-1 group-hover:text-primary transition-colors">
+                      {item.name}
+                    </h3>
+                  </div>
+                </div>
+
+                <div className="mt-2 flex items-center justify-between pt-1">
+                  <span className="text-xs font-bold text-foreground">
+                    {formatPaise(item.price_paise)}
+                  </span>
+                  <span className="text-[10px] font-semibold text-primary">
+                    Order &rarr;
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : previewItems.length > 0 ? (
+        <section className="space-y-3" aria-labelledby="home-specials-heading">
+          <div className="flex items-center justify-between">
+            <h2 id="home-specials-heading" className="text-base font-bold tracking-tight">Today&apos;s Specials</h2>
             <Link
               href="/menu"
               className="text-xs font-semibold text-primary hover:underline flex min-h-[44px] items-center gap-1 px-1"
@@ -197,7 +287,7 @@ export default async function StudentHomePage() {
             ))}
           </div>
         </section>
-      )}
+      ) : null}
 
       {/* Footer Info */}
       <footer className="pt-2 text-center text-xs text-muted-foreground">
