@@ -34,6 +34,7 @@ import {
   transitionOrderAction,
 } from "@/server/actions/staff";
 import { OrderDetailDrawer } from "@/components/staff/order-detail-drawer";
+import { MenuItemImage } from "@/components/ui/menu-item-image";
 import { cn } from "@/lib/utils";
 
 interface KitchenBoardProps {
@@ -471,11 +472,35 @@ function KanbanColumn({
                   </span>
                 </div>
 
-                {/* Items summary */}
-                <div className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                  {order.order_items
-                    .map((item) => `${item.quantity}× ${item.name_snapshot}`)
-                    .join(", ")}
+                {/* Items summary with thumbnails */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+                    {order.order_items.slice(0, 3).map((item) => (
+                      <div
+                        key={item.id}
+                        className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/60"
+                        title={`${item.quantity}× ${item.name_snapshot}`}
+                      >
+                        <MenuItemImage
+                          src={item.image_url}
+                          alt={item.name_snapshot}
+                          aspect="square"
+                          sizes="40px"
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    ))}
+                    {order.order_items.length > 3 && (
+                      <div className="h-10 w-10 shrink-0 rounded-lg bg-muted/80 border border-border/60 flex items-center justify-center text-[11px] font-bold text-muted-foreground">
+                        +{order.order_items.length - 3}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground line-clamp-1 leading-relaxed">
+                    {order.order_items
+                      .map((item) => `${item.quantity}× ${item.name_snapshot}`)
+                      .join(", ")}
+                  </div>
                 </div>
 
                 {/* Timings */}

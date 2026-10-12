@@ -31,6 +31,7 @@ import {
   type StaffOrderStatus,
   transitionOrderAction,
 } from "@/server/actions/staff";
+import { MenuItemImage } from "@/components/ui/menu-item-image";
 import { cn } from "@/lib/utils";
 
 interface OrderDetailDrawerProps {
@@ -164,16 +165,27 @@ export function OrderDetailDrawer({
 
             <div className="rounded-xl border border-border/70 bg-card divide-y divide-border/60">
               {order.order_items.map((item) => (
-                <div key={item.id} className="p-3 flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-semibold text-foreground text-sm leading-snug">
-                      {item.quantity} &times; {item.name_snapshot}
-                    </p>
-                    <p className="text-muted-foreground text-[11px]">
-                      {formatPaise(item.unit_price_paise)} each
-                    </p>
+                <div key={item.id} className="p-3 flex items-center justify-between text-xs gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/60">
+                      <MenuItemImage
+                        src={item.image_url}
+                        alt={item.name_snapshot}
+                        aspect="square"
+                        sizes="40px"
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground text-sm leading-snug truncate">
+                        {item.quantity} &times; {item.name_snapshot}
+                      </p>
+                      <p className="text-muted-foreground text-[11px]">
+                        {formatPaise(item.unit_price_paise)} each
+                      </p>
+                    </div>
                   </div>
-                  <span className="font-bold text-foreground">
+                  <span className="font-bold text-foreground shrink-0">
                     {formatPaise(item.unit_price_paise * item.quantity)}
                   </span>
                 </div>

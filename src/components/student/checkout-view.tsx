@@ -22,6 +22,7 @@ import {
   getCartItemDetailsAction,
   type CartItemDetail,
 } from "@/server/actions/cart";
+import { MenuItemImage } from "@/components/ui/menu-item-image";
 import {
   placeOrderAction,
   getPickupEstimateAction,
@@ -530,14 +531,25 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
         <h2 className="text-sm font-bold">Order Items ({lineItems.length})</h2>
         <div className="divide-y divide-border/60">
           {lineItems.map(({ cartItem, detail, effectiveQty, lineTotal }) => (
-            <div key={cartItem.menu_item_id} className="py-2.5 flex items-center justify-between text-xs">
-              <div>
-                <p className="font-semibold text-foreground">{detail?.name ?? "Item"}</p>
-                <p className="text-muted-foreground text-[11px]">
-                  {effectiveQty} &times; {formatPaise(detail?.price_paise ?? 0)}
-                </p>
+            <div key={cartItem.menu_item_id} className="py-2.5 flex items-center justify-between text-xs gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/60">
+                  <MenuItemImage
+                    src={detail?.image_url}
+                    alt={detail?.name ?? "Item"}
+                    aspect="square"
+                    sizes="44px"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground truncate">{detail?.name ?? "Item"}</p>
+                  <p className="text-muted-foreground text-[11px]">
+                    {effectiveQty} &times; {formatPaise(detail?.price_paise ?? 0)}
+                  </p>
+                </div>
               </div>
-              <span className="font-bold text-foreground">
+              <span className="font-bold text-foreground shrink-0">
                 {formatPaise(lineTotal)}
               </span>
             </div>

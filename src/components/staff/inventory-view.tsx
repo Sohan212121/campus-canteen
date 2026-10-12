@@ -8,12 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatPaise } from "@/lib/money";
 import { setItemAvailabilityAction } from "@/server/actions/staff";
+import { MenuItemImage } from "@/components/ui/menu-item-image";
 
 export interface StaffInventoryItem {
   id: string;
   name: string;
   description: string | null;
   price_paise: number;
+  image_url?: string | null;
   is_veg: boolean;
   is_available: boolean;
   stock: number | null;
@@ -169,21 +171,33 @@ export function InventoryView({ initialItems }: InventoryViewProps) {
               >
                 <CardContent className="p-4 flex flex-col justify-between h-full space-y-4">
                   <div className="space-y-1.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-bold text-base line-clamp-1">
-                        {item.name}
-                      </h3>
-                      <Badge variant="outline" className="text-xs shrink-0 font-medium">
-                        <Layers className="h-3 w-3 mr-1" />
-                        {categoryName}
-                      </Badge>
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-muted">
+                        <MenuItemImage
+                          src={item.image_url}
+                          alt={item.name}
+                          aspect="square"
+                          sizes="40px"
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-1.5">
+                          <h3 className="font-bold text-base line-clamp-1">
+                            {item.name}
+                          </h3>
+                          <Badge variant="outline" className="text-[10px] shrink-0 font-medium h-5">
+                            <Layers className="h-2.5 w-2.5 mr-1" />
+                            {categoryName}
+                          </Badge>
+                        </div>
+                        {item.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
                     </div>
-
-                    {item.description && (
-                      <p className="text-xs text-muted-foreground line-clamp-2">
-                        {item.description}
-                      </p>
-                    )}
 
                     <div className="flex items-center justify-between pt-1">
                       <span className="font-bold font-mono text-primary text-sm">

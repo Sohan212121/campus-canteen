@@ -5,6 +5,7 @@ import { requireRole } from "@/server/auth";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { OrderConfirmationCleanup } from "@/components/student/order-confirmation-cleanup";
 import { OrderTrackerView, type OrderDetailData } from "@/components/student/order-tracker-view";
+import { extractMenuItemImageUrl } from "@/lib/image-utils";
 
 const uuidSchema = z.string().uuid();
 
@@ -48,7 +49,10 @@ export default async function OrderDetailPage({
         menu_item_id,
         name_snapshot,
         unit_price_paise,
-        quantity
+        quantity,
+        menu_items (
+          image_url
+        )
       )
     `)
     .eq("id", orderId)
@@ -59,7 +63,23 @@ export default async function OrderDetailPage({
   }
 
   const canteen = Array.isArray(order.canteens) ? order.canteens[0] : order.canteens;
-  const orderItems = (order.order_items || []) as OrderDetailData["order_items"];
+  const rawItems = (order.order_items || []) as Array<{
+    id: string;
+    menu_item_id: string;
+    name_snapshot: string;
+    unit_price_paise: number;
+    quantity: number;
+    menu_items?: { image_url?: string | null } | Array<{ image_url?: string | null }> | null;
+  }>;
+
+  const orderItems: OrderDetailData["order_items"] = rawItems.map((item) => ({
+    id: item.id,
+    menu_item_id: item.menu_item_id,
+    name_snapshot: item.name_snapshot,
+    unit_price_paise: item.unit_price_paise,
+    quantity: item.quantity,
+    image_url: extractMenuItemImageUrl(item.menu_items),
+  }));
 
   const orderData: OrderDetailData = {
     id: order.id,

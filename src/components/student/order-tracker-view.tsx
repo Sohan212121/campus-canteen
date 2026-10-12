@@ -33,6 +33,7 @@ import {
   ORDER_LIFECYCLE_STEPS,
 } from "@/lib/order-status";
 import { cancelOrderAction, getReorderItemsAction } from "@/server/actions/order";
+import { MenuItemImage } from "@/components/ui/menu-item-image";
 import { cn } from "@/lib/utils";
 
 export interface OrderDetailData {
@@ -57,6 +58,7 @@ export interface OrderDetailData {
     name_snapshot: string;
     unit_price_paise: number;
     quantity: number;
+    image_url?: string | null;
   }>;
 }
 
@@ -405,14 +407,25 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
 
         <div className="divide-y divide-border/60">
           {order.order_items.map((item) => (
-            <div key={item.id} className="py-2.5 flex items-center justify-between text-xs">
-              <div>
-                <p className="font-semibold text-foreground">{item.name_snapshot}</p>
-                <p className="text-muted-foreground text-[11px]">
-                  {item.quantity} &times; {formatPaise(item.unit_price_paise)}
-                </p>
+            <div key={item.id} className="py-2.5 flex items-center justify-between text-xs gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/60">
+                  <MenuItemImage
+                    src={item.image_url}
+                    alt={item.name_snapshot}
+                    aspect="square"
+                    sizes="40px"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground truncate">{item.name_snapshot}</p>
+                  <p className="text-muted-foreground text-[11px]">
+                    {item.quantity} &times; {formatPaise(item.unit_price_paise)}
+                  </p>
+                </div>
               </div>
-              <span className="font-bold text-foreground">
+              <span className="font-bold text-foreground shrink-0">
                 {formatPaise(item.unit_price_paise * item.quantity)}
               </span>
             </div>

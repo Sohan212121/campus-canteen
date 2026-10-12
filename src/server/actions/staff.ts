@@ -5,6 +5,7 @@ import * as z from "zod";
 
 import { requireRole } from "@/server/auth";
 import { createClient } from "@/lib/supabase/server";
+import { extractMenuItemImageUrl } from "@/lib/image-utils";
 
 const uuidSchema = z.string().uuid("Invalid ID format");
 const tokenSchema = z.string().regex(/^\d{6}$/, "Pickup token must be a 6-digit numeric code");
@@ -39,6 +40,7 @@ export type BoardOrder = {
     name_snapshot: string;
     quantity: number;
     unit_price_paise: number;
+    image_url?: string | null;
   }>;
 };
 
@@ -346,7 +348,10 @@ export async function getStaffBoardDataAction(): Promise<StaffBoardData> {
         id,
         name_snapshot,
         quantity,
-        unit_price_paise
+        unit_price_paise,
+        menu_items (
+          image_url
+        )
       )
     `)
     .eq("canteen_id", canteenId)
@@ -384,6 +389,20 @@ export async function getStaffBoardDataAction(): Promise<StaffBoardData> {
 
     const isStale = placedDateIst < todayIst;
 
+    const mappedItems = ((raw.order_items || []) as Array<{
+      id: string;
+      name_snapshot: string;
+      quantity: number;
+      unit_price_paise: number;
+      menu_items?: { image_url?: string | null } | Array<{ image_url?: string | null }> | null;
+    }>).map((item) => ({
+      id: item.id,
+      name_snapshot: item.name_snapshot,
+      quantity: item.quantity,
+      unit_price_paise: item.unit_price_paise,
+      image_url: extractMenuItemImageUrl(item.menu_items),
+    }));
+
     const order: BoardOrder = {
       id: raw.id,
       order_code: raw.order_code,
@@ -397,7 +416,7 @@ export async function getStaffBoardDataAction(): Promise<StaffBoardData> {
       prep_minutes_total: raw.prep_minutes_total,
       customer_name: customerName,
       is_stale: isStale,
-      order_items: (raw.order_items || []) as BoardOrder["order_items"],
+      order_items: mappedItems,
     };
 
     if (raw.status === "PLACED") {
@@ -470,6 +489,7 @@ export async function getStaffInventoryItemsAction(): Promise<{
       name,
       description,
       price_paise,
+      image_url,
       is_veg,
       is_available,
       stock,
@@ -490,6 +510,7 @@ export async function getStaffInventoryItemsAction(): Promise<{
     name: string;
     description: string | null;
     price_paise: number;
+    image_url: string | null;
     is_veg: boolean;
     is_available: boolean;
     stock: number | null;
@@ -509,6 +530,7 @@ export async function getStaffInventoryItemsAction(): Promise<{
       name: raw.name,
       description: raw.description,
       price_paise: raw.price_paise,
+      image_url: raw.image_url ?? null,
       is_veg: raw.is_veg,
       is_available: raw.is_available,
       stock: raw.stock,

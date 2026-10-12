@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef } from "react";
-import Image from "next/image";
 import { toast } from "sonner";
 import {
   Search,
@@ -32,6 +31,8 @@ import {
   adminArchiveMenuItemAction,
   uploadMenuImageAction,
 } from "@/server/actions/admin";
+import { MenuItemImage } from "@/components/ui/menu-item-image";
+import { compressImageForUpload } from "@/lib/client-image";
 
 interface MenuViewProps {
   canteenId: string;
@@ -202,25 +203,28 @@ export function MenuView({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("File size exceeds 2 MB limit");
-      return;
-    }
-
     setUploadingImage(true);
-    const formData = new FormData();
-    formData.append("file", file);
 
     try {
+      // 1. Client-side resize and compression (max 1200px, WebP/JPEG, target < 500 KB, guaranteed < 2 MB)
+      const compressedFile = await compressImageForUpload(file);
+
+      // 2. Server upload
+      const formData = new FormData();
+      formData.append("file", compressedFile);
+
       const res = await uploadMenuImageAction(formData);
       if (res.success) {
         setItemImageUrl(res.data.publicUrl);
-        toast.success("Image uploaded successfully");
+        const origKb = Math.round(file.size / 1024);
+        const compKb = Math.round(compressedFile.size / 1024);
+        toast.success(`Image optimized (${origKb} KB → ${compKb} KB) and uploaded`);
       } else {
-        toast.error(res.error);
+        toast.error(res.error || "Failed to upload image");
       }
-    } catch {
-      toast.error("Network error uploading image");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to process image.";
+      toast.error(message);
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -434,18 +438,17 @@ export function MenuView({
                 className="overflow-hidden border border-border/60 shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between"
               >
                 <div>
-                  {/* Image banner if present */}
-                  {item.image_url ? (
-                    <div className="relative h-36 w-full bg-muted">
-                      <Image
-                        src={item.image_url}
-                        alt={item.name}
-                        fill
-                        unoptimized
-                        className="object-cover"
-                      />
-                    </div>
-                  ) : null}
+                  {/* Fixed aspect ratio card thumbnail */}
+                  <div className="w-full">
+                    <MenuItemImage
+                      src={item.image_url}
+                      alt={item.name}
+                      aspect="4/3"
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      className="h-full w-full object-cover"
+                      containerClassName="w-full h-40"
+                    />
+                  </div>
 
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-start justify-between gap-2">
@@ -741,23 +744,59 @@ export function MenuView({
                   </label>
 
                   {itemImageUrl ? (
-                    <div className="relative h-32 w-full rounded-lg overflow-hidden border bg-muted">
-                      <Image
-                        src={itemImageUrl}
-                        alt="Preview"
-                        fill
-                        unoptimized
-                        className="object-cover"
-                      />
+                    <div className="space-y-2">
+                      <div className="relative h-40 w-full rounded-lg overflow-hidden border bg-muted">
+                        <MenuItemImage
+                          src={itemImageUrl}
+                          alt="Preview"
+                          aspect="4/3"
+                          sizes="500px"
+                          className="h-full w-full object-cover"
+                          containerClassName="h-full w-full"
+                        />
+                        {uploadingImage && (
+                          <div className="absolute inset-0 bg-background/70 backdrop-blur-[1px] flex items-center justify-center text-xs font-semibold gap-2 z-20">
+                            <Upload className="h-4 w-4 animate-bounce" />
+                            <span>Optimizing & uploading...</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploadingImage}
+                          className="text-xs h-9 flex-1 gap-1.5"
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          <span>Replace Photo</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setItemImageUrl(null)}
+                          disabled={uploadingImage}
+                          className="text-xs h-9 gap-1.5"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          <span>Remove</span>
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-muted/30 transition-colors flex flex-col items-center justify-center gap-1.5"
+                      onClick={() => !uploadingImage && fileInputRef.current?.click()}
+                      className="border-2 border-dashed rounded-lg p-5 text-center cursor-pointer hover:bg-muted/30 transition-colors flex flex-col items-center justify-center gap-1.5"
                     >
                       <Upload className="h-6 w-6 text-muted-foreground" />
                       <span className="text-xs font-medium text-muted-foreground">
-                        {uploadingImage ? "Uploading..." : "Click to upload food photo"}
+                        {uploadingImage ? "Optimizing & uploading..." : "Click to select food photo (JPEG, PNG, WebP)"}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/80">
+                        Auto-resized (max 1200px) & compressed under 500 KB
                       </span>
                     </div>
                   )}

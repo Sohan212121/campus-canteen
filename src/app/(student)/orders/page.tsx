@@ -1,6 +1,7 @@
 import { requireRole } from "@/server/auth";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { OrdersListView, type OrderSummaryItem } from "@/components/student/orders-list-view";
+import { extractMenuItemImageUrl } from "@/lib/image-utils";
 
 export default async function OrdersPage() {
   const profile = await requireRole(["student"]);
@@ -25,7 +26,10 @@ export default async function OrdersPage() {
         id,
         name_snapshot,
         quantity,
-        unit_price_paise
+        unit_price_paise,
+        menu_items (
+          image_url
+        )
       )
     `)
     .eq("user_id", profile.id)
@@ -51,13 +55,24 @@ export default async function OrdersPage() {
         id,
         name_snapshot,
         quantity,
-        unit_price_paise
+        unit_price_paise,
+        menu_items (
+          image_url
+        )
       )
     `, { count: "exact" })
     .eq("user_id", profile.id)
     .not("status", "in", '("PLACED","ACCEPTED","PREPARING","READY")')
     .order("placed_at", { ascending: false })
     .range(0, 19);
+
+  type RawItemRow = {
+    id: string;
+    name_snapshot: string;
+    quantity: number;
+    unit_price_paise: number;
+    menu_items?: { image_url?: string | null } | Array<{ image_url?: string | null }> | null;
+  };
 
   type RawOrderRow = {
     id: string;
@@ -68,7 +83,7 @@ export default async function OrdersPage() {
     estimated_ready_at: string;
     pickup_window_end: string;
     canteens: { name: string; location: string | null } | Array<{ name: string; location: string | null }> | null;
-    order_items: Array<{ id: string; name_snapshot: string; quantity: number; unit_price_paise: number }> | null;
+    order_items: RawItemRow[] | null;
   };
 
   const rawActive = (activeData || []) as unknown as RawOrderRow[];
@@ -77,13 +92,25 @@ export default async function OrdersPage() {
   const initialActiveOrders: OrderSummaryItem[] = rawActive.map((o) => ({
     ...o,
     canteens: Array.isArray(o.canteens) ? o.canteens[0] : o.canteens,
-    order_items: o.order_items || [],
+    order_items: (o.order_items || []).map((item) => ({
+      id: item.id,
+      name_snapshot: item.name_snapshot,
+      quantity: item.quantity,
+      unit_price_paise: item.unit_price_paise,
+      image_url: extractMenuItemImageUrl(item.menu_items),
+    })),
   }));
 
   const initialPastOrders: OrderSummaryItem[] = rawPast.map((o) => ({
     ...o,
     canteens: Array.isArray(o.canteens) ? o.canteens[0] : o.canteens,
-    order_items: o.order_items || [],
+    order_items: (o.order_items || []).map((item) => ({
+      id: item.id,
+      name_snapshot: item.name_snapshot,
+      quantity: item.quantity,
+      unit_price_paise: item.unit_price_paise,
+      image_url: extractMenuItemImageUrl(item.menu_items),
+    })),
   }));
 
   return (

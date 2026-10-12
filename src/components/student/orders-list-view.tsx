@@ -25,6 +25,7 @@ import {
   getStatusBadgeConfig,
 } from "@/lib/order-status";
 import { getReorderItemsAction } from "@/server/actions/order";
+import { MenuItemImage } from "@/components/ui/menu-item-image";
 import { cn } from "@/lib/utils";
 
 export interface OrderSummaryItem {
@@ -44,8 +45,9 @@ export interface OrderSummaryItem {
     name_snapshot: string;
     quantity: number;
     unit_price_paise: number;
+    image_url?: string | null;
   }>;
-}
+};
 
 interface OrdersListViewProps {
   userId: string;
@@ -311,12 +313,36 @@ export function OrdersListView({
                     </span>
                   </div>
 
-                  {/* Line Items Preview */}
-                  <p className="text-xs text-muted-foreground line-clamp-1">
-                    {order.order_items
-                      .map((item) => `${item.quantity}× ${item.name_snapshot}`)
-                      .join(", ")}
-                  </p>
+                  {/* Line Items Preview with Thumbnails */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+                      {order.order_items.slice(0, 3).map((item) => (
+                        <div
+                          key={item.id}
+                          className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/60"
+                          title={`${item.quantity}× ${item.name_snapshot}`}
+                        >
+                          <MenuItemImage
+                            src={item.image_url}
+                            alt={item.name_snapshot}
+                            aspect="square"
+                            sizes="40px"
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      ))}
+                      {order.order_items.length > 3 && (
+                        <div className="h-10 w-10 shrink-0 rounded-lg bg-muted/80 border border-border/60 flex items-center justify-center text-[11px] font-bold text-muted-foreground">
+                          +{order.order_items.length - 3}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-1">
+                      {order.order_items
+                        .map((item) => `${item.quantity}× ${item.name_snapshot}`)
+                        .join(", ")}
+                    </p>
+                  </div>
 
                   {/* Direct Link to Track & View QR */}
                   <Link
@@ -379,11 +405,35 @@ export function OrdersListView({
                     </span>
                   </div>
 
-                  {/* Items summary */}
-                  <div className="text-xs text-muted-foreground line-clamp-2">
-                    {order.order_items
-                      .map((item) => `${item.quantity}× ${item.name_snapshot}`)
-                      .join(", ")}
+                  {/* Items summary with Thumbnails */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+                      {order.order_items.slice(0, 3).map((item) => (
+                        <div
+                          key={item.id}
+                          className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/60"
+                          title={`${item.quantity}× ${item.name_snapshot}`}
+                        >
+                          <MenuItemImage
+                            src={item.image_url}
+                            alt={item.name_snapshot}
+                            aspect="square"
+                            sizes="40px"
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      ))}
+                      {order.order_items.length > 3 && (
+                        <div className="h-10 w-10 shrink-0 rounded-lg bg-muted/80 border border-border/60 flex items-center justify-center text-[11px] font-bold text-muted-foreground">
+                          +{order.order_items.length - 3}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground line-clamp-1">
+                      {order.order_items
+                        .map((item) => `${item.quantity}× ${item.name_snapshot}`)
+                        .join(", ")}
+                    </div>
                   </div>
 
                   {/* Bottom Action Buttons */}

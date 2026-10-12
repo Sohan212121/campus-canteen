@@ -109,7 +109,10 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
           <MenuItemImage
             src={item.image_url}
             alt={item.name}
+            aspect="4/3"
+            sizes="(max-width: 640px) 100px, 120px"
             className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+            containerClassName="h-full w-full"
             placeholderClassName="h-full w-full"
           />
           {isOutOfStock && (

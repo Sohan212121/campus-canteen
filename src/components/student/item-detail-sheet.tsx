@@ -115,7 +115,10 @@ function ItemDetailDialogContent({
           <MenuItemImage
             src={item.image_url}
             alt={item.name}
+            aspect="4/3"
+            sizes="(max-width: 640px) 100vw, 500px"
             className="h-full w-full object-cover"
+            containerClassName="h-full w-full"
             placeholderClassName="h-full w-full"
           />
           <button

@@ -163,7 +163,10 @@ export default async function StudentHomePage() {
                     <MenuItemImage
                       src={item.image_url}
                       alt={item.name}
+                      aspect="4/3"
+                      sizes="(max-width: 640px) 50vw, 200px"
                       className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      containerClassName="h-full w-full"
                     />
                   </div>
                   <div className="space-y-1">
