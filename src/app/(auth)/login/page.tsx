@@ -21,7 +21,7 @@ function LoginForm() {
 
   const urlErrorMessage =
     !state.error && errorParam === "account_deactivated"
-      ? "Your account has been deactivated. Contact administration."
+      ? "Your account is not active yet. If you were just invited, an administrator needs to activate it."
       : !state.error && errorParam === "auth_code_error"
       ? "The confirmation link was invalid or has expired. Please sign in or request a new confirmation email."
       : null;
@@ -65,9 +65,17 @@ function LoginForm() {
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="password" className="text-sm font-medium">
-            Password
-          </label>
+          <div className="flex items-center justify-between">
+            <label htmlFor="password" className="text-sm font-medium">
+              Password
+            </label>
+            <Link
+              href="/forgot-password"
+              className="text-xs text-primary underline-offset-4 hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <Input
             id="password"
             name="password"

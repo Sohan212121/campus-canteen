@@ -34,6 +34,7 @@ export async function proxy(request: NextRequest) {
     pathname === "/api/health" ||
     pathname === "/auth/deactivated" ||
     pathname === "/auth/callback" ||
+    pathname === "/auth/confirm" ||
     pathname === "/manifest.webmanifest" ||
     pathname === "/offline" ||
     pathname.startsWith("/icons/")
@@ -75,7 +76,12 @@ export async function proxy(request: NextRequest) {
 
   // Handle unauthenticated visitors
   if (!user) {
-    if (pathname === "/login" || pathname === "/signup") {
+    if (
+      pathname === "/login" ||
+      pathname === "/signup" ||
+      pathname === "/forgot-password" ||
+      pathname === "/auth/confirm"
+    ) {
       return supabaseResponse;
     }
     const loginUrl = request.nextUrl.clone();
@@ -94,8 +100,15 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // Deactivated user -> redirect to sign-out handler
+  // Inactive / deactivated user -> allow setting password or viewing waiting screen
   if (!profile.is_active) {
+    if (
+      pathname === "/set-password" ||
+      pathname === "/auth/pending-activation" ||
+      pathname === "/auth/confirm"
+    ) {
+      return supabaseResponse;
+    }
     const deactUrl = request.nextUrl.clone();
     deactUrl.pathname = "/auth/deactivated";
     return NextResponse.redirect(deactUrl);
@@ -104,8 +117,12 @@ export async function proxy(request: NextRequest) {
   const userRole = profile.role as UserRole;
   const userHome = ROLE_HOME[userRole] ?? "/";
 
-  // Redirect signed-in users away from /login and /signup to their own home
-  if (pathname === "/login" || pathname === "/signup") {
+  // Redirect signed-in active users away from auth pages to their own home
+  if (
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname === "/forgot-password"
+  ) {
     const homeUrl = request.nextUrl.clone();
     homeUrl.pathname = userHome;
     return NextResponse.redirect(homeUrl);

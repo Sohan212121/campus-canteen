@@ -1,10 +1,18 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies, headers } from "next/headers";
 import * as z from "zod";
+import type { EmailOtpType } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import { ROLE_HOME, type UserRole } from "@/server/auth";
+import {
+  forgotPasswordSchema,
+  setPasswordSchema,
+  validateRedirectPath,
+  PASSWORD_RESET_COOKIE,
+} from "@/lib/validation/auth-recovery";
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -57,6 +65,7 @@ export type AuthActionState = {
   success?: boolean;
   needsConfirmation?: boolean;
   email?: string;
+  message?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -235,4 +244,178 @@ export async function signOutAction(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/login");
+}
+
+// ---------------------------------------------------------------------------
+// Forgot Password Server Action
+// ---------------------------------------------------------------------------
+
+export async function forgotPasswordAction(
+  _prevState: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
+  const raw = {
+    email: formData.get("email"),
+  };
+
+  const parsed = forgotPasswordSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const supabase = await createClient();
+  const headersList = await headers();
+  const origin =
+    headersList.get("origin") ||
+    headersList.get("referer") ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000";
+
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      parsed.data.email,
+      {
+        redirectTo: `${origin}/auth/confirm?type=recovery&next=/set-password`,
+      }
+    );
+    if (error) {
+      // Log real error on server (rate limit, non-existent, provider issue)
+      console.error(
+        "[forgotPasswordAction] Provider error (masked for anti-enumeration):",
+        error.message
+      );
+    }
+  } catch (err) {
+    console.error("[forgotPasswordAction] Unexpected exception:", err);
+  }
+
+  // Consistent message for every outcome including rate-limit errors
+  return {
+    success: true,
+    message:
+      "If an account with this email exists, a password reset link has been sent. Please check your inbox and spam folder.",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Confirm Token Server Action (Email-Scanner Safe POST Verification)
+// ---------------------------------------------------------------------------
+
+export async function verifyConfirmTokenAction(
+  formData: FormData
+): Promise<never> {
+  const token_hash = formData.get("token_hash")?.toString();
+  const type = formData.get("type")?.toString() as EmailOtpType | undefined;
+  const rawNext = formData.get("next")?.toString();
+
+  if (!token_hash || !type) {
+    redirect("/forgot-password?error=invalid_link");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.verifyOtp({
+    token_hash,
+    type,
+  });
+
+  if (error) {
+    console.error("[verifyConfirmTokenAction] OTP error:", error.message);
+    redirect("/forgot-password?error=link_expired");
+  }
+
+  const defaultNext =
+    type === "recovery" || type === "invite" ? "/set-password" : "/";
+  const next = validateRedirectPath(rawNext, defaultNext);
+
+  if (type === "recovery" || type === "invite" || next === "/set-password") {
+    const cookieStore = await cookies();
+    cookieStore.set(PASSWORD_RESET_COOKIE, "true", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 600, // 10 minutes
+      path: "/",
+    });
+  }
+
+  redirect(next);
+}
+
+// ---------------------------------------------------------------------------
+// Set Password Server Action
+// ---------------------------------------------------------------------------
+
+export async function setPasswordAction(
+  _prevState: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
+  const cookieStore = await cookies();
+  const resetAllowed = cookieStore.get(PASSWORD_RESET_COOKIE)?.value === "true";
+  if (!resetAllowed) {
+    return {
+      error:
+        "Password reset session has expired or is unauthorized. Please request a new link.",
+    };
+  }
+
+  const raw = {
+    password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword"),
+  };
+
+  const parsed = setPasswordSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      error:
+        "Authentication required. Please use the link sent to your email to set your password.",
+    };
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password: parsed.data.password,
+  });
+
+  if (error) {
+    console.error("[setPasswordAction] Update error:", error.message);
+    return {
+      error:
+        "Failed to update password. Please try again or request a new link.",
+    };
+  }
+
+  // Requirement: Sign out all other sessions (scope 'others')
+  try {
+    await supabase.auth.signOut({ scope: "others" });
+  } catch (err) {
+    console.error("[setPasswordAction] Signout others error:", err);
+  }
+
+  // Consume / delete the reset authorization cookie
+  cookieStore.delete(PASSWORD_RESET_COOKIE);
+
+  // Check profile active status and role
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, is_active")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile?.is_active) {
+    redirect("/auth/pending-activation");
+  }
+
+  if (profile?.role && profile.role in ROLE_HOME) {
+    redirect(ROLE_HOME[profile.role as UserRole]);
+  }
+
+  redirect("/");
 }

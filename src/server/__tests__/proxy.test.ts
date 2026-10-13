@@ -76,14 +76,16 @@ describe("proxy (UX redirects & loop invariants)", () => {
   });
 
   describe("bypass routes (never redirected)", () => {
-    it.each(["/api/health", "/auth/deactivated", "/auth/callback"])(
-      "passes %s through without auth redirection",
-      async (path) => {
-        const req = createMockRequest(path);
-        const res = await proxy(req);
-        expect(res.headers.get("location")).toBeNull();
-      }
-    );
+    it.each([
+      "/api/health",
+      "/auth/deactivated",
+      "/auth/callback",
+      "/auth/confirm",
+    ])("passes %s through without auth redirection", async (path) => {
+      const req = createMockRequest(path);
+      const res = await proxy(req);
+      expect(res.headers.get("location")).toBeNull();
+    });
   });
 
   describe("unauthenticated visitors", () => {
@@ -91,17 +93,14 @@ describe("proxy (UX redirects & loop invariants)", () => {
       mockGetUser.mockResolvedValue({ data: { user: null } });
     });
 
-    it("allows unauthenticated visitor on /login without redirect", async () => {
-      const req = createMockRequest("/login");
-      const res = await proxy(req);
-      expect(res.headers.get("location")).toBeNull();
-    });
-
-    it("allows unauthenticated visitor on /signup without redirect", async () => {
-      const req = createMockRequest("/signup");
-      const res = await proxy(req);
-      expect(res.headers.get("location")).toBeNull();
-    });
+    it.each(["/login", "/signup", "/forgot-password", "/auth/confirm"])(
+      "allows unauthenticated visitor on %s without redirect",
+      async (path) => {
+        const req = createMockRequest(path);
+        const res = await proxy(req);
+        expect(res.headers.get("location")).toBeNull();
+      }
+    );
 
     it("redirects unauthenticated visitor on / to /login", async () => {
       const req = createMockRequest("/");
@@ -123,7 +122,7 @@ describe("proxy (UX redirects & loop invariants)", () => {
   });
 
   describe("deactivated accounts", () => {
-    it("redirects deactivated user to /auth/deactivated", async () => {
+    it("redirects deactivated user to /auth/deactivated on regular routes", async () => {
       mockGetUser.mockResolvedValue({ data: { user: { id: "deact-user" } } });
       mockProfile({ role: "student", is_active: false });
 
@@ -131,6 +130,18 @@ describe("proxy (UX redirects & loop invariants)", () => {
       const res = await proxy(req);
       expect(res.headers.get("location")).toBe("https://example.com/auth/deactivated");
     });
+
+    it.each(["/set-password", "/auth/pending-activation", "/auth/confirm"])(
+      "exempts inactive user on %s without redirect to /auth/deactivated",
+      async (path) => {
+        mockGetUser.mockResolvedValue({ data: { user: { id: "inactive-user" } } });
+        mockProfile({ role: "staff", is_active: false });
+
+        const req = createMockRequest(path);
+        const res = await proxy(req);
+        expect(res.headers.get("location")).toBeNull();
+      }
+    );
   });
 
   describe("signed-in visitors visiting /login or /signup", () => {
