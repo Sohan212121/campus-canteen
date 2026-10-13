@@ -70,6 +70,14 @@ export async function adminAddAllowedDomainAction(
 
   if (error) {
     const rawMsg = error.message || "";
+    if (rawMsg.includes("PUBLIC_SUFFIX_CONFIRMATION_REQUIRED")) {
+      return {
+        success: false,
+        error: `${parsed.data} is a public top-level or second-level suffix (e.g. ac.in, edu.in, edu), not an institution domain. Did you mean campus.${parsed.data}? Confirm explicitly if you truly wish to allow this root suffix.`,
+        code: "PUBLIC_SUFFIX_CONFIRMATION_REQUIRED",
+        isFreemailWarning: true,
+      };
+    }
     if (rawMsg.includes("FREEMAIL_CONFIRMATION_REQUIRED")) {
       return {
         success: false,

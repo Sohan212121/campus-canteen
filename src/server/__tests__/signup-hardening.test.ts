@@ -257,6 +257,20 @@ describe("Signup Hardening: Unit Tests", () => {
       }
     });
 
+    it("adminAddAllowedDomainAction warns when adding public suffix without confirm", async () => {
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: { message: "PUBLIC_SUFFIX_CONFIRMATION_REQUIRED: ac.in is a public top-level or second-level suffix" },
+      });
+
+      const res = await adminAddAllowedDomainAction("ac.in", false);
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.isFreemailWarning).toBe(true);
+        expect(res.error).toContain("is a public top-level or second-level suffix");
+      }
+    });
+
     it("adminAddAllowedDomainAction succeeds with confirmFreemail=true", async () => {
       mockRpc.mockResolvedValue({
         data: { id: "d-1", domain: "gmail.com", changed: true },

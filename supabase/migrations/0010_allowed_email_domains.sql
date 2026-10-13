@@ -19,6 +19,7 @@ DO $$
 DECLARE
   v_null_or_blank_count integer;
   v_dup_count           integer;
+  v_format_fail_count   integer;
 BEGIN
   -- Count student profiles with NULL or whitespace-only college_id
   SELECT count(*) INTO v_null_or_blank_count
@@ -28,6 +29,18 @@ BEGIN
 
   IF v_null_or_blank_count > 0 THEN
     RAISE EXCEPTION 'MIGRATION 0010 ABORTED: Found % student profile(s) with NULL or empty college_id. Run the read-only audit query in docs/SCHEMA.md to identify and resolve offending rows before applying this migration.', v_null_or_blank_count;
+  END IF;
+
+  -- Count student profiles with invalid format (must be 3-30 chars, matching ^[A-Za-z0-9_./-]{3,30}$)
+  SELECT count(*) INTO v_format_fail_count
+  FROM public.profiles
+  WHERE role = 'student'::public.user_role
+    AND college_id IS NOT NULL
+    AND trim(college_id) != ''
+    AND college_id !~ '^[A-Za-z0-9_./-]{3,30}$';
+
+  IF v_format_fail_count > 0 THEN
+    RAISE EXCEPTION 'MIGRATION 0010 ABORTED: Found % student profile(s) with invalid college_id format (must be 3-30 characters matching ^[A-Za-z0-9_./-]{3,30}$). Run the read-only audit query in docs/SCHEMA.md to identify and resolve offending rows before applying this migration.', v_format_fail_count;
   END IF;
 
   -- Count student profiles with duplicate college_id (case-insensitive)
@@ -98,7 +111,7 @@ BEGIN
         OR (
           college_id IS NOT NULL
           AND trim(college_id) != ''
-          AND college_id ~ '^[A-Za-z0-9\-_./]{3,30}$'
+          AND college_id ~ '^[A-Za-z0-9_./-]{3,30}$'
         )
       );
   END IF;
@@ -251,8 +264,8 @@ BEGIN
     RAISE EXCEPTION 'MISSING_COLLEGE_ID: College ID is required for student registration' USING ERRCODE = 'P0001';
   END IF;
 
-  IF v_college_id !~ '^[A-Za-z0-9\-_./]{3,30}$' THEN
-    RAISE EXCEPTION 'INVALID_COLLEGE_ID_FORMAT: College ID must be 3-30 characters and contain only letters, numbers, and - _ . /' USING ERRCODE = 'P0001';
+  IF v_college_id !~ '^[A-Za-z0-9_./-]{3,30}$' THEN
+    RAISE EXCEPTION 'INVALID_COLLEGE_ID_FORMAT: College ID must be 3-30 characters and contain only letters, numbers, and _ . / -' USING ERRCODE = 'P0001';
   END IF;
 
   -- 5. Duplicate check on college_id
@@ -273,6 +286,8 @@ DROP TRIGGER IF EXISTS trg_validate_student_signup ON auth.users;
 CREATE TRIGGER trg_validate_student_signup
   BEFORE INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.validate_student_signup();
+
+REVOKE ALL ON FUNCTION public.validate_student_signup() FROM PUBLIC;
 
 
 -- =============================================================================
@@ -313,14 +328,17 @@ BEGIN
   END IF;
 
   -- 2. Sanitise full_name:
-  -- - Strip control characters and unicode bidi/zero-width formatting overrides
-  -- - Collapse multiple whitespaces to single space
+  -- - Step 1: Turn control characters and newlines into a single space
+  -- - Step 2: Strip zero-width, bidi, and byte-order overrides
+  -- - Step 3: Collapse whitespace and trim
   -- - Max 80 characters; blank becomes NULL
   v_raw_name := NEW.raw_user_meta_data->>'full_name';
   IF v_raw_name IS NOT NULL THEN
-    -- Strip non-printable / bidi / zero-width codepoints
-    v_clean_name := regexp_replace(v_raw_name, '[\x00-\x1F\x7F\u200B-\u200F\u202A-\u202E\uFEFF]', '', 'g');
-    -- Collapse whitespace
+    -- Step 1: Turn control characters and newlines into a single space
+    v_clean_name := regexp_replace(v_raw_name, '[[:cntrl:]]+', ' ', 'g');
+    -- Step 2: Strip zero-width, bidi, and byte-order overrides
+    v_clean_name := regexp_replace(v_clean_name, '[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]', '', 'g');
+    -- Step 3: Collapse whitespace and trim
     v_clean_name := regexp_replace(v_clean_name, '\s+', ' ', 'g');
     v_clean_name := trim(v_clean_name);
     IF length(v_clean_name) > 80 THEN
@@ -349,14 +367,13 @@ BEGIN
     v_role,
     v_is_active
   )
-  ON CONFLICT (id) DO UPDATE SET
-    full_name = EXCLUDED.full_name,
-    college_id = COALESCE(public.profiles.college_id, EXCLUDED.college_id),
-    updated_at = now();
+  ON CONFLICT (id) DO NOTHING;
 
   RETURN NEW;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC;
 
 
 -- =============================================================================
@@ -468,7 +485,7 @@ BEGIN
     RAISE EXCEPTION 'INVALID_INPUT: Invalid domain name format';
   END IF;
 
-  -- 3. Common freemail provider check
+  -- 3. Common freemail provider & public-suffix check
   IF v_clean_domain IN (
     'gmail.com', 'googlemail.com', 'yahoo.com', 'ymail.com',
     'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
@@ -479,6 +496,15 @@ BEGIN
     v_is_freemail := true;
     IF NOT coalesce(p_confirm_freemail, false) THEN
       RAISE EXCEPTION 'FREEMAIL_CONFIRMATION_REQUIRED: % is a public consumer email provider. Confirm explicitly to allow it.', v_clean_domain;
+    END IF;
+  ELSIF v_clean_domain IN (
+    'ac.in', 'edu.in', 'res.in', 'gov.in', 'nic.in', 'mil.in', 'co.in', 'net.in', 'org.in',
+    'edu', 'ac.uk', 'gov.uk', 'edu.au', 'com.au', 'ac.nz', 'edu.sg',
+    'com', 'org', 'net', 'info', 'biz', 'io', 'co', 'in', 'us', 'uk'
+  ) THEN
+    v_is_freemail := true;
+    IF NOT coalesce(p_confirm_freemail, false) THEN
+      RAISE EXCEPTION 'PUBLIC_SUFFIX_CONFIRMATION_REQUIRED: % is a public top-level or second-level suffix, not an institution domain (e.g. use campus.%). Confirm explicitly to allow it.', v_clean_domain, v_clean_domain;
     END IF;
   END IF;
 
@@ -691,7 +717,7 @@ BEGIN
     END IF;
   END IF;
 
-  -- 6. Validate role assignment and constraints
+  -- 6. Validate role and canteen assignment
   IF p_role = 'staff'::public.user_role THEN
     IF p_canteen_id IS NULL THEN
       RAISE EXCEPTION 'INVALID_INPUT: Staff members must be assigned to an existing canteen';
@@ -704,17 +730,21 @@ BEGIN
 
     v_new_canteen := p_canteen_id;
   ELSIF p_role = 'student'::public.user_role THEN
-    -- Student role requires a non-null, valid College ID
-    IF v_target.college_id IS NULL OR trim(v_target.college_id) = '' THEN
+    -- Student role requires a non-null, valid College ID matching format
+    IF v_target.college_id IS NULL 
+       OR trim(v_target.college_id) = '' 
+       OR v_target.college_id !~ '^[A-Za-z0-9_./-]{3,30}$' THEN
       RAISE EXCEPTION 'INVALID_INPUT: Cannot assign student role to an account without a valid College ID';
     END IF;
     v_new_canteen := NULL;
   ELSE
-    -- admin role must have NULL canteen_id
+    -- student and admin roles must have NULL canteen_id
     v_new_canteen := NULL;
   END IF;
 
   -- 7. Update target profile
+  -- Note: prevent_profile_escalation trigger allows this change because current_user
+  -- is not 'authenticated' or 'anon' inside this SECURITY DEFINER procedure.
   UPDATE public.profiles
   SET role = p_role,
       canteen_id = v_new_canteen,

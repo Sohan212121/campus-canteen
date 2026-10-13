@@ -17,7 +17,7 @@ const loginSchema = z.object({
     .min(6, "Password must be at least 6 characters."),
 });
 
-const collegeIdRegex = /^[A-Za-z0-9\-_./]{3,30}$/;
+const collegeIdRegex = /^[A-Za-z0-9_./-]{3,30}$/;
 
 const signupSchema = z.object({
   fullName: z

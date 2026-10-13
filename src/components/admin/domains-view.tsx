@@ -253,7 +253,7 @@ export function DomainsView({ initialDomains }: DomainsViewProps) {
             <CardHeader className="space-y-2">
               <div className="flex items-center gap-2 text-destructive">
                 <ShieldAlert className="h-5 w-5" />
-                <CardTitle className="text-base font-bold">Public Email Warning</CardTitle>
+                <CardTitle className="text-base font-bold">Public Domain / Suffix Warning</CardTitle>
               </div>
               <CardDescription className="text-xs leading-relaxed text-foreground">
                 {freemailPrompt.warning}
@@ -261,7 +261,7 @@ export function DomainsView({ initialDomains }: DomainsViewProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Allowing public providers like Gmail or Yahoo means anyone on the internet with a free email can sign up as a student. Are you completely sure you want to approve this?
+                Allowing public email providers or broad registry suffixes means anyone with that domain or suffix can register as a student. Are you completely sure you want to approve this?
               </p>
               <div className="flex justify-end gap-2 pt-2">
                 <Button

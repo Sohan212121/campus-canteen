@@ -541,7 +541,7 @@ Added in migration `0010_allowed_email_domains.sql`:
   - **Constraint**: `chk_allowed_domain_format` requires exact lowercase match, no `@`, no trailing dot, and standard label regex (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`).
   - **RLS & Access**: RLS enabled with 0 policies. Access revoked from `PUBLIC`, `anon`, and `authenticated`. Managed exclusively via `SECURITY DEFINER` routines.
 - **Constraints & Indexes on `public.profiles`**:
-  - `chk_profiles_student_college_id`: Enforces that any account with `role = 'student'` must have a non-null, non-empty `college_id` adhering to format `^[A-Za-z0-9\-_./]{3,30}$`. Non-student accounts (`staff`, `admin`) are permitted to have `NULL` college IDs.
+  - `chk_profiles_student_college_id`: Enforces that any account with `role = 'student'` must have a non-null, non-empty `college_id` adhering to format `^[A-Za-z0-9_./-]{3,30}$`. Non-student accounts (`staff`, `admin`) are permitted to have `NULL` college IDs.
   - `idx_profiles_student_college_id_unique`: Unique index on `upper(trim(college_id))` for rows where `role = 'student'`.
 
 ### 14.2 Procedures & Trigger Pipeline
@@ -553,20 +553,23 @@ Added in migration `0010_allowed_email_domains.sql`:
 - **Trigger `trg_validate_student_signup` on `BEFORE INSERT ON auth.users`**:
   - Function: `public.validate_student_signup()`
   - Runs strictly on new user insertions into `auth.users` (new signups). Never fires on logins, magic links for existing users, or password resets.
+  - Revoked from `PUBLIC`.
   - Bypasses domain and college ID checks if the account is an administrative invite (`NEW.invited_at IS NOT NULL`) or an admin-created user (`NEW.raw_app_meta_data->>'role' IN ('staff', 'admin')` or `is_admin_created = true`).
   - Enforces:
     - Exactly one `@` symbol; local part cannot be empty or contain `+` aliases.
     - Exact domain match against `public.allowed_email_domains` (fails closed).
-    - College ID present in `NEW.raw_user_meta_data`, valid format (3-30 chars, alphanumeric + `-_./`), and uniqueness against existing student profiles.
+    - College ID present in `NEW.raw_user_meta_data`, valid format (3-30 chars, alphanumeric + `_ . / -`), and uniqueness against existing student profiles.
 - **Updated `public.handle_new_user()` on `AFTER INSERT ON auth.users`**:
+  - Revoked from `PUBLIC`.
   - Normalizes `college_id` to uppercase.
-  - Sanitizes `full_name`: strips control characters and bidi/zero-width formatting overrides, collapses multiple whitespaces, caps at 80 characters, and treats blanks as `NULL`.
+  - Sanitizes `full_name`: control characters and newlines turned into spaces via `[[:cntrl:]]+`, bidi/zero-width formatting overrides stripped (`[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]`), multiple whitespaces collapsed to a single space, capped at 80 characters, and blank becomes `NULL`.
+  - Preserves idempotent `ON CONFLICT (id) DO NOTHING`.
   - For admin-invited or admin-created users without student role, safely defaults role to `'staff'` (or specified admin role) with `is_active = false` until the administrator assigns a canteen.
 - **Admin Procedures**:
   - `public.admin_list_allowed_domains() RETURNS jsonb`: Returns all configured domains with creation timestamps and administrator names.
-  - `public.admin_add_allowed_domain(p_domain text, p_confirm_freemail boolean DEFAULT false) RETURNS jsonb`: Validates and normalizes domain. Blocks common consumer freemail domains (Gmail, Yahoo, Outlook, etc.) unless `p_confirm_freemail` is true. Idempotent: returns `changed: false` with zero audit writes if already present. Writes to `public.admin_audit_log` (`action = 'ADD_ALLOWED_DOMAIN'`).
+  - `public.admin_add_allowed_domain(p_domain text, p_confirm_freemail boolean DEFAULT false) RETURNS jsonb`: Validates and normalizes domain. Blocks common consumer freemail domains (Gmail, Yahoo, Outlook, etc.) and public suffix/registry domains (ac.in, edu.in, edu, ac.uk, etc.) unless `p_confirm_freemail` is true. Idempotent: returns `changed: false` with zero audit writes if already present. Writes to `public.admin_audit_log` (`action = 'ADD_ALLOWED_DOMAIN'`).
   - `public.admin_remove_allowed_domain(p_domain text) RETURNS jsonb`: Deletes domain. Idempotent: returns `changed: false` with zero audit writes if already absent. Writes to `public.admin_audit_log` (`action = 'REMOVE_ALLOWED_DOMAIN'`).
-  - `public.admin_set_user_role(...)`: Guard updated to raise clean `INVALID_INPUT` if an administrator attempts to change a user's role to `'student'` without a valid `college_id`.
+  - `public.admin_set_user_role(...)`: Guard updated to raise clean `INVALID_INPUT` if an administrator attempts to change a user's role to `'student'` without a valid `college_id` matching `^[A-Za-z0-9_./-]{3,30}$`.
 
 ### 14.3 Known Limit
 > [!NOTE]
@@ -594,7 +597,7 @@ SELECT
   CASE
     WHEN p.college_id IS NULL OR trim(p.college_id) = '' THEN 'MISSING_OR_BLANK_COLLEGE_ID'
     WHEN d.dup_college_id IS NOT NULL THEN 'DUPLICATE_COLLEGE_ID (' || d.occurences || ' times)'
-    WHEN p.college_id !~ '^[A-Za-z0-9\-_./]{3,30}$' THEN 'INVALID_COLLEGE_ID_FORMAT'
+    WHEN p.college_id !~ '^[A-Za-z0-9_./-]{3,30}$' THEN 'INVALID_COLLEGE_ID_FORMAT'
   END AS violation_type
 FROM public.profiles p
 LEFT JOIN student_duplicates d 
@@ -604,10 +607,52 @@ WHERE p.role = 'student'
     p.college_id IS NULL 
     OR trim(p.college_id) = '' 
     OR d.dup_college_id IS NOT NULL
-    OR p.college_id !~ '^[A-Za-z0-9\-_./]{3,30}$'
+    OR p.college_id !~ '^[A-Za-z0-9_./-]{3,30}$'
   )
 ORDER BY violation_type, p.created_at ASC;
 ```
+
+Summary count check:
+```sql
+SELECT
+  count(*) FILTER (WHERE college_id IS NULL OR trim(college_id) = '') AS missing_or_blank_count,
+  count(*) FILTER (WHERE college_id IS NOT NULL AND trim(college_id) != '' AND college_id !~ '^[A-Za-z0-9_./-]{3,30}$') AS invalid_format_count
+FROM public.profiles
+WHERE role = 'student';
+```
+
+### 14.5 Provisioning Staff & Admin Accounts (Invite User, Not Create User)
+> [!IMPORTANT]
+> **Always use "Invite user", NEVER "Create user" for Staff/Admin accounts.**
+> 
+> 1. In Supabase Dashboard: Navigate to **Authentication > Users > Add user > Invite user** (or use the backend Admin API `inviteUserByEmail`).
+> 2. **Why**: "Invite user" sets `invited_at = now()`. The `trg_validate_student_signup` trigger detects `invited_at IS NOT NULL` and bypasses student campus domain and College ID requirements.
+> 3. **Warning**: Dashboard **"Create user"** (which sets email and password directly) leaves `invited_at = NULL` and empty `raw_app_meta_data`. It is treated as an untrusted student registration and will be **immediately aborted** with `MISSING_COLLEGE_ID` or `DOMAIN_NOT_ALLOWED`.
+> 4. **Post-Invite Administrator Steps**:
+>    - When invited, `handle_new_user()` creates the profile with `role = 'staff'`, `canteen_id = NULL`, and `is_active = false`.
+>    - Step A: Assign the staff member to their designated canteen via procedure:
+>      `SELECT public.admin_set_user_role('<user-uuid>', 'staff'::public.user_role, '<canteen-uuid>');`
+>    - Step B: Activate the user account:
+>      `SELECT public.admin_set_user_active('<user-uuid>', true);`
+
+---
+
+## 15. Exact Migration Apply Order
+
+The database migrations must strictly be applied in sequential order:
+
+1. `0001_schema.sql` — Core tables, enums, sequences, and initial trigger routines.
+2. `0002_rls.sql` — Row Level Security policies and security-invoker escalation guards.
+3. `0003_place_order.sql` — Atomic order placement engine with capacity checks.
+4. `0004_order_tracking.sql` — Order tracking and pickup token generation.
+5. `0005_staff_operations.sql` — Kitchen staff queue lifecycle and order transition procedures.
+6. `0006_admin_operations.sql` — Administrator management procedures, audit logs, and analytics.
+7. `0007_role_isolation.sql` — Strict role separation and student/staff context isolation.
+8. `0008_best_sellers.sql` — Real-time popularity ranking and best seller views.
+9. `0009_reviews.sql` — Verified-purchase ratings and item review moderation.
+10. **Pre-check Audit Query** — Run read-only query (Section 14.4) to confirm zero student violations.
+11. `0010_allowed_email_domains.sql` — Campus domain restriction and signup hardening.
+12. `0011_cleanup_unconfirmed_users.sql` — Scheduled/admin cleanup routine for unconfirmed stale signups.
 
 
 
