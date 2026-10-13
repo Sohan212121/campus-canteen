@@ -465,7 +465,7 @@ Added in migration `0008_best_sellers.sql`:
 
 ## 13. Verified-Purchase Reviews & Rating System
 
-Added in migration `0009_reviews.sql`:
+Added in migration `0009_reviews.sql` and updated in `0012_review_fixes.sql`:
 
 ### 13.1 Schema & Columns
 - **Table `public.item_reviews`**:
@@ -474,57 +474,72 @@ Added in migration `0009_reviews.sql`:
   - `user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE`
   - `order_id uuid REFERENCES public.orders(id) ON DELETE SET NULL` (qualifying collected order)
   - `rating smallint NOT NULL CHECK (rating >= 1 AND rating <= 5)`
-  - `comment text CHECK (comment IS NULL OR (length(comment) <= 500 AND length(comment) > 0))`
+  - `comment text NULL CHECK (comment IS NULL OR length(comment) <= 500)`
   - `is_hidden boolean NOT NULL DEFAULT false`
   - `created_at timestamptz NOT NULL DEFAULT now()`
   - `updated_at timestamptz NOT NULL DEFAULT now()`
-  - **Constraint**: `UNIQUE (user_id, menu_item_id)` — exactly one review per user per menu item.
-  - **RLS & Access**: RLS enabled with 0 policies. Permissions revoked from `PUBLIC` and `anon`. All access mediated strictly through `SECURITY DEFINER` functions.
+  - **Constraint**: `CONSTRAINT uq_item_reviews_user_item UNIQUE (user_id, menu_item_id)` — exactly one review per user per menu item.
+  - **RLS & Access**: RLS enabled with 0 policies. Permissions revoked from `PUBLIC`, `anon`, and `authenticated`. Granted exclusively to `service_role`. All user access mediated strictly through `SECURITY DEFINER` functions.
 - **Table `public.menu_items` columns added**:
-  - `rating_avg numeric(3,2) DEFAULT NULL CHECK (rating_avg IS NULL OR (rating_avg >= 1.00 AND rating_avg <= 5.00))`
-  - `rating_count integer NOT NULL DEFAULT 0 CHECK (rating_count >= 0)`
+  - `rating_avg numeric(3,2) DEFAULT NULL`
+  - `rating_count integer NOT NULL DEFAULT 0`
 - **Column Protection Invariant**:
-  - Trigger function `prevent_menu_item_unauthorized_update()` updated to block direct modification of `rating_avg` and `rating_count` by any authenticated role (`student`, `staff`, or `admin`). Only the internal database trigger or service role can update these fields.
+  - Trigger function `prevent_menu_item_unauthorized_update()` updated to block direct modification of `rating_avg` and `rating_count` by any authenticated caller (`student`, `staff`, or `admin`). Only internal `SECURITY DEFINER` trigger routines or service role can modify these columns.
 
 ### 13.2 Rating Synchronization Trigger
 - **Function**: `public.handle_review_rating_sync()`
-- **Trigger**: `trg_sync_menu_item_ratings AFTER INSERT OR DELETE OR UPDATE OF rating, is_hidden, menu_item_id ON public.item_reviews`
-- **Race Condition Prevention & Locking**:
-  - Executes explicit row locking first: `PERFORM 1 FROM public.menu_items WHERE id = <item_id> FOR UPDATE;`
+- **Trigger**: `trg_sync_menu_item_ratings AFTER INSERT OR DELETE OR UPDATE OF rating, is_hidden, menu_item_id ON public.item_reviews FOR EACH ROW EXECUTE FUNCTION public.handle_review_rating_sync()`
+- **Race Condition Prevention & Locking (Updated in 0012)**:
+  - Executes row locking: `PERFORM 1 FROM public.menu_items WHERE id = <item_id> FOR NO KEY UPDATE;`
+  - **Why `FOR NO KEY UPDATE`**: In PostgreSQL, foreign key checks on child tables (like `order_items` or `item_reviews` referencing `menu_items(id)`) acquire `FOR KEY SHARE` locks on the referenced `menu_items` row. `FOR UPDATE` is an exclusive tuple lock that directly conflicts with `KEY SHARE`, causing transaction deadlocks under high concurrency. `FOR NO KEY UPDATE` locks the row against concurrent data modifications without conflicting with foreign key `KEY SHARE` checks.
   - Aggregates non-hidden reviews (`is_hidden = false`): `count = count(*)` and `avg = round(avg(rating)::numeric, 2)`.
-  - Sets `rating_avg = NULL` and `rating_count = 0` when count is 0.
-  - Handles `menu_item_id` change by resyncing both OLD and NEW menu items.
+  - Sets `rating_avg = v_avg` and `rating_count = COALESCE(v_cnt, 0)` (when count is 0, `rating_avg` becomes `NULL` and `rating_count` becomes 0).
+  - Handles `menu_item_id` change on update by resyncing both OLD and NEW menu items.
 
 ### 13.3 Procedures & Security Model
-All procedures are `SECURITY DEFINER`, `SET search_path = ''`, schema-qualified, revoked from `PUBLIC` and `anon`, and reloaded via `NOTIFY pgrst, 'reload schema'`.
+All procedures are `SECURITY DEFINER`, `SET search_path = ''`, schema-qualified, revoked from `PUBLIC` and `anon`, granted to `authenticated` and `service_role`, and reloaded via `NOTIFY pgrst, 'reload schema'`.
 
-- **`public.submit_review(p_menu_item_id uuid, p_rating smallint, p_comment text DEFAULT NULL) RETURNS jsonb`**:
+- **`public.submit_review(p_menu_item_id uuid, p_rating integer, p_comment text DEFAULT NULL) RETURNS jsonb`**:
   - Enforces active student role (`role = 'student'` and `is_active = true`).
   - Checks verified purchase: requires at least one order with `status = 'COLLECTED'` belonging to caller containing `p_menu_item_id`.
-  - Rate limits: maximum 10 distinct reviews touched/created in the last 24 hours (`updated_at >= now() - interval '24 hours'`).
-  - Strict input sanitization: turns whitespace (`\r`, `\n`, `\t`) into single spaces, removes control characters and unicode bidi/zero-width formatting overrides, trims, enforces $\le 500$ characters, and converts empty strings to `NULL`.
-  - Upsert preserves moderation state: `DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, updated_at = now()` (never resets `is_hidden`).
+  - Rate limits: maximum 10 distinct reviews touched/created in rolling 24 hours (`updated_at >= now() - interval '24 hours'`).
+  - Input sanitization (Updated in 0012): converts whitespace (`\r`, `\n`, `\t`) into single spaces, strips control characters, zero-width spaces (`\u200B-\u200F`), bidi overrides (`\u202A-\u202E`, `\u2066-\u2069`), word-joiner (`\u2060`), and byte-order mark (`\uFEFF`) via `[\x00-\x1F\x7F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]`. Trims, enforces $\le 500$ characters, and empty/whitespace becomes `NULL`.
+  - Upsert preserves moderation state: `ON CONFLICT (user_id, menu_item_id) DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, order_id = EXCLUDED.order_id, updated_at = now()` (omits `is_hidden` so existing moderation state persists).
+  - Returns `{ id, menu_item_id, rating, comment, is_hidden, created_at, updated_at }`.
 - **`public.delete_my_review(p_menu_item_id uuid) RETURNS jsonb`**:
-  - Allows an active student to delete their own review. Deletion automatically triggers rating recalculation.
-- **`public.list_item_reviews(p_menu_item_id uuid, p_limit int DEFAULT 20, p_offset int DEFAULT 0) RETURNS jsonb`**:
+  - Allows an active student to delete their own review. Raises `NOT_FOUND` if caller has no review for the item.
+  - Deletion automatically triggers rating recalculation via `handle_review_rating_sync()`.
+  - Returns `{ success: true, deleted: true }`.
+- **`public.list_item_reviews(p_menu_item_id uuid, p_limit integer DEFAULT 10, p_offset integer DEFAULT 0) RETURNS jsonb`**:
+  - Enforces active student role (Updated in 0012: `role = 'student'` and `is_active = true`, `FORBIDDEN` otherwise).
   - Verifies menu item existence (`NOT_FOUND` if absent).
+  - Clamps `p_limit` to `[1, 50]` (default 10) and `p_offset` to `[0, inf)` (default 0).
+  - Computes 1..5 star histogram strictly from non-hidden reviews under key `'histogram'`: `{ "1": N, "2": N, "3": N, "4": N, "5": N }`.
   - Returns sanitized student reviews: only `rating`, `comment`, `created_at`, `display_name`, `is_mine`, `is_hidden`.
   - Strips review `id` and reviewer `user_id` from output for privacy.
-  - Generates display names in SQL: First name + last initial (e.g., "John D."), single word preserved, blanks/emails masked to "Student", first name truncated to 20 chars.
-  - Hidden reviews are excluded unless authored by caller (flagged with `is_hidden: true` and moderation note).
-  - Returns rating breakdown histogram (`ratings_count: { "1": N, "2": N, "3": N, "4": N, "5": N }`).
+  - Generates display names in SQL: First name + last initial (e.g., "Ravi K."), single word preserved ("Ravi"), blanks/emails masked to "Student", first name truncated to 20 chars.
+  - Hidden reviews are excluded unless authored by caller (`is_hidden = false OR user_id = auth.uid()`).
+  - Returns `{ menu_item_id, rating_avg, rating_count, histogram, reviews }`.
 - **`public.get_my_review_eligibility(p_menu_item_ids uuid[]) RETURNS jsonb`**:
-  - Accepts up to 50 item IDs (deduped). Returns array of `{ menu_item_id, eligible, has_reviewed, existing_rating, existing_comment, is_hidden }`.
-- **`public.admin_list_reviews(...)`**:
-  - Active admin only. Provides paginated reviews with optional search and `status_filter` (`'all'`, `'active'`, `'hidden'`).
-- **`public.admin_set_review_hidden(p_review_id uuid, p_hidden boolean, p_reason text DEFAULT NULL) RETURNS jsonb`**:
-  - Active admin only. Moderates review visibility. If already in requested state, returns `changed: false` with zero audit log writes.
-  - On status change, logs to `public.admin_audit_log` with `action = 'HIDE_REVIEW'` or `'UNHIDE_REVIEW'`, `actor_id = auth.uid()`.
+  - Enforces active student role (`role = 'student'` and `is_active = true`).
+  - Accepts up to 50 item IDs (deduped). Returns array of `{ menu_item_id, can_review, has_reviewed, my_rating, my_comment, my_is_hidden, my_updated_at }`.
+  - Returns `'[]'::jsonb` when input is empty or NULL.
+- **`public.admin_list_reviews(p_status text DEFAULT 'all', p_search text DEFAULT NULL, p_limit integer DEFAULT 20, p_offset integer DEFAULT 0) RETURNS jsonb`**:
+  - Active admin only (`role = 'admin'` and `is_active = true`).
+  - Status filtering: `'all'`, `'visible'`, `'hidden'`.
+  - Input search capped at 100 characters before escaping (Updated in 0012). Searches item name, canteen name, reviewer name, reviewer email, and review comment.
+  - Clamps `p_limit` to `[1, 100]` (default 20) and `p_offset` to `[0, inf)` (default 0).
+  - Returns `{ reviews, total_count, limit, offset }`.
+- **`public.admin_set_review_hidden(p_review_id uuid, p_hidden boolean) RETURNS jsonb`**:
+  - Active admin only (`role = 'admin'` and `is_active = true`). Signature takes 2 arguments: `p_review_id`, `p_hidden`.
+  - If already in requested state, returns `{ success: true, changed: false, review_id, is_hidden }` with zero audit log writes.
+  - On status change, sets `is_hidden = p_hidden` WITHOUT updating `updated_at` (Updated in 0012; preserves the author's review timestamp).
+  - Logs to `public.admin_audit_log` with `action = 'HIDE_REVIEW'` or `'UNHIDE_REVIEW'`, `target_type = 'item_review'`, `actor_id = auth.uid()`.
+  - Returns `{ success: true, changed: true, review_id, is_hidden }`.
 
 ### 13.4 Indexing Strategy
-- `idx_item_reviews_item_active`: `(menu_item_id, created_at DESC)` WHERE `is_hidden = false` for high-throughput public review feeds.
-- `idx_item_reviews_user_rate_limit`: `(user_id, updated_at DESC)` for the 24-hour review rate limiter.
-- `idx_item_reviews_admin_feed`: `(created_at DESC)` for moderation queue sorting.
+- `idx_item_reviews_item_visible_created`: `ON public.item_reviews(menu_item_id, created_at DESC) WHERE is_hidden = false` for high-throughput public review feeds, histogram computation, and trigger aggregates.
+- `idx_item_reviews_user_updated`: `ON public.item_reviews(user_id, updated_at DESC)` for user review eligibility lookups and the 24-hour rate limiter.
 
 ---
 
@@ -653,6 +668,7 @@ The database migrations must strictly be applied in sequential order:
 10. **Pre-check Audit Query** — Run read-only query (Section 14.4) to confirm zero student violations.
 11. `0010_allowed_email_domains.sql` — Campus domain restriction and signup hardening.
 12. `0011_cleanup_unconfirmed_users.sql` — Scheduled/admin cleanup routine for unconfirmed stale signups.
+13. `0012_review_fixes.sql` — Reviews concurrency hardening (FOR NO KEY UPDATE), student role requirement on review listing, updated_at preservation on moderation, extended unicode stripping (\u2060, \uFEFF), and admin search capping.
 
 
 
