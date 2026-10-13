@@ -81,19 +81,21 @@ BEGIN
     true
   ) RETURNING id INTO v_canteen2_id;
 
-  -- 3. Discover 3 active profiles
-  SELECT id INTO v_student_id FROM public.profiles WHERE is_active = true ORDER BY created_at ASC LIMIT 1 OFFSET 0;
-  SELECT id INTO v_staff1_id  FROM public.profiles WHERE is_active = true ORDER BY created_at ASC LIMIT 1 OFFSET 1;
-  SELECT id INTO v_staff2_id  FROM public.profiles WHERE is_active = true ORDER BY created_at ASC LIMIT 1 OFFSET 2;
+  -- 3. Create isolated test users working BEFORE and AFTER 0010
+  v_student_id := gen_random_uuid();
+  v_staff1_id  := gen_random_uuid();
+  v_staff2_id  := gen_random_uuid();
 
-  IF v_student_id IS NULL OR v_staff1_id IS NULL OR v_staff2_id IS NULL THEN
-    RAISE EXCEPTION 'TEST SETUP FAILED: Sign up at least 3 active accounts first to test student, staff-canteen-1, and staff-canteen-2 boundaries.';
-  END IF;
+  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  VALUES 
+    (v_student_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_p7_stu_' || substr(v_student_id::text, 1, 8) || '@test.local', 'pwd', now(), '{"is_admin_created": true}'::jsonb, '{"full_name": "Test Student"}'::jsonb, now(), now()),
+    (v_staff1_id,  '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_p7_st1_' || substr(v_staff1_id::text, 1, 8) || '@test.local', 'pwd', now(), '{"is_admin_created": true, "role": "staff"}'::jsonb, '{"full_name": "Test Staff 1"}'::jsonb, now(), now()),
+    (v_staff2_id,  '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_p7_st2_' || substr(v_staff2_id::text, 1, 8) || '@test.local', 'pwd', now(), '{"is_admin_created": true, "role": "staff"}'::jsonb, '{"full_name": "Test Staff 2"}'::jsonb, now(), now());
 
-  -- 4. Temporarily configure profile roles for the test run
-  UPDATE public.profiles SET role = 'student'::public.user_role, canteen_id = NULL WHERE id = v_student_id;
-  UPDATE public.profiles SET role = 'staff'::public.user_role, canteen_id = v_canteen1_id WHERE id = v_staff1_id;
-  UPDATE public.profiles SET role = 'staff'::public.user_role, canteen_id = v_canteen2_id WHERE id = v_staff2_id;
+  -- 4. Configure profile roles for the test run
+  UPDATE public.profiles SET role = 'student'::public.user_role, canteen_id = NULL, is_active = true, college_id = 'TST' || upper(substr(md5(random()::text), 1, 8)) WHERE id = v_student_id;
+  UPDATE public.profiles SET role = 'staff'::public.user_role, canteen_id = v_canteen1_id, is_active = true WHERE id = v_staff1_id;
+  UPDATE public.profiles SET role = 'staff'::public.user_role, canteen_id = v_canteen2_id, is_active = true WHERE id = v_staff2_id;
 
   -- 5. Clear active orders for test users so active order limit (3) cannot interfere
   UPDATE public.orders

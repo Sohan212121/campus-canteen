@@ -54,32 +54,22 @@ BEGIN
   RAISE NOTICE 'PHASE 6 TEST SUITE: SETUP (Role: postgres)';
   RAISE NOTICE '=====================================================';
 
-  -- Find primary test student
-  SELECT id INTO v_user1_id 
-  FROM public.profiles 
-  WHERE role = 'student' AND is_active = true 
-  ORDER BY created_at ASC 
-  LIMIT 1;
+  -- Create isolated test student users working BEFORE and AFTER 0010
+  v_user1_id := gen_random_uuid();
+  v_user2_id := gen_random_uuid();
 
-  IF v_user1_id IS NULL THEN
-    SELECT id INTO v_user1_id 
-    FROM public.profiles 
-    WHERE is_active = true 
-    ORDER BY created_at ASC 
-    LIMIT 1;
-  END IF;
+  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  VALUES 
+    (v_user1_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_p6_u1_' || substr(v_user1_id::text, 1, 8) || '@test.local', 'pwd', now(), '{"is_admin_created": true}'::jsonb, '{"full_name": "Test User 1"}'::jsonb, now(), now()),
+    (v_user2_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_p6_u2_' || substr(v_user2_id::text, 1, 8) || '@test.local', 'pwd', now(), '{"is_admin_created": true}'::jsonb, '{"full_name": "Test User 2"}'::jsonb, now(), now());
 
-  -- Find a second distinct user for cross-ownership checks
-  SELECT id INTO v_user2_id 
-  FROM public.profiles 
-  WHERE id != v_user1_id AND is_active = true 
-  ORDER BY created_at ASC 
-  LIMIT 1;
+  UPDATE public.profiles
+  SET role = 'student'::public.user_role, full_name = 'Test User 1', is_active = true, college_id = 'TST' || upper(substr(md5(random()::text), 1, 8))
+  WHERE id = v_user1_id;
 
-  -- Enforce minimum test profile prerequisite
-  IF v_user1_id IS NULL OR v_user2_id IS NULL THEN
-    RAISE EXCEPTION 'TEST SETUP FAILED: Sign up a second test user first. At least two active user profiles are required to test cross-user ownership isolation.';
-  END IF;
+  UPDATE public.profiles
+  SET role = 'student'::public.user_role, full_name = 'Test User 2', is_active = true, college_id = 'TST' || upper(substr(md5(random()::text), 1, 8))
+  WHERE id = v_user2_id;
 
   -- Temporarily clear active orders for test users so the 3-active-order cap cannot interfere
   -- (The entire script is wrapped in BEGIN ... ROLLBACK so changes are automatically reverted)

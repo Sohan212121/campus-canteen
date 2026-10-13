@@ -71,13 +71,13 @@ BEGIN
   END IF;
 
   -- 2. Create isolated test users (triggers create profiles)
-  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at)
+  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
   VALUES 
-    (v_student_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_bs_student_' || substr(v_student_id::text, 1, 8) || '@test.com', 'pwd', now(), '{"full_name": "Test Student"}'::jsonb, now(), now()),
-    (v_staff_id,   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_bs_staff_'   || substr(v_staff_id::text, 1, 8) || '@test.com', 'pwd', now(), '{"full_name": "Test Staff"}'::jsonb, now(), now()),
-    (v_admin_id,   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_bs_admin_'   || substr(v_admin_id::text, 1, 8) || '@test.com', 'pwd', now(), '{"full_name": "Test Admin"}'::jsonb, now(), now());
+    (v_student_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_bs_student_' || substr(v_student_id::text, 1, 8) || '@test.local', 'pwd', now(), '{"is_admin_created": true}'::jsonb, '{"full_name": "Test Student"}'::jsonb, now(), now()),
+    (v_staff_id,   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_bs_staff_'   || substr(v_staff_id::text, 1, 8) || '@test.local', 'pwd', now(), '{"is_admin_created": true, "role": "staff"}'::jsonb, '{"full_name": "Test Staff"}'::jsonb, now(), now()),
+    (v_admin_id,   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_bs_admin_'   || substr(v_admin_id::text, 1, 8) || '@test.local', 'pwd', now(), '{"is_admin_created": true, "role": "admin"}'::jsonb, '{"full_name": "Test Admin"}'::jsonb, now(), now());
 
-  UPDATE public.profiles SET role = 'student'::public.user_role, is_active = true WHERE id = v_student_id;
+  UPDATE public.profiles SET role = 'student'::public.user_role, is_active = true, college_id = 'TST' || upper(substr(md5(random()::text), 1, 8)) WHERE id = v_student_id;
   UPDATE public.profiles SET role = 'staff'::public.user_role, canteen_id = v_canteen_id, is_active = true WHERE id = v_staff_id;
   UPDATE public.profiles SET role = 'admin'::public.user_role, is_active = true WHERE id = v_admin_id;
 

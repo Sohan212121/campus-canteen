@@ -16,8 +16,8 @@ BEGIN;
 
 DO $$
 DECLARE
-  -- >>> SET YOUR TEST USER UUID HERE <<<
-  c_test_user_id CONSTANT uuid := '00000000-0000-0000-0000-000000000001';
+  v_test_user_id uuid := gen_random_uuid();
+  c_test_user_id uuid;
 
   v_canteen_id uuid;
   v_item_available uuid;
@@ -38,18 +38,25 @@ DECLARE
   v_key_3 text := 'test-idemp-' || gen_random_uuid()::text;
   v_key_4 text := 'test-idemp-' || gen_random_uuid()::text;
 BEGIN
+  RESET ROLE;
+
   RAISE NOTICE '=====================================================';
   RAISE NOTICE 'STARTING PHASE 5 TEST SUITE (BEGIN ... ROLLBACK)';
   RAISE NOTICE '=====================================================';
 
-  -- 0. Set up authenticated caller context
+  -- 0. Create isolated test student user working BEFORE and AFTER 0010
+  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  VALUES (v_test_user_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'test_p5_user_' || substr(v_test_user_id::text, 1, 8) || '@test.local', 'pwd', now(), '{"is_admin_created": true}'::jsonb, '{"full_name": "Phase 5 Student"}'::jsonb, now(), now());
+
+  UPDATE public.profiles
+  SET role = 'student'::public.user_role, full_name = 'Phase 5 Student', is_active = true, college_id = 'TST' || upper(substr(md5(random()::text), 1, 8))
+  WHERE id = v_test_user_id;
+
+  c_test_user_id := v_test_user_id;
+
+  -- Set up authenticated caller context
   PERFORM set_config('request.jwt.claims', json_build_object('sub', c_test_user_id)::text, true);
   SET LOCAL ROLE authenticated;
-
-  -- Verify test user exists and is active
-  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = c_test_user_id AND is_active = true) THEN
-    RAISE EXCEPTION 'TEST SETUP FAILED: Please configure c_test_user_id with an active user ID from public.profiles';
-  END IF;
 
   -- Fetch primary active canteen
   SELECT id INTO v_canteen_id FROM public.canteens WHERE is_active = true ORDER BY created_at ASC LIMIT 1;
