@@ -18,19 +18,21 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const errorParam = searchParams.get("error");
 
-  const deactivatedMessage =
+  const urlErrorMessage =
     !state.error && errorParam === "account_deactivated"
       ? "Your account has been deactivated. Contact administration."
+      : !state.error && errorParam === "auth_code_error"
+      ? "The confirmation link was invalid or has expired. Please sign in or request a new confirmation email."
       : null;
 
   return (
     <>
-      {deactivatedMessage && (
+      {urlErrorMessage && (
         <div
-          id="deactivated-error"
+          id="url-error"
           className="mb-4 rounded-lg bg-destructive/10 p-3 text-center text-sm text-destructive"
         >
-          {deactivatedMessage}
+          {urlErrorMessage}
         </div>
       )}
 

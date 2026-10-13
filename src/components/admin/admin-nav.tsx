@@ -14,6 +14,7 @@ import {
   Menu as MenuIcon,
   X,
   MessageSquare,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "@/server/actions/auth";
@@ -24,6 +25,7 @@ const navItems = [
   { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
   { label: "Reviews", href: "/admin/reviews", icon: MessageSquare },
   { label: "Users", href: "/admin/users", icon: Users },
+  { label: "Domains", href: "/admin/domains", icon: Globe },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 

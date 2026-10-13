@@ -526,6 +526,90 @@ All procedures are `SECURITY DEFINER`, `SET search_path = ''`, schema-qualified,
 - `idx_item_reviews_user_rate_limit`: `(user_id, updated_at DESC)` for the 24-hour review rate limiter.
 - `idx_item_reviews_admin_feed`: `(created_at DESC)` for moderation queue sorting.
 
+---
+
+## 14. Campus Domain Restriction & Signup Hardening
+
+Added in migration `0010_allowed_email_domains.sql`:
+
+### 14.1 Schema & Columns
+- **Table `public.allowed_email_domains`**:
+  - `id uuid PRIMARY KEY DEFAULT gen_random_uuid()`
+  - `domain text NOT NULL UNIQUE`
+  - `created_at timestamptz NOT NULL DEFAULT now()`
+  - `created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL`
+  - **Constraint**: `chk_allowed_domain_format` requires exact lowercase match, no `@`, no trailing dot, and standard label regex (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`).
+  - **RLS & Access**: RLS enabled with 0 policies. Access revoked from `PUBLIC`, `anon`, and `authenticated`. Managed exclusively via `SECURITY DEFINER` routines.
+- **Constraints & Indexes on `public.profiles`**:
+  - `chk_profiles_student_college_id`: Enforces that any account with `role = 'student'` must have a non-null, non-empty `college_id` adhering to format `^[A-Za-z0-9\-_./]{3,30}$`. Non-student accounts (`staff`, `admin`) are permitted to have `NULL` college IDs.
+  - `idx_profiles_student_college_id_unique`: Unique index on `upper(trim(college_id))` for rows where `role = 'student'`.
+
+### 14.2 Procedures & Trigger Pipeline
+- **`public.is_signup_email_allowed(p_email text) RETURNS boolean`**:
+  - `SECURITY DEFINER`, `SET search_path = ''`.
+  - Permissions: Revoked from `PUBLIC`; granted to `anon`, `authenticated`, and `service_role`.
+  - Normalizes email, enforces exactly one `@`, rejects plus-addressing (`+`), validates domain syntax, and checks exact presence in `public.allowed_email_domains`.
+  - Discloses zero account-existence information; safe for public unauthenticated verification. Fails closed (returns `false` if `allowed_email_domains` is empty).
+- **Trigger `trg_validate_student_signup` on `BEFORE INSERT ON auth.users`**:
+  - Function: `public.validate_student_signup()`
+  - Runs strictly on new user insertions into `auth.users` (new signups). Never fires on logins, magic links for existing users, or password resets.
+  - Bypasses domain and college ID checks if the account is an administrative invite (`NEW.invited_at IS NOT NULL`) or an admin-created user (`NEW.raw_app_meta_data->>'role' IN ('staff', 'admin')` or `is_admin_created = true`).
+  - Enforces:
+    - Exactly one `@` symbol; local part cannot be empty or contain `+` aliases.
+    - Exact domain match against `public.allowed_email_domains` (fails closed).
+    - College ID present in `NEW.raw_user_meta_data`, valid format (3-30 chars, alphanumeric + `-_./`), and uniqueness against existing student profiles.
+- **Updated `public.handle_new_user()` on `AFTER INSERT ON auth.users`**:
+  - Normalizes `college_id` to uppercase.
+  - Sanitizes `full_name`: strips control characters and bidi/zero-width formatting overrides, collapses multiple whitespaces, caps at 80 characters, and treats blanks as `NULL`.
+  - For admin-invited or admin-created users without student role, safely defaults role to `'staff'` (or specified admin role) with `is_active = false` until the administrator assigns a canteen.
+- **Admin Procedures**:
+  - `public.admin_list_allowed_domains() RETURNS jsonb`: Returns all configured domains with creation timestamps and administrator names.
+  - `public.admin_add_allowed_domain(p_domain text, p_confirm_freemail boolean DEFAULT false) RETURNS jsonb`: Validates and normalizes domain. Blocks common consumer freemail domains (Gmail, Yahoo, Outlook, etc.) unless `p_confirm_freemail` is true. Idempotent: returns `changed: false` with zero audit writes if already present. Writes to `public.admin_audit_log` (`action = 'ADD_ALLOWED_DOMAIN'`).
+  - `public.admin_remove_allowed_domain(p_domain text) RETURNS jsonb`: Deletes domain. Idempotent: returns `changed: false` with zero audit writes if already absent. Writes to `public.admin_audit_log` (`action = 'REMOVE_ALLOWED_DOMAIN'`).
+  - `public.admin_set_user_role(...)`: Guard updated to raise clean `INVALID_INPUT` if an administrator attempts to change a user's role to `'student'` without a valid `college_id`.
+
+### 14.3 Known Limit
+> [!NOTE]
+> **Known Limitation (Self-Asserted College ID)**:
+> Currently, `college_id` is self-asserted by the registrant during signup. Any user with a valid campus email address can claim any unused College ID. A centralized student roster allowlist (mapping student institutional emails directly to verified registrar College IDs) is the planned long-term solution and should be implemented prior to deploying penalty strikes for pickup no-shows.
+
+### 14.4 Read-Only Audit & Migration Pre-Check Query
+Before applying migration `0010_allowed_email_domains.sql`, run this query in the Supabase SQL Editor to verify that no existing rows violate the new constraints:
+```sql
+WITH student_duplicates AS (
+  SELECT upper(trim(college_id)) AS dup_college_id, count(*) AS occurences
+  FROM public.profiles
+  WHERE role = 'student'
+    AND college_id IS NOT NULL
+    AND trim(college_id) != ''
+  GROUP BY upper(trim(college_id))
+  HAVING count(*) > 1
+)
+SELECT 
+  p.id AS profile_id,
+  p.full_name,
+  p.college_id,
+  p.role,
+  p.created_at,
+  CASE
+    WHEN p.college_id IS NULL OR trim(p.college_id) = '' THEN 'MISSING_OR_BLANK_COLLEGE_ID'
+    WHEN d.dup_college_id IS NOT NULL THEN 'DUPLICATE_COLLEGE_ID (' || d.occurences || ' times)'
+    WHEN p.college_id !~ '^[A-Za-z0-9\-_./]{3,30}$' THEN 'INVALID_COLLEGE_ID_FORMAT'
+  END AS violation_type
+FROM public.profiles p
+LEFT JOIN student_duplicates d 
+  ON upper(trim(p.college_id)) = d.dup_college_id
+WHERE p.role = 'student'
+  AND (
+    p.college_id IS NULL 
+    OR trim(p.college_id) = '' 
+    OR d.dup_college_id IS NOT NULL
+    OR p.college_id !~ '^[A-Za-z0-9\-_./]{3,30}$'
+  )
+ORDER BY violation_type, p.created_at ASC;
+```
+
+
 
 
 

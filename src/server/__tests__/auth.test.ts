@@ -20,6 +20,7 @@ const mockFrom = vi.fn();
 const mockSignUp = vi.fn();
 const mockSignInWithPassword = vi.fn();
 const mockSignOut = vi.fn();
+const mockRpc = vi.fn().mockResolvedValue({ data: true, error: null });
 
 vi.mock("@/lib/supabase/server", () => ({
   createReadOnlyClient: vi.fn().mockResolvedValue({
@@ -36,6 +37,7 @@ vi.mock("@/lib/supabase/server", () => ({
       getUser: (...args: unknown[]) => mockGetUser(...args),
     },
     from: (...args: unknown[]) => mockFrom(...args),
+    rpc: (...args: unknown[]) => mockRpc(...args),
   }),
 }));
 
@@ -374,7 +376,7 @@ describe("server/auth", () => {
       expect(result.error).toBeUndefined();
       expect(result.fieldErrors).toBeDefined();
       expect(result.fieldErrors?.fullName).toContain("Full name is required.");
-      expect(result.fieldErrors?.collegeId).toContain("College ID is required.");
+      expect(result.fieldErrors?.collegeId).toContain("College ID must be at least 3 characters.");
       expect(result.fieldErrors?.email).toContain("Please enter a valid email address.");
       expect(result.fieldErrors?.password).toContain("Password must be at least 8 characters.");
       expect(mockSignUp).not.toHaveBeenCalled();
@@ -394,7 +396,7 @@ describe("server/auth", () => {
 
       const result = await signupAction({}, formData);
 
-      expect(result.error).toBe("Could not create account. Please try again.");
+      expect(result.error).toBe("Could not create account. Check your details or contact the canteen office.");
       expect(result.fieldErrors).toBeUndefined();
       expect(consoleSpy).toHaveBeenCalled();
       consoleSpy.mockRestore();
