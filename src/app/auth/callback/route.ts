@@ -26,11 +26,11 @@ export async function GET(request: Request) {
   const supabase = await createClient();
 
   if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && data?.user) {
       if (next === "/set-password" || type === "recovery" || type === "invite") {
         const cookieStore = await cookies();
-        cookieStore.set(PASSWORD_RESET_COOKIE, "true", {
+        cookieStore.set(PASSWORD_RESET_COOKIE, data.user.id, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: "lax",
@@ -41,11 +41,11 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${origin}${next}`);
     }
   } else if (token_hash && type) {
-    const { error } = await supabase.auth.verifyOtp({ token_hash, type });
-    if (!error) {
+    const { data, error } = await supabase.auth.verifyOtp({ token_hash, type });
+    if (!error && data?.user) {
       if (next === "/set-password" || type === "recovery" || type === "invite") {
         const cookieStore = await cookies();
-        cookieStore.set(PASSWORD_RESET_COOKIE, "true", {
+        cookieStore.set(PASSWORD_RESET_COOKIE, data.user.id, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: "lax",

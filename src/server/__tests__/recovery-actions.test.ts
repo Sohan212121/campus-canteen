@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockResetPasswordForEmail = vi.fn();
+const mockVerifyOtp = vi.fn();
 const mockUpdateUser = vi.fn();
 const mockSignOut = vi.fn();
 const mockGetUser = vi.fn();
@@ -38,6 +39,7 @@ vi.mock("@/lib/supabase/server", () => ({
     auth: {
       resetPasswordForEmail: (...args: unknown[]) =>
         mockResetPasswordForEmail(...args),
+      verifyOtp: (...args: unknown[]) => mockVerifyOtp(...args),
       updateUser: (...args: unknown[]) => mockUpdateUser(...args),
       signOut: (...args: unknown[]) => mockSignOut(...args),
       getUser: (...args: unknown[]) => mockGetUser(...args),
@@ -48,6 +50,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import {
   forgotPasswordAction,
+  verifyConfirmTokenAction,
   setPasswordAction,
 } from "@/server/actions/auth";
 import { PASSWORD_RESET_COOKIE } from "@/lib/validation/auth-recovery";
@@ -103,6 +106,67 @@ describe("Recovery & Password Setting Server Actions", () => {
     });
   });
 
+  describe("verifyConfirmTokenAction", () => {
+    it("redirects unknown type values to expired link screen", async () => {
+      const formData = new FormData();
+      formData.set("token_hash", "valid-hash");
+      formData.set("type", "unknown_type");
+
+      await expect(verifyConfirmTokenAction(formData)).rejects.toThrow(
+        "NEXT_REDIRECT:/forgot-password?error=link_expired"
+      );
+      expect(mockVerifyOtp).not.toHaveBeenCalled();
+    });
+
+    it("accepts invite, recovery, signup, and email types", async () => {
+      for (const validOtpType of ["invite", "recovery", "signup", "email"]) {
+        mockVerifyOtp.mockResolvedValue({
+          data: { user: { id: "user-123" } },
+          error: null,
+        });
+
+        const formData = new FormData();
+        formData.set("token_hash", "valid-hash");
+        formData.set("type", validOtpType);
+
+        await expect(verifyConfirmTokenAction(formData)).rejects.toThrow(
+          "NEXT_REDIRECT:"
+        );
+        expect(mockVerifyOtp).toHaveBeenCalledWith({
+          token_hash: "valid-hash",
+          type: validOtpType,
+        });
+      }
+    });
+
+    it("binds the password reset cookie to the verified user id for recovery/invite", async () => {
+      mockVerifyOtp.mockResolvedValue({
+        data: { user: { id: "verified-user-uuid" } },
+        error: null,
+      });
+
+      const formData = new FormData();
+      formData.set("token_hash", "valid-token");
+      formData.set("type", "recovery");
+      formData.set("next", "/set-password");
+
+      await expect(verifyConfirmTokenAction(formData)).rejects.toThrow(
+        "NEXT_REDIRECT:/set-password"
+      );
+
+      expect(mockCookieSet).toHaveBeenCalledWith(
+        PASSWORD_RESET_COOKIE,
+        "verified-user-uuid",
+        expect.objectContaining({
+          httpOnly: true,
+          sameSite: "lax",
+          maxAge: 600,
+          path: "/",
+        })
+      );
+    });
+  });
+
   describe("setPasswordAction", () => {
     it("rejects when reset authorization cookie is missing", async () => {
       mockCookieGet.mockReturnValue(undefined);
@@ -116,8 +180,22 @@ describe("Recovery & Password Setting Server Actions", () => {
       expect(mockUpdateUser).not.toHaveBeenCalled();
     });
 
+    it("rejects when reset authorization cookie belongs to a different user", async () => {
+      mockCookieGet.mockReturnValue({ value: "other-user-uuid" });
+      mockGetUser.mockResolvedValue({ data: { user: { id: "actual-user-uuid" } } });
+
+      const formData = new FormData();
+      formData.set("password", "NewPassword123!");
+      formData.set("confirmPassword", "NewPassword123!");
+
+      const result = await setPasswordAction({}, formData);
+      expect(result.error).toContain("Authentication required");
+      expect(mockUpdateUser).not.toHaveBeenCalled();
+    });
+
     it("rejects passwords shorter than 8 characters", async () => {
-      mockCookieGet.mockReturnValue({ value: "true" });
+      mockCookieGet.mockReturnValue({ value: "user-123" });
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-123" } } });
 
       const formData = new FormData();
       formData.set("password", "short");
@@ -129,7 +207,8 @@ describe("Recovery & Password Setting Server Actions", () => {
     });
 
     it("rejects non-matching passwords", async () => {
-      mockCookieGet.mockReturnValue({ value: "true" });
+      mockCookieGet.mockReturnValue({ value: "user-123" });
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-123" } } });
 
       const formData = new FormData();
       formData.set("password", "Password123!");
@@ -143,7 +222,7 @@ describe("Recovery & Password Setting Server Actions", () => {
     });
 
     it("updates password, signs out other sessions, deletes cookie, and redirects active student to /", async () => {
-      mockCookieGet.mockReturnValue({ value: "true" });
+      mockCookieGet.mockReturnValue({ value: "user-123" });
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-123" } } });
       mockUpdateUser.mockResolvedValue({ error: null });
       mockSingle.mockResolvedValue({
@@ -167,7 +246,7 @@ describe("Recovery & Password Setting Server Actions", () => {
     });
 
     it("redirects inactive staff user to /auth/pending-activation", async () => {
-      mockCookieGet.mockReturnValue({ value: "true" });
+      mockCookieGet.mockReturnValue({ value: "staff-123" });
       mockGetUser.mockResolvedValue({ data: { user: { id: "staff-123" } } });
       mockUpdateUser.mockResolvedValue({ error: null });
       mockSingle.mockResolvedValue({

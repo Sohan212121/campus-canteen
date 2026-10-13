@@ -301,25 +301,30 @@ export async function forgotPasswordAction(
 // Confirm Token Server Action (Email-Scanner Safe POST Verification)
 // ---------------------------------------------------------------------------
 
+const ALLOWED_OTP_TYPES = ["invite", "recovery", "signup", "email"] as const;
+
 export async function verifyConfirmTokenAction(
   formData: FormData
 ): Promise<never> {
   const token_hash = formData.get("token_hash")?.toString();
-  const type = formData.get("type")?.toString() as EmailOtpType | undefined;
+  const rawType = formData.get("type")?.toString();
   const rawNext = formData.get("next")?.toString();
 
-  if (!token_hash || !type) {
-    redirect("/forgot-password?error=invalid_link");
+  // Validate presence and allowlist: unknown types redirect to expired-link screen
+  if (!token_hash || !rawType || !ALLOWED_OTP_TYPES.includes(rawType as (typeof ALLOWED_OTP_TYPES)[number])) {
+    redirect("/forgot-password?error=link_expired");
   }
 
+  const type = rawType as EmailOtpType;
+
   const supabase = await createClient();
-  const { error } = await supabase.auth.verifyOtp({
+  const { data, error } = await supabase.auth.verifyOtp({
     token_hash,
     type,
   });
 
-  if (error) {
-    console.error("[verifyConfirmTokenAction] OTP error:", error.message);
+  if (error || !data?.user) {
+    console.error("[verifyConfirmTokenAction] OTP error:", error?.message);
     redirect("/forgot-password?error=link_expired");
   }
 
@@ -329,7 +334,7 @@ export async function verifyConfirmTokenAction(
 
   if (type === "recovery" || type === "invite" || next === "/set-password") {
     const cookieStore = await cookies();
-    cookieStore.set(PASSWORD_RESET_COOKIE, "true", {
+    cookieStore.set(PASSWORD_RESET_COOKIE, data.user.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -350,8 +355,8 @@ export async function setPasswordAction(
   formData: FormData
 ): Promise<AuthActionState> {
   const cookieStore = await cookies();
-  const resetAllowed = cookieStore.get(PASSWORD_RESET_COOKIE)?.value === "true";
-  if (!resetAllowed) {
+  const resetAllowedUserId = cookieStore.get(PASSWORD_RESET_COOKIE)?.value;
+  if (!resetAllowedUserId) {
     return {
       error:
         "Password reset session has expired or is unauthorized. Please request a new link.",
@@ -373,7 +378,7 @@ export async function setPasswordAction(
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  if (!user || user.id !== resetAllowedUserId) {
     return {
       error:
         "Authentication required. Please use the link sent to your email to set your password.",

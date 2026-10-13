@@ -650,6 +650,24 @@ WHERE role = 'student';
 >    - Step B: Activate the user account:
 >      `SELECT public.admin_set_user_active('<user-uuid>', true);`
 
+### 14.6 Authentication Configuration (Site URL & Redirect URLs)
+
+> [!IMPORTANT]
+> **Site URL is a project-wide setting:**
+> Supabase Auth uses a single project-wide **Site URL** (`{{ .SiteURL }}`) as the base address for all transactional email templates (Staff Invites, Password Resets, and Signup Confirmations).
+> - Setting Site URL to `http://localhost:3000` is strictly for **solo local development testing**.
+> - It **must be reverted to `https://<YOUR-PRODUCTION-DOMAIN>` before anyone else registers or signs up**, otherwise links sent to users will point to localhost and fail.
+> - Where to find `<YOUR-PRODUCTION-DOMAIN>`: In your hosting provider dashboard (e.g. Vercel Project Overview > Domains, or your custom domain).
+
+#### Required Dashboard Redirect URLs
+In **Supabase Dashboard > Authentication > URL Configuration > Redirect URLs**, configure:
+```
+http://localhost:3000/auth/confirm
+http://localhost:3000/auth/callback
+https://<YOUR-PRODUCTION-DOMAIN>/auth/confirm
+https://<YOUR-PRODUCTION-DOMAIN>/auth/callback
+```
+
 ---
 
 ## 15. Exact Migration Apply Order

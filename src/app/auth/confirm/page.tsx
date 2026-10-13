@@ -25,7 +25,8 @@ export default async function ConfirmPage({ searchParams }: ConfirmPageProps) {
   const type = params.type;
   const next = params.next || (type === "invite" || type === "recovery" ? "/set-password" : "/");
 
-  const isInvalid = !token_hash || !type;
+  const ALLOWED_OTP_TYPES = ["invite", "recovery", "signup", "email"];
+  const isInvalid = !token_hash || !type || !ALLOWED_OTP_TYPES.includes(type);
 
   let title = "Confirm your request";
   let description = "Click below to complete email verification.";
@@ -38,7 +39,7 @@ export default async function ConfirmPage({ searchParams }: ConfirmPageProps) {
     title = "Password reset verification";
     description =
       "Click below to securely proceed and choose a new password for your account.";
-  } else if (type === "signup") {
+  } else if (type === "signup" || type === "email") {
     title = "Confirm campus registration";
     description =
       "Click below to verify your campus email address and activate your account.";
