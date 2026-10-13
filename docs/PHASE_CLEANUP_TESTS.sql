@@ -47,9 +47,9 @@ BEGIN
   RESET ROLE;
 
   -- 1. Ensure allowed campus domain exists so student signup trigger does not reject
-  INSERT INTO public.allowed_email_domains (domain, is_active)
-  VALUES ('campus.edu', true)
-  ON CONFLICT (domain) DO UPDATE SET is_active = true;
+  INSERT INTO public.allowed_email_domains (domain)
+  VALUES ('campus.edu')
+  ON CONFLICT (domain) DO NOTHING;
 
   -- 2. Ensure an active canteen exists
   SELECT id INTO v_canteen_id FROM public.canteens WHERE is_active = true LIMIT 1;
@@ -393,14 +393,25 @@ $$;
 -- ==============================================================================
 DO $$
 DECLARE
-  v_admin_id   uuid;
-  v_res_dry    jsonb;
-  v_res_live   jsonb;
-  i            integer;
-  v_uid        uuid;
-  v_cand_len   integer;
+  v_admin_id       uuid;
+  v_res_baseline   jsonb;
+  v_baseline_count integer;
+  v_res_dry        jsonb;
+  v_res_live       jsonb;
+  i                integer;
+  v_uid            uuid;
+  v_cand_len       integer;
 BEGIN
   SELECT val_uuid INTO v_admin_id FROM _test_env WHERE key = 'admin_id';
+  RESET ROLE;
+
+  -- 0. Take a baseline dry-run candidate_count BEFORE inserting the 205 users
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin_id::text)::text, true);
+  SET LOCAL ROLE authenticated;
+
+  v_res_baseline := public.admin_cleanup_unconfirmed_users(interval '48 hours', true);
+  v_baseline_count := (v_res_baseline->>'candidate_count')::integer;
+
   RESET ROLE;
 
   -- Insert 205 unconfirmed student candidates
@@ -417,23 +428,23 @@ BEGIN
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin_id::text)::text, true);
   SET LOCAL ROLE authenticated;
 
-  -- 1. Test Dry Run: should report candidate_count = 205, candidates list = 200, remaining_count = 5
+  -- 1. Test Dry Run: should report candidate_count = baseline + 205, candidates list = 200, remaining_count = baseline + 5
   v_res_dry := public.admin_cleanup_unconfirmed_users(interval '48 hours', true);
   v_cand_len := jsonb_array_length(v_res_dry->'candidates');
 
-  -- 2. Test Live Run: should delete exactly 200, remaining_count = 5
+  -- 2. Test Live Run: should delete exactly 200, remaining_count = baseline + 5
   v_res_live := public.admin_cleanup_unconfirmed_users(interval '48 hours', false);
 
   RESET ROLE;
 
-  IF (v_res_dry->>'candidate_count')::integer = 205
+  IF (v_res_dry->>'candidate_count')::integer = (v_baseline_count + 205)
      AND v_cand_len = 200
-     AND (v_res_dry->>'remaining_count')::integer = 5
+     AND (v_res_dry->>'remaining_count')::integer = (v_baseline_count + 5)
      AND (v_res_live->>'deleted_count')::integer = 200
-     AND (v_res_live->>'remaining_count')::integer = 5 THEN
-    INSERT INTO _test_results VALUES (7, 'Cap of 200 per run and remaining_count calculation', true, 'Dry run capped at 200 candidates; Live run deleted 200, 5 remaining');
+     AND (v_res_live->>'remaining_count')::integer = (v_baseline_count + 5) THEN
+    INSERT INTO _test_results VALUES (7, 'Cap of 200 per run and remaining_count calculation', true, 'Dry run capped at 200 candidates; Live run deleted 200, delta remaining verified');
   ELSE
-    INSERT INTO _test_results VALUES (7, 'Cap of 200 per run and remaining_count calculation', false, 'dry=' || coalesce(v_res_dry::text, 'null') || ', live=' || coalesce(v_res_live::text, 'null'));
+    INSERT INTO _test_results VALUES (7, 'Cap of 200 per run and remaining_count calculation', false, 'dry=' || coalesce(v_res_dry::text, 'null') || ', live=' || coalesce(v_res_live::text, 'null') || ', baseline=' || v_baseline_count);
   END IF;
 EXCEPTION WHEN OTHERS THEN
   RESET ROLE;
@@ -487,21 +498,38 @@ $$;
 -- ==============================================================================
 DO $$
 DECLARE
+  v_cand_id   uuid := gen_random_uuid();
   v_res       jsonb;
   v_audit_row record;
 BEGIN
   RESET ROLE;
 
-  -- In SQL Editor or direct postgres session: session_user is postgres, auth.uid() is null
+  -- 1. Clear JWT claims so auth.uid() is strictly NULL in this session
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  -- 2. Insert one candidate first
+  INSERT INTO auth.users (id, email, email_confirmed_at, invited_at, created_at, raw_user_meta_data)
+  VALUES (v_cand_id, 'servicerole_candidate@campus.edu', NULL, NULL, now() - interval '72 hours', jsonb_build_object('full_name', 'Service Role Candidate', 'college_id', 'SRV001'));
+
+  UPDATE public.profiles
+  SET role = 'student'::public.user_role, college_id = 'SRV001', is_active = true
+  WHERE id = v_cand_id;
+
+  -- 3. Execute live cleanup as service role / postgres (auth.uid() is NULL)
   v_res := public.admin_cleanup_unconfirmed_users(interval '48 hours', false);
 
+  -- 4. Find the audit row with action = 'CLEANUP_UNCONFIRMED_USERS' AND actor_id IS NULL AND details->>'caller_type' = 'sql editor or service role'
+  -- (Never pick latest row by created_at since now() is the transaction start timestamp)
   SELECT * INTO v_audit_row
   FROM public.admin_audit_log
   WHERE action = 'CLEANUP_UNCONFIRMED_USERS'
-  ORDER BY created_at DESC
+    AND actor_id IS NULL
+    AND details->>'caller_type' = 'sql editor or service role'
   LIMIT 1;
 
   IF (v_res->>'success')::boolean = true
+     AND (v_res->>'deleted_count')::integer >= 1
+     AND v_audit_row.id IS NOT NULL
      AND v_audit_row.actor_id IS NULL
      AND v_audit_row.details->>'caller_type' = 'sql editor or service role' THEN
     INSERT INTO _test_results VALUES (9, 'Service role invocation works with actor_id NULL in audit log', true, 'Live deletion executed by service role; actor_id NULL; details noted caller_type');
@@ -615,5 +643,7 @@ BEGIN
   END IF;
 END;
 $$;
+
+SELECT test_num, test_name, passed, details FROM _test_results ORDER BY test_num;
 
 ROLLBACK;

@@ -645,10 +645,31 @@ WHERE role = 'student';
 > 3. **Warning**: Dashboard **"Create user"** (which sets email and password directly) leaves `invited_at = NULL` and empty `raw_app_meta_data`. It is treated as an untrusted student registration and will be **immediately aborted** with `MISSING_COLLEGE_ID` or `DOMAIN_NOT_ALLOWED`.
 > 4. **Post-Invite Administrator Steps**:
 >    - When invited, `handle_new_user()` creates the profile with `role = 'staff'`, `canteen_id = NULL`, and `is_active = false`.
->    - Step A: Assign the staff member to their designated canteen via procedure:
->      `SELECT public.admin_set_user_role('<user-uuid>', 'staff'::public.user_role, '<canteen-uuid>');`
->    - Step B: Activate the user account:
->      `SELECT public.admin_set_user_active('<user-uuid>', true);`
+>    - **Important**: The procedures `admin_set_user_role` and `admin_set_user_active` require `auth.uid()`. In the Supabase SQL Editor, `auth.uid()` is `NULL`, so calling them directly there will raise `UNAUTHENTICATED: Must be logged in`.
+>    - **Recommended Method (Web Application UI)**:
+>      Log into the application as an active administrator and navigate to the **Admin Users page** at `/admin/users` (rendered by [`UsersView`](file:///src/components/admin/users-view.tsx)):
+>      - **Role & Canteen**: Click **"Edit Role"** on the user row, select `Staff` (and choose the assigned Canteen from the dropdown) or `Admin`, then save. This calls `adminSetUserRoleAction(activeUser.id, newRole, canteenId)` with the authenticated admin's session and records an audit log row.
+>      - **Activation**: Click the **"Activate"** toggle button. This calls `adminSetUserActiveAction(user.id, true)` with the authenticated admin's session and records an audit log row.
+>    - **SQL Editor Fallback (Direct Postgres Update)**:
+>      If bootstrapping or configuring directly in the Supabase SQL Editor (running as superuser `postgres`), update `public.profiles` directly:
+>      ```sql
+>      -- Assign staff member to a canteen and activate account
+>      UPDATE public.profiles
+>      SET 
+>        role = 'staff'::public.user_role,
+>        canteen_id = '<canteen-uuid>',
+>        is_active = true
+>      WHERE id = '<user-uuid>';
+>
+>      -- Or to configure an administrator account:
+>      UPDATE public.profiles
+>      SET 
+>        role = 'admin'::public.user_role,
+>        canteen_id = NULL,
+>        is_active = true
+>      WHERE id = '<user-uuid>';
+>      ```
+>      *Note: Directly updating `public.profiles` in the SQL Editor bypasses the `admin_set_user_role` and `admin_set_user_active` RPCs, so no audit row is written to `public.admin_audit_log`.*
 
 ### 14.6 Authentication Configuration (Site URL & Redirect URLs)
 
