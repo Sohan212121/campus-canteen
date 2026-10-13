@@ -665,10 +665,10 @@ The database migrations must strictly be applied in sequential order:
 7. `0007_role_isolation.sql` — Strict role separation and student/staff context isolation.
 8. `0008_best_sellers.sql` — Real-time popularity ranking and best seller views.
 9. `0009_reviews.sql` — Verified-purchase ratings and item review moderation.
-10. **Pre-check Audit Query** — Run read-only query (Section 14.4) to confirm zero student violations.
-11. `0010_allowed_email_domains.sql` — Campus domain restriction and signup hardening.
-12. `0011_cleanup_unconfirmed_users.sql` — Scheduled/admin cleanup routine for unconfirmed stale signups.
-13. `0012_review_fixes.sql` — Reviews concurrency hardening (FOR NO KEY UPDATE), student role requirement on review listing, updated_at preservation on moderation, extended unicode stripping (\u2060, \uFEFF), and admin search capping.
+10. `0012_review_fixes.sql` — Reviews concurrency hardening (FOR NO KEY UPDATE), student role requirement on review listing, updated_at preservation on moderation, extended unicode stripping (\u2060, \uFEFF), and admin search capping.
+11. **Pre-check Audit Query** — Run read-only query (Section 14.4) to confirm zero student violations.
+12. `0010_allowed_email_domains.sql` — Campus domain restriction and signup hardening.
+13. `0011_cleanup_unconfirmed_users.sql` — Scheduled/admin cleanup routine for unconfirmed stale signups with dry-run support, staff/invited exclusion, and 200 batch deletion limit.
 
 
 
