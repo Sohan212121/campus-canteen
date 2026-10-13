@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { signupAction, resendConfirmationAction, type AuthActionState } from "@/server/actions/auth";
+import { SIGNUP_EMAIL_PLACEHOLDER } from "@/lib/constants";
 
 const initialState: AuthActionState = {};
 
@@ -153,18 +154,18 @@ export default function SignupPage() {
 
           <div className="space-y-1.5">
             <label htmlFor="email" className="text-sm font-medium">
-              Campus Email
+              Email
             </label>
             <Input
               id="email"
               name="email"
               type="email"
-              placeholder="you@campus.edu"
+              placeholder={SIGNUP_EMAIL_PLACEHOLDER}
               required
               autoComplete="email"
             />
             <p className="text-[11px] text-muted-foreground">
-              Must belong to an approved campus domain.
+              Use the email address you want to sign in with.
             </p>
             {state.fieldErrors?.email && (
               <p className="text-xs text-destructive">{state.fieldErrors.email[0]}</p>

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { loginAction, type AuthActionState } from "@/server/actions/auth";
+import { SIGNUP_EMAIL_PLACEHOLDER } from "@/lib/constants";
 
 const initialState: AuthActionState = {};
 
@@ -54,7 +55,7 @@ function LoginForm() {
             id="email"
             name="email"
             type="email"
-            placeholder="you@campus.edu"
+            placeholder={SIGNUP_EMAIL_PLACEHOLDER}
             required
             autoComplete="email"
           />

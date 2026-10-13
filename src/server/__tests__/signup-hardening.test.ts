@@ -127,7 +127,7 @@ describe("Signup Hardening: Unit Tests", () => {
         p_email: "intruder@evil.com",
       });
       expect(result.error).toBe(
-        "Registration is restricted to authorized campus email addresses."
+        "This email address can't be used to register. Please use an approved email address."
       );
       expect(mockSignUp).not.toHaveBeenCalled();
     });

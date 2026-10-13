@@ -147,7 +147,7 @@ export async function signupAction(
     );
     if (!rpcError && isAllowed === false) {
       return {
-        error: "Registration is restricted to authorized campus email addresses.",
+        error: "This email address can't be used to register. Please use an approved email address.",
       };
     }
   } catch (err) {
@@ -175,7 +175,7 @@ export async function signupAction(
 
     if (rawMsg.includes("DOMAIN_NOT_ALLOWED")) {
       return {
-        error: "Registration is restricted to authorized campus email addresses.",
+        error: "This email address can't be used to register. Please use an approved email address.",
       };
     }
 
