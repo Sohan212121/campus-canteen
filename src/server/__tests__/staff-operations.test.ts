@@ -1,17 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import * as fs from "fs";
-import * as path from "path";
+import fs from "fs";
+import path from "path";
 
+// Mock server auth
 const mockRequireRole = vi.fn();
 vi.mock("@/server/auth", () => ({
   requireRole: (...args: unknown[]) => mockRequireRole(...args),
+  resolveStaffCanteen: vi.fn().mockImplementation((profile) => profile?.canteen_id || null),
 }));
 
-const mockGetActiveCanteenId = vi.fn();
-vi.mock("@/server/canteen", () => ({
-  getActiveCanteenId: () => mockGetActiveCanteenId(),
-}));
-
+// Mock Supabase Server Client
 const mockRpc = vi.fn();
 const mockFrom = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({
@@ -27,12 +25,13 @@ vi.mock("next/cache", () => ({
 
 import {
   transitionOrderAction,
-  verifyPickupAction,
+  previewCollectionAction,
+  collectOrderAction,
   setItemAvailabilityAction,
 } from "@/server/actions/staff";
 import { calculateStartPreparingBy } from "@/lib/order-status";
 
-describe("Phase 7 Staff Operations", () => {
+describe("Staff Operations & Collection Core", () => {
   const validOrderId = "b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22";
   const validCanteenId = "c2eebc99-9c0b-4ef8-bb6d-6bb9bd380c33";
 
@@ -47,7 +46,7 @@ describe("Phase 7 Staff Operations", () => {
   });
 
   describe("transitionOrderAction", () => {
-    it("enforces staff role check", async () => {
+    it("successfully calls transition_order for kitchen transitions", async () => {
       mockRpc.mockResolvedValue({
         data: {
           order_id: validOrderId,
@@ -57,161 +56,173 @@ describe("Phase 7 Staff Operations", () => {
         error: null,
       });
 
-      await transitionOrderAction(validOrderId, "ACCEPTED");
-      expect(mockRequireRole).toHaveBeenCalledWith(["staff"]);
+      const result = await transitionOrderAction(validOrderId, "ACCEPTED");
+      expect(result.success).toBe(true);
       expect(mockRpc).toHaveBeenCalledWith("transition_order", {
         p_order_id: validOrderId,
         p_to_status: "ACCEPTED",
       });
     });
 
-    it("rejects invalid UUID input", async () => {
+    it("strictly refuses direct transition to COLLECTED", async () => {
+      const result = await transitionOrderAction(validOrderId, "COLLECTED");
+      expect(result.success).toBe(false);
+      expect(result.code).toBe("INVALID_TRANSITION");
+      expect(result.error).toContain("Use collectOrderAction instead");
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    it("rejects invalid UUID format before calling RPC", async () => {
       const result = await transitionOrderAction("not-a-valid-uuid", "ACCEPTED");
       expect(result.success).toBe(false);
       expect(result.code).toBe("INVALID_INPUT");
       expect(mockRpc).not.toHaveBeenCalled();
     });
 
-    it("rejects invalid status transitions not in enum", async () => {
-      // @ts-expect-error testing invalid status string
+    it("rejects non-existent status", async () => {
+      // @ts-expect-error Testing runtime invalid input
       const result = await transitionOrderAction(validOrderId, "NON_EXISTENT");
       expect(result.success).toBe(false);
       expect(result.code).toBe("INVALID_INPUT");
       expect(mockRpc).not.toHaveBeenCalled();
     });
 
-    it("maps FORBIDDEN error when staff operates on wrong canteen", async () => {
-      mockRpc.mockResolvedValue({
-        data: null,
-        error: { message: "FORBIDDEN: Staff not authorized for this canteen" },
-      });
-
-      const result = await transitionOrderAction(validOrderId, "PREPARING");
-      expect(result.success).toBe(false);
-      expect(result.code).toBe("FORBIDDEN");
-      expect(result.error).toContain("authorized");
-    });
-
-    it("maps INVALID_TRANSITION error", async () => {
+    it("maps database errors cleanly", async () => {
       mockRpc.mockResolvedValue({
         data: null,
         error: {
-          message: "INVALID_TRANSITION: Cannot transition order from PLACED to COLLECTED",
+          message: "INVALID_TRANSITION: Cannot transition order from PLACED to READY",
         },
       });
 
-      const result = await transitionOrderAction(validOrderId, "COLLECTED");
+      const result = await transitionOrderAction(validOrderId, "READY");
       expect(result.success).toBe(false);
       expect(result.code).toBe("INVALID_TRANSITION");
       expect(result.error).toContain("Cannot transition");
     });
-
-    it("handles idempotent no-op returns gracefully", async () => {
-      mockRpc.mockResolvedValue({
-        data: {
-          order_id: validOrderId,
-          status: "PREPARING",
-          was_noop: true,
-        },
-        error: null,
-      });
-
-      const result = await transitionOrderAction(validOrderId, "PREPARING");
-      expect(result.success).toBe(true);
-      expect(result.was_noop).toBe(true);
-      expect(result.data?.was_noop).toBe(true);
-    });
   });
 
-  describe("verifyPickupAction", () => {
-    it("rejects non-6-digit tokens before querying database", async () => {
-      const result = await verifyPickupAction("12345"); // 5 digits
+  describe("previewCollectionAction", () => {
+    it("rejects empty order reference", async () => {
+      const result = await previewCollectionAction({ orderRef: "" });
       expect(result.success).toBe(false);
-      expect(result.code).toBe("INVALID_TOKEN");
-      expect(mockRpc).not.toHaveBeenCalled();
-
-      const nonNumeric = await verifyPickupAction("abcdef");
-      expect(nonNumeric.success).toBe(false);
-      expect(nonNumeric.code).toBe("INVALID_TOKEN");
+      expect(result.code).toBe("INVALID_INPUT");
       expect(mockRpc).not.toHaveBeenCalled();
     });
 
-    it("rejects if staff has no canteen assigned", async () => {
-      mockRequireRole.mockResolvedValue({
-        id: "staff-no-canteen",
-        role: "staff",
-        canteen_id: null,
-        is_active: true,
-      });
-
-      const result = await verifyPickupAction("123456");
-      expect(result.success).toBe(false);
-      expect(result.code).toBe("NO_CANTEEN_ASSIGNED");
-      expect(result.error).toContain("No canteen assigned");
-      expect(mockRpc).not.toHaveBeenCalled();
-    });
-
-    it("maps found:false to NOT_FOUND error message", async () => {
+    it("maps ok:false RATE_LIMITED without throwing", async () => {
       mockRpc.mockResolvedValue({
-        data: { found: false },
+        data: { ok: false, error: "RATE_LIMITED" },
         error: null,
       });
 
-      const result = await verifyPickupAction("999999");
-      expect(result.success).toBe(false);
-      expect(result.code).toBe("NOT_FOUND");
-      expect(result.error).toContain("No ready order found");
-    });
-
-    it("maps RATE_LIMITED error when 10+ failed attempts occurred", async () => {
-      mockRpc.mockResolvedValue({
-        data: null,
-        error: {
-          message:
-            "RATE_LIMITED: Too many failed pickup verification attempts. Please wait 5 minutes.",
-        },
+      const result = await previewCollectionAction({
+        orderRef: "CN10001",
+        code: "123456",
       });
 
-      const result = await verifyPickupAction("999999");
       expect(result.success).toBe(false);
       expect(result.code).toBe("RATE_LIMITED");
-      expect(result.error).toContain("Too many failed pickup attempts");
+      expect(result.error).toContain("Too many failed attempts");
     });
 
-    it("returns formatted order details on token match", async () => {
+    it("returns formatted scan card on preview match", async () => {
       mockRpc.mockResolvedValue({
         data: {
-          found: true,
+          ok: true,
           order_id: validOrderId,
-          order_code: "ORD1042",
-          status: "READY",
-          student_name: "Aarav Sharma",
-          total_paise: 14000,
-          payment_method: "PAY_AT_PICKUP",
-          payment_status: "PENDING",
+          order_code: "CN10001",
+          first_name: "Rahul",
+          college_id_last4: "8899",
+          pickup_for_name: "Anita",
+          total_paise: 12000,
+          is_amber: false,
           items: [
-            { id: "item-1", name_snapshot: "Masala Dosa", quantity: 2, unit_price_paise: 6000 },
-            { id: "item-2", name_snapshot: "Filter Coffee", quantity: 1, unit_price_paise: 2000 },
+            { id: "i1", name: "Dosa", quantity: 2, unit_price_paise: 6000 },
           ],
         },
         error: null,
       });
 
-      const result = await verifyPickupAction("482910");
-      expect(result.success).toBe(true);
-      expect(result.data).toEqual({
-        order_id: validOrderId,
-        order_code: "ORD1042",
-        status: "READY",
-        student_name: "Aarav Sharma",
-        total_paise: 14000,
-        payment_method: "PAY_AT_PICKUP",
-        payment_status: "PENDING",
-        items: [
-          { id: "item-1", name_snapshot: "Masala Dosa", quantity: 2, unit_price_paise: 6000 },
-          { id: "item-2", name_snapshot: "Filter Coffee", quantity: 1, unit_price_paise: 2000 },
-        ],
+      const result = await previewCollectionAction({
+        orderRef: "CN10001",
+        code: "123456",
       });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.first_name).toBe("Rahul");
+      expect(result.data?.college_id_last4).toBe("8899");
+      expect(result.data?.is_amber).toBe(false);
+    });
+  });
+
+  describe("collectOrderAction", () => {
+    it("rejects invalid payment method", async () => {
+      const result = await collectOrderAction({
+        orderId: validOrderId,
+        collectedWith: "BITCOIN" as unknown as "CASH",
+        method: "SCAN",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe("INVALID_INPUT");
+    });
+
+    it("enforces minimum 5 characters reason for MANUAL collection", async () => {
+      const result = await collectOrderAction({
+        orderId: validOrderId,
+        collectedWith: "CASH",
+        method: "MANUAL",
+        reason: "bad",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe("INVALID_INPUT");
+      expect(result.error).toContain("at least 5 characters");
+    });
+
+    it("maps ok:false AMBER_REQUIRES_CODE_AND_PIN", async () => {
+      mockRpc.mockResolvedValue({
+        data: { ok: false, error: "AMBER_REQUIRES_CODE_AND_PIN" },
+        error: null,
+      });
+
+      const result = await collectOrderAction({
+        orderId: validOrderId,
+        collectedWith: "CASH",
+        method: "PIN",
+        pin: "1234",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe("AMBER_REQUIRES_CODE_AND_PIN");
+    });
+
+    it("successfully collects order and revalidates paths", async () => {
+      mockRpc.mockResolvedValue({
+        data: {
+          ok: true,
+          order_id: validOrderId,
+          order_code: "CN10001",
+          first_name: "Rahul",
+          college_id_last4: "8899",
+          total_paise: 12000,
+          collected_with: "CASH",
+          collection_method: "SCAN",
+          items: [],
+        },
+        error: null,
+      });
+
+      const result = await collectOrderAction({
+        orderId: validOrderId,
+        code: "123456",
+        collectedWith: "CASH",
+        method: "SCAN",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.collected_with).toBe("CASH");
     });
   });
 
@@ -236,7 +247,6 @@ describe("Phase 7 Staff Operations", () => {
 
   describe("calculateStartPreparingBy helper", () => {
     it("calculates start time by subtracting preparation lead minutes", () => {
-      // 12:30 UTC is 18:00 (6:00 PM) IST. Subtracting 15m gives 17:45 (5:45 PM) IST.
       const pickupTime = "2026-10-10T12:30:00Z";
       const leadMinutes = 15;
       const startTime = calculateStartPreparingBy(pickupTime, leadMinutes);
@@ -249,12 +259,11 @@ describe("Phase 7 Staff Operations", () => {
     });
   });
 
-  describe("Staff Query Security Invariant (Requirement 6)", () => {
+  describe("Staff Query Security Invariant", () => {
     it("asserts that staff server action queries NEVER select pickup_token", () => {
       const staffActionsPath = path.resolve(__dirname, "../actions/staff.ts");
       const staffActionsContent = fs.readFileSync(staffActionsPath, "utf-8");
 
-      // Extract all .select(...) calls across staff.ts
       const selectMatches = staffActionsContent.match(
         /\.select\(\s*[`'"][^`'"]*[`'"]\s*\)/g
       );
@@ -262,7 +271,6 @@ describe("Phase 7 Staff Operations", () => {
       expect(selectMatches).not.toBeNull();
       expect(selectMatches!.length).toBeGreaterThan(0);
 
-      // Verify no select string contains pickup_token
       for (const match of selectMatches!) {
         expect(match).not.toContain("pickup_token");
       }

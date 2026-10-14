@@ -199,16 +199,38 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN v_err_msg := SQLERRM; END;
   END IF;
 
-  -- 4. READY -> COLLECTED
+  -- 4. READY -> COLLECTED via transition_order MUST BE REFUSED
   IF v_err_msg IS NULL THEN
     BEGIN
       v_trans_res := public.transition_order(v_order_id, 'COLLECTED'::public.order_status);
+      v_err_msg := 'transition_order unexpectedly allowed direct COLLECTED transition!';
+    EXCEPTION WHEN OTHERS THEN
+      IF SQLERRM NOT LIKE '%COLLECTED%' THEN
+        v_err_msg := 'Unexpected error refusing COLLECTED: ' || SQLERRM;
+      END IF;
+    END;
+  END IF;
+
+  -- 5. Complete collection securely through public.collect_order
+  IF v_err_msg IS NULL THEN
+    BEGIN
+      v_trans_res := public.collect_order(
+        v_order_id,
+        NULL,
+        'CASH',
+        'MANUAL',
+        NULL,
+        'Verified student identity at counter'
+      );
+      IF (v_trans_res->>'ok')::boolean IS NOT TRUE THEN
+        v_err_msg := 'collect_order returned ok=false: ' || (v_trans_res->>'error');
+      END IF;
     EXCEPTION WHEN OTHERS THEN v_err_msg := SQLERRM; END;
   END IF;
 
   RESET ROLE;
   IF v_err_msg IS NOT NULL THEN
-    INSERT INTO _test_results VALUES (1, 'Valid transition chain', false, 'transition_order failed: ' || v_err_msg);
+    INSERT INTO _test_results VALUES (1, 'Valid transition chain', false, 'transition_order/collect_order failed: ' || v_err_msg);
     RETURN;
   END IF;
 
@@ -223,8 +245,8 @@ BEGIN
      AND v_order_rec.preparing_at IS NOT NULL
      AND v_order_rec.ready_at IS NOT NULL
      AND v_order_rec.collected_at IS NOT NULL THEN
-    INSERT INTO _test_results VALUES (1, 'Valid transition chain', true, 'Full lifecycle transitioned successfully; payment marked PAID on collect.');
-    RAISE NOTICE 'PASS [Test 1]: Valid sequential transition chain';
+    INSERT INTO _test_results VALUES (1, 'Valid transition chain', true, 'Full lifecycle transitioned successfully; transition_order refused COLLECTED, collect_order completed settlement.');
+    RAISE NOTICE 'PASS [Test 1]: Valid sequential transition chain and collect_order handover';
   ELSE
     INSERT INTO _test_results VALUES (1, 'Valid transition chain', false, 'State mismatch after transitions: status=' || coalesce(v_order_rec.status::text, 'NULL') || ' payment=' || coalesce(v_order_rec.payment_status::text, 'NULL'));
   END IF;
