@@ -708,22 +708,23 @@ The database migrations must strictly be applied in sequential order:
 11. **Pre-check Audit Query** — Run read-only query (Section 14.4) to confirm zero student violations.
 12. `0010_allowed_email_domains.sql` — Campus domain restriction and signup hardening.
 13. `0011_cleanup_unconfirmed_users.sql` — Scheduled/admin cleanup routine for unconfirmed stale signups with dry-run support, staff/invited exclusion, and 200 batch deletion limit.
-14. `0013_collection_core.sql` — Collection core: TOTP rotating pickup code (60-second window, HMAC-SHA256), PIN derivation from secret, amber threshold validation (> 5 items or > ₹500), preview and collection procedures, manual collection audit, collection reports ("Not me"), and pickup_token deprecation.
+14. `0013_collection_core.sql` — Collection Core v2 (Additive): New orders columns, `pickup_collect_attempts`, `order_pickup_secrets` (RLS on, 0 policies), `pickup_hmac` wrapper (`extensions.hmac` with empty search_path), internal TOTP/PIN helpers, `get_pickup_code`, `preview_collection`, `collect_order`, dispute reporting (`order_collection_reports`, `report_unauthorized_collection`), and in-flight secrets backfill.
+15. `0014_collection_cutover.sql` — Collection Cutover v2: Replaces `transition_order` (strictly refuses `COLLECTED`), replaces `place_order` (adds `p_pickup_for_name`, generates secret row, removes static token loop), drops `verify_pickup`, nullifies existing `pickup_token`s, and updates `handle_order_status_notification` trigger function to notify on `COLLECTED` (with manual override notice).
+16. Deploy updated web application.
 
 ---
 
 ## 16. Collection Core & Smart Counter Pickup
 
-Added in migration `0013_collection_core.sql`:
+Added in migrations `0013_collection_core.sql` (additive) and `0014_collection_cutover.sql` (cutover):
 
 ### 16.1 Architecture & Token Invariant Resolution
 - **Deprecation of Static `pickup_token`**:
   - Previously, `pickup_token` was a static 6-digit number on `public.orders`, viewable across the canteen by staff under table-level SELECT RLS.
-  - In `0013_collection_core.sql`, `pickup_token` is made nullable and set to `NULL` for all orders. New orders no longer generate static tokens.
+  - In `0014_collection_cutover.sql`, `pickup_token` is made nullable and set to `NULL` for all orders. New orders no longer generate static tokens.
 - **Separate Secrets Table (`public.order_pickup_secrets`)**:
   - `order_id uuid PRIMARY KEY REFERENCES public.orders(id) ON DELETE CASCADE`
   - `secret text NOT NULL`: 64-character cryptographic hex string derived from `replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')` (zero external extension dependencies).
-  - `failed_pin_attempts integer NOT NULL DEFAULT 0`
   - `created_at timestamptz NOT NULL DEFAULT now()`
   - **RLS & Security**: RLS enabled with 0 policies. All privileges revoked from `PUBLIC`, `anon`, and `authenticated`. Accessible strictly via `service_role` and `SECURITY DEFINER` routines. Neither students nor staff can ever select rows from this table.
 
