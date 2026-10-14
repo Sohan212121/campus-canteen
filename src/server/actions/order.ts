@@ -18,6 +18,7 @@ const placeOrderSchema = z.object({
   paymentMethod: z.literal("PAY_AT_PICKUP"),
   idempotencyKey: z.string().uuid("Invalid idempotency key"),
   requestedAt: z.string().datetime({ offset: true }).nullable().optional(),
+  pickupForName: z.string().trim().max(40).nullable().optional(),
 });
 
 export type PlaceOrderInput = z.infer<typeof placeOrderSchema>;
@@ -80,7 +81,7 @@ export async function placeOrderAction(rawInput: unknown): Promise<PlaceOrderRes
     };
   }
 
-  const { canteenId, items, paymentMethod, idempotencyKey, requestedAt } = parsed.data;
+  const { canteenId, items, paymentMethod, idempotencyKey, requestedAt, pickupForName } = parsed.data;
 
   // 3. Invoke public.place_order with user's session client
   const supabase = await createClient();
@@ -95,6 +96,9 @@ export async function placeOrderAction(rawInput: unknown): Promise<PlaceOrderRes
   // Only pass p_requested_at if non-empty to let Postgres use DEFAULT NULL cleanly
   if (requestedAt) {
     rpcParams.p_requested_at = requestedAt;
+  }
+  if (pickupForName) {
+    rpcParams.p_pickup_for_name = pickupForName;
   }
 
   const { data, error } = await supabase.rpc("place_order", rpcParams);
@@ -467,4 +471,115 @@ export async function getReorderItemsAction(orderId: string): Promise<GetReorder
     itemsToReorder,
     skippedItems,
   };
+}
+
+export type PickupCodeResult = {
+  success: boolean;
+  code?: string;
+  error?: string;
+  data?: {
+    order_id: string;
+    order_code: string;
+    code: string;
+    seconds_remaining: number;
+    pin: string;
+    pickup_for_name?: string | null;
+  };
+};
+
+/**
+ * Retrieves the dynamic rotating 6-digit TOTP pickup code and PIN for an order in READY status.
+ */
+export async function getPickupCodeAction(orderId: string): Promise<PickupCodeResult> {
+  await requireRole(["student"]);
+  const parsed = z.string().uuid("Invalid order ID").safeParse(orderId);
+  if (!parsed.success) {
+    return { success: false, code: "INVALID_INPUT", error: "Invalid order ID" };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_pickup_code", {
+    p_order_id: parsed.data,
+  });
+
+  if (error) {
+    return {
+      success: false,
+      code: error.message.split(":")[0]?.trim() || "ERROR",
+      error: error.message.replace(/^[A-Z_]+:\s*/, ""),
+    };
+  }
+
+  const res = data as { ok: boolean; error?: string; [key: string]: unknown };
+  if (!res || !res.ok) {
+    return {
+      success: false,
+      code: res?.error || "FAILED",
+      error: res?.error === "ORDER_NOT_READY" ? "Order is not ready for pickup yet" : "Unable to retrieve pickup code",
+    };
+  }
+
+  return {
+    success: true,
+    data: {
+      order_id: res.order_id as string,
+      order_code: res.order_code as string,
+      code: res.code as string,
+      seconds_remaining: Number(res.seconds_remaining || 0),
+      pin: res.pin as string,
+      pickup_for_name: (res.pickup_for_name as string) || null,
+    },
+  };
+}
+
+/**
+ * Allows a student to dispute an unauthorized collection within 24 hours of collection.
+ */
+export async function reportUnauthorizedCollectionAction(
+  orderId: string,
+  reason: string
+): Promise<{ success: boolean; code?: string; error?: string }> {
+  await requireRole(["student"]);
+  const parsedId = z.string().uuid("Invalid order ID").safeParse(orderId);
+  const parsedReason = z.string().trim().min(5, "Reason must be at least 5 characters").safeParse(reason);
+
+  if (!parsedId.success || !parsedReason.success) {
+    return {
+      success: false,
+      code: "INVALID_INPUT",
+      error: !parsedReason.success ? parsedReason.error.issues[0]?.message : "Invalid order ID",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("report_unauthorized_collection", {
+    p_order_id: parsedId.data,
+    p_reason: parsedReason.data,
+  });
+
+  if (error) {
+    return {
+      success: false,
+      code: error.message.split(":")[0]?.trim() || "ERROR",
+      error: error.message.replace(/^[A-Z_]+:\s*/, ""),
+    };
+  }
+
+  const res = data as { ok: boolean; error?: string };
+  if (!res || !res.ok) {
+    const errorMap: Record<string, string> = {
+      REPORT_WINDOW_EXPIRED: "Dispute reports must be filed within 24 hours of collection.",
+      ALREADY_REPORTED: "A dispute report has already been submitted for this order.",
+      REPORT_LIMIT_EXCEEDED: "Monthly limit reached (maximum 3 reports in 30 days).",
+      ORDER_NOT_COLLECTED: "Only orders marked as collected can be disputed.",
+    };
+    return {
+      success: false,
+      code: res?.error || "FAILED",
+      error: (res?.error && errorMap[res.error]) || res?.error || "Failed to file report.",
+    };
+  }
+
+  revalidatePath(`/orders/${parsedId.data}`, "page");
+  return { success: true };
 }

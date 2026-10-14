@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { z } from "zod";
 import { toast } from "sonner";
 import {
   Camera,
@@ -9,37 +8,40 @@ import {
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
-  Sparkles,
   ShoppingBag,
   User,
   ShieldAlert,
+  Loader2,
+  CreditCard,
+  Banknote,
+  KeyRound,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  verifyPickupAction,
-  transitionOrderAction,
-  type VerifiedPickupOrder,
+  previewCollectionAction,
+  collectOrderAction,
+  type CollectionCard,
 } from "@/server/actions/staff";
 import { formatPaise } from "@/lib/money";
-
 import { LazyQrScanner } from "./lazy-qr-scanner";
 
-const tokenSchema = z
-  .string()
-  .trim()
-  .regex(/^\d{6}$/, "Token must be exactly 6 digits");
-
 export function PickupScannerView() {
-  const [mode, setMode] = useState<"camera" | "manual">("camera");
-  const [tokenInput, setTokenInput] = useState("");
+  const [mode, setMode] = useState<"camera" | "manual" | "override">("camera");
+  const [orderCodeInput, setOrderCodeInput] = useState("");
+  const [codeInput, setCodeInput] = useState("");
+  const [pinInput, setPinInput] = useState("");
+  const [manualReason, setManualReason] = useState("");
+  const [collectedWith, setCollectedWith] = useState<"CASH" | "UPI">("CASH");
+
   const [isVerifying, setIsVerifying] = useState(false);
   const [isCollecting, setIsCollecting] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [verifiedOrder, setVerifiedOrder] = useState<VerifiedPickupOrder | null>(null);
+  const [verifiedCard, setVerifiedCard] = useState<CollectionCard | null>(null);
+  const [lastScannedCode, setLastScannedCode] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -60,86 +62,116 @@ export function PickupScannerView() {
     };
   }, []);
 
-  const handleVerify = async (rawToken: string) => {
+  const handlePreview = async (orderRef: string, code?: string, pin?: string) => {
     setErrorMessage(null);
-    const parsed = tokenSchema.safeParse(rawToken);
-    if (!parsed.success) {
-      const msg = parsed.error.issues[0]?.message || "Invalid token format";
-      setErrorMessage(msg);
-      toast.error(msg);
-      setPaused(false);
-      return;
-    }
-
     setIsVerifying(true);
     try {
-      const res = await verifyPickupAction(parsed.data);
-      if (!res.success) {
-        setErrorMessage(res.error || "Verification failed");
-        toast.error(res.error || "Verification failed");
-        setVerifiedOrder(null);
-      } else if (res.data) {
-        setVerifiedOrder(res.data);
-        toast.success(`Order #${res.data.order_code} verified for pickup!`);
+      const res = await previewCollectionAction({
+        orderRef,
+        code,
+        pin,
+      });
+
+      if (!res.success || !res.data) {
+        const err = res.error || "Verification failed";
+        setErrorMessage(err);
+        toast.error(err);
+        setVerifiedCard(null);
+        setPaused(false);
+      } else {
+        setVerifiedCard(res.data);
+        if (code) setLastScannedCode(code);
+        toast.success(`Order #${res.data.order_code} verified!`);
       }
     } catch {
-      setErrorMessage("Network error during pickup verification");
-      toast.error("Network error during pickup verification");
+      setErrorMessage("Network error verifying pickup");
+      toast.error("Network error verifying pickup");
+      setPaused(false);
     } finally {
       setIsVerifying(false);
     }
   };
 
   const handleScan = (detectedCodes: { rawValue: string }[]) => {
-    if (paused || isVerifying || verifiedOrder) return;
+    if (paused || isVerifying || verifiedCard) return;
     if (detectedCodes.length > 0 && detectedCodes[0].rawValue) {
       setPaused(true);
       const val = detectedCodes[0].rawValue.trim();
-      handleVerify(val);
-    }
-  };
 
-  const handleCameraError = (err: unknown) => {
-    const errorStr =
-      err instanceof Error ? err.message : "Camera access denied or unavailable";
-    setCameraError(errorStr);
-    setMode("manual");
-    toast.error("Camera access failed. Switched to manual token entry.");
+      // QR format: CC1:<order_id>:<code>
+      if (val.startsWith("CC1:")) {
+        const parts = val.split(":");
+        if (parts.length >= 3) {
+          const orderId = parts[1];
+          const code = parts[2];
+          handlePreview(orderId, code);
+          return;
+        }
+      }
+
+      setErrorMessage("Invalid QR code format. Please scan a valid Campus Canteen pickup QR.");
+      toast.error("Invalid QR format");
+      setPaused(false);
+    }
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tokenInput.trim()) return;
-    handleVerify(tokenInput.trim());
+    if (!orderCodeInput.trim()) {
+      toast.error("Please enter an order code (e.g. CN10001)");
+      return;
+    }
+    handlePreview(orderCodeInput.trim(), codeInput.trim() || undefined, pinInput.trim() || undefined);
   };
 
   const handleCollect = async () => {
-    if (!verifiedOrder) return;
+    if (!verifiedCard || isCollecting) return;
+
+    // Amber orders check: must have PIN
+    if (verifiedCard.is_amber && (!pinInput.trim() || pinInput.trim().length !== 4)) {
+      toast.error("Amber orders require a valid 4-digit student PIN");
+      return;
+    }
+
     setIsCollecting(true);
     try {
-      const res = await transitionOrderAction(
-        verifiedOrder.order_id,
-        "COLLECTED"
-      );
-      if (res.success) {
+      const isManual = mode === "override";
+      const isPinOnly = !lastScannedCode && Boolean(pinInput.trim());
+
+      const res = await collectOrderAction({
+        orderId: verifiedCard.order_id,
+        code: lastScannedCode || undefined,
+        collectedWith,
+        method: isManual ? "MANUAL" : isPinOnly ? "PIN" : "SCAN",
+        pin: pinInput.trim() || undefined,
+        reason: isManual ? manualReason.trim() : undefined,
+      });
+
+      if (res.success && res.data) {
         toast.success(
-          `Order #${verifiedOrder.order_code} collected successfully!`
+          `Order #${res.data.order_code} collected! Payment confirmed via ${collectedWith}.`
         );
         resetState();
       } else {
-        toast.error(res.error || "Failed to mark as collected");
+        const err = res.error || "Collection failed";
+        setErrorMessage(err);
+        toast.error(err);
       }
     } catch {
-      toast.error("Network error marking collected");
+      toast.error("Network error during collection");
     } finally {
       setIsCollecting(false);
     }
   };
 
   const resetState = () => {
-    setVerifiedOrder(null);
+    setVerifiedCard(null);
     setErrorMessage(null);
-    setTokenInput("");
+    setOrderCodeInput("");
+    setCodeInput("");
+    setPinInput("");
+    setManualReason("");
+    setLastScannedCode("");
     setPaused(false);
   };
 
@@ -149,7 +181,7 @@ export function PickupScannerView() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Pickup Verification</h1>
           <p className="text-sm text-muted-foreground">
-            Scan student QR code or enter the 6-digit pickup token to release orders.
+            Scan dynamic student QR code or verify counter PIN to release orders.
           </p>
         </div>
 
@@ -161,7 +193,7 @@ export function PickupScannerView() {
               setMode("camera");
               resetState();
             }}
-            className={`flex min-h-[44px] items-center gap-2 px-4 text-xs font-bold rounded-lg transition-colors ${
+            className={`flex min-h-[44px] items-center gap-2 px-3 text-xs font-bold rounded-lg transition-colors ${
               mode === "camera"
                 ? "bg-background text-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
@@ -176,62 +208,145 @@ export function PickupScannerView() {
               setMode("manual");
               resetState();
             }}
-            className={`flex min-h-[44px] items-center gap-2 px-4 text-xs font-bold rounded-lg transition-colors ${
+            className={`flex min-h-[44px] items-center gap-2 px-3 text-xs font-bold rounded-lg transition-colors ${
               mode === "manual"
                 ? "bg-background text-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Keyboard className="h-4 w-4" />
-            Manual Entry
+            Code / PIN
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("override");
+              resetState();
+            }}
+            className={`flex min-h-[44px] items-center gap-2 px-3 text-xs font-bold rounded-lg transition-colors ${
+              mode === "override"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <FileText className="h-4 w-4" />
+            Manual
           </button>
         </div>
       </div>
 
-      {/* Verified Order Card */}
-      {verifiedOrder ? (
-        <Card className="border-emerald-500/40 bg-emerald-500/5 shadow-md animate-in fade-in zoom-in-95 duration-200">
+      {/* Verified Scan Card */}
+      {verifiedCard ? (
+        <Card
+          className={`shadow-md animate-in fade-in zoom-in-95 duration-200 ${
+            verifiedCard.is_amber
+              ? "border-amber-500/60 bg-amber-500/5"
+              : "border-emerald-500/40 bg-emerald-500/5"
+          }`}
+        >
           <CardHeader className="pb-3 border-b border-border/40">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+              <div className="flex items-center gap-2.5">
+                {verifiedCard.is_amber ? (
+                  <AlertTriangle className="h-6 w-6 text-amber-500" />
+                ) : (
+                  <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+                )}
                 <div>
                   <CardTitle className="text-xl">
-                    Order #{verifiedOrder.order_code}
+                    Order #{verifiedCard.order_code}
                   </CardTitle>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                    <User className="h-3 w-3" />
-                    Customer:{" "}
-                    <span className="font-semibold text-foreground">
-                      {verifiedOrder.student_name}
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                    <span className="flex items-center gap-1 font-semibold text-foreground">
+                      <User className="h-3 w-3 text-muted-foreground" />
+                      {verifiedCard.first_name}
                     </span>
-                  </p>
+                    {verifiedCard.college_id_last4 && (
+                      <span className="font-mono bg-muted/60 px-1.5 py-0.5 rounded text-[11px]">
+                        ID: ••••{verifiedCard.college_id_last4}
+                      </span>
+                    )}
+                    {verifiedCard.pickup_for_name && (
+                      <span className="font-medium text-primary">
+                        Pickup by: {verifiedCard.pickup_for_name}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-              <Badge className="bg-emerald-600 text-white font-bold">
-                READY FOR COLLECTION
+              <Badge
+                className={
+                  verifiedCard.is_amber
+                    ? "bg-amber-600 text-white font-bold"
+                    : "bg-emerald-600 text-white font-bold"
+                }
+              >
+                {verifiedCard.is_amber ? "AMBER VERIFICATION" : "READY FOR COLLECTION"}
               </Badge>
             </div>
           </CardHeader>
 
           <CardContent className="pt-4 space-y-4">
+            {verifiedCard.is_amber && (
+              <div className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  High-Value or Bulk Order Security Check
+                </p>
+                <p>
+                  Orders over 5 items or ₹500 require the student&apos;s 4-digit PIN in addition to the rotating code.
+                </p>
+                <div className="pt-2 max-w-xs">
+                  <label className="text-[11px] font-semibold text-foreground block mb-1">
+                    Student 4-digit PIN:
+                  </label>
+                  <Input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="••••"
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ""))}
+                    className="font-mono text-center tracking-widest text-lg h-10 bg-background"
+                  />
+                </div>
+              </div>
+            )}
+
+            {mode === "override" && (
+              <div className="p-3 rounded-xl border border-border bg-muted/40 text-xs space-y-2">
+                <label className="font-bold block text-foreground">
+                  Manual Collection Reason (Min 5 characters):
+                </label>
+                <Input
+                  placeholder="e.g. Student phone battery depleted, student ID verified"
+                  value={manualReason}
+                  onChange={(e) => setManualReason(e.target.value)}
+                  className="bg-background text-xs"
+                />
+              </div>
+            )}
+
+            {/* Items list */}
             <div className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Order Items ({verifiedOrder.items.length})
+                Order Items ({verifiedCard.items.length})
               </h4>
-              <div className="divide-y divide-border/40 rounded-lg border bg-background/50 px-3">
-                {verifiedOrder.items.map((item, idx) => (
+              <div className="rounded-xl border border-border/40 divide-y divide-border/30 bg-background/50 overflow-hidden text-sm">
+                {verifiedCard.items.map((item) => (
                   <div
-                    key={idx}
-                    className="flex items-center justify-between py-2 text-sm"
+                    key={item.id}
+                    className="flex items-center justify-between p-2.5"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-primary">
-                        {item.quantity}x
-                      </span>
-                      <span>{item.name_snapshot}</span>
+                    <div>
+                      <p className="font-medium text-foreground">
+                        {item.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Qty: {item.quantity} &times; {formatPaise(item.unit_price_paise)}
+                      </p>
                     </div>
-                    <span className="font-medium text-muted-foreground">
+                    <span className="font-bold text-foreground">
                       {formatPaise(item.unit_price_paise * item.quantity)}
                     </span>
                   </div>
@@ -239,26 +354,64 @@ export function PickupScannerView() {
               </div>
             </div>
 
-            <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-card border font-bold text-base">
-              <span>Total Bill</span>
-              <span className="text-primary font-mono text-lg">
-                {formatPaise(verifiedOrder.total_paise)}
-              </span>
+            {/* Payment & Amount bar */}
+            <div className="p-3 rounded-xl bg-card border border-border/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Total Bill Amount</p>
+                <p className="text-2xl font-black tracking-tight text-foreground">
+                  {formatPaise(verifiedCard.total_paise)}
+                </p>
+              </div>
+
+              {/* Payment Method Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-muted-foreground">Received as:</span>
+                <div className="inline-flex rounded-lg border bg-muted p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setCollectedWith("CASH")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
+                      collectedWith === "CASH"
+                        ? "bg-background text-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Banknote className="h-3.5 w-3.5" />
+                    CASH
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCollectedWith("UPI")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
+                      collectedWith === "UPI"
+                        ? "bg-background text-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    UPI
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            {/* Handover Buttons */}
+            <div className="pt-2 flex flex-col sm:flex-row gap-3">
               <Button
                 size="lg"
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold shadow-sm"
                 onClick={handleCollect}
                 disabled={isCollecting}
+                className="flex-1 min-h-[48px] rounded-xl text-sm font-bold gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
               >
                 {isCollecting ? (
-                  "Marking Collected..."
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Confirming Payment & Handover...
+                  </>
                 ) : (
                   <>
                     <ShoppingBag className="h-5 w-5" />
-                    Hand Over & Mark Collected
+                    Received {collectedWith} & Hand Over Order
                   </>
                 )}
               </Button>
@@ -267,17 +420,17 @@ export function PickupScannerView() {
                 size="lg"
                 onClick={resetState}
                 disabled={isCollecting}
-                className="gap-2"
+                className="gap-2 rounded-xl"
               >
                 <RotateCcw className="h-4 w-4" />
-                Cancel / Reset
+                Reset
               </Button>
             </div>
           </CardContent>
         </Card>
       ) : (
         <>
-          {/* Error Message Banner */}
+          {/* Error Banner */}
           {errorMessage && (
             <div className="p-4 rounded-xl border border-destructive/40 bg-destructive/10 text-destructive flex items-start justify-between gap-3 animate-in fade-in">
               <div className="flex items-start gap-2.5">
@@ -293,7 +446,7 @@ export function PickupScannerView() {
                 size="sm"
                 variant="outline"
                 onClick={resetState}
-                className="min-h-[44px] px-3.5 text-xs font-bold text-destructive hover:bg-destructive/10"
+                className="min-h-[40px] px-3 text-xs font-bold text-destructive hover:bg-destructive/10"
               >
                 Try Again
               </Button>
@@ -308,96 +461,144 @@ export function PickupScannerView() {
                   <span>Camera QR Scanner</span>
                   {paused && (
                     <Badge variant="outline" className="text-amber-500 border-amber-500">
-                      Paused
+                      Processing...
                     </Badge>
                   )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="relative aspect-square max-w-sm mx-auto overflow-hidden rounded-xl border bg-black/90">
+                <div className="aspect-square max-w-sm mx-auto overflow-hidden rounded-2xl bg-black border relative">
                   <LazyQrScanner
                     onScan={handleScan}
-                    onError={handleCameraError}
-                    paused={paused || isVerifying}
-                    formats={["qr_code"]}
-                    styles={{
-                      container: { width: "100%", height: "100%" },
+                    onError={(err) => {
+                      const msg = err instanceof Error ? err.message : "Camera error";
+                      setErrorMessage(msg);
+                      setMode("manual");
+                      toast.error("Camera access failed. Switched to code/PIN entry.");
                     }}
+                    paused={paused}
                   />
-                  {isVerifying && (
-                    <div className="absolute inset-0 bg-background/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2">
-                      <Sparkles className="h-8 w-8 text-primary animate-spin" />
-                      <p className="text-sm font-semibold">Verifying token...</p>
-                    </div>
-                  )}
                 </div>
-
-                <div className="text-center space-y-2">
-                  <p className="text-xs text-muted-foreground">
-                    Point camera at student&apos;s order pickup QR code.
-                  </p>
-                  {paused && !isVerifying && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPaused(false)}
-                      className="gap-1.5"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      Resume Camera
-                    </Button>
-                  )}
-                </div>
+                <p className="text-center text-xs text-muted-foreground">
+                  Center the student&apos;s dynamic pickup QR code inside the viewfinder.
+                </p>
               </CardContent>
             </Card>
           )}
 
-          {/* Manual Entry View */}
+          {/* Manual Code or PIN Entry */}
           {mode === "manual" && (
             <Card className="border shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base">Enter 6-Digit Token</CardTitle>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Enter Order Code & Code/PIN</CardTitle>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleManualSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="pickup-token"
-                      className="text-xs font-medium text-muted-foreground"
-                    >
-                      Pickup Token
+                <form onSubmit={handleManualSubmit} className="space-y-4 max-w-sm mx-auto">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground">
+                      Order Reference:
                     </label>
                     <Input
-                      id="pickup-token"
-                      type="text"
+                      placeholder="e.g. CN10001"
+                      value={orderCodeInput}
+                      onChange={(e) => setOrderCodeInput(e.target.value.toUpperCase())}
+                      className="font-mono text-center text-base uppercase"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground">
+                      6-Digit Rotating Code:
+                    </label>
+                    <Input
                       inputMode="numeric"
-                      pattern="\d{6}"
                       maxLength={6}
-                      autoFocus
-                      placeholder="e.g. 748291"
-                      value={tokenInput}
-                      onChange={(e) =>
-                        setTokenInput(e.target.value.replace(/\D/g, ""))
-                      }
-                      className="text-center font-mono text-2xl tracking-widest h-14"
+                      placeholder="123456"
+                      value={codeInput}
+                      onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, ""))}
+                      className="font-mono text-center tracking-widest text-lg"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                      <KeyRound className="h-3 w-3" />
+                      4-Digit Student PIN (Fallback or Amber):
+                    </label>
+                    <Input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="••••"
+                      value={pinInput}
+                      onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ""))}
+                      className="font-mono text-center tracking-widest text-lg"
                     />
                   </div>
 
                   <Button
                     type="submit"
-                    className="w-full h-11 text-base font-semibold"
-                    disabled={isVerifying || tokenInput.length !== 6}
+                    size="lg"
+                    disabled={isVerifying}
+                    className="w-full min-h-[44px] rounded-xl font-bold gap-2"
                   >
-                    {isVerifying ? "Verifying Token..." : "Verify Pickup Token"}
+                    {isVerifying ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      "Verify Order"
+                    )}
                   </Button>
                 </form>
+              </CardContent>
+            </Card>
+          )}
 
-                {cameraError && (
-                  <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex items-center gap-2">
-                    <ShieldAlert className="h-4 w-4 shrink-0" />
-                    <span>Camera unavailable: {cameraError}</span>
+          {/* Manual Override Mode */}
+          {mode === "override" && (
+            <Card className="border shadow-sm border-amber-500/40">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-amber-500" />
+                  Manual Collection Override
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleManualSubmit} className="space-y-4 max-w-sm mx-auto">
+                  <p className="text-xs text-muted-foreground">
+                    Use when a student cannot present their phone or QR code. A reason is required and will be logged in the campus audit log.
+                  </p>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground">
+                      Order Reference (CNxxxxx):
+                    </label>
+                    <Input
+                      placeholder="CN10001"
+                      value={orderCodeInput}
+                      onChange={(e) => setOrderCodeInput(e.target.value.toUpperCase())}
+                      className="font-mono text-center text-base uppercase"
+                      required
+                    />
                   </div>
-                )}
+                  <Button
+                    type="submit"
+                    size="lg"
+                    disabled={isVerifying}
+                    className="w-full min-h-[44px] rounded-xl font-bold gap-2"
+                  >
+                    {isVerifying ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Checking Order...
+                      </>
+                    ) : (
+                      "Load Order For Manual Release"
+                    )}
+                  </Button>
+                </form>
               </CardContent>
             </Card>
           )}

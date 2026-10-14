@@ -8,7 +8,6 @@ import { createClient } from "@/lib/supabase/server";
 import { extractMenuItemImageUrl } from "@/lib/image-utils";
 
 const uuidSchema = z.string().uuid("Invalid ID format");
-const tokenSchema = z.string().regex(/^\d{6}$/, "Pickup token must be a 6-digit numeric code");
 
 const orderStatusSchema = z.enum([
   "PLACED",
@@ -103,6 +102,14 @@ export async function transitionOrderAction(
     return { success: false, code: "INVALID_INPUT", error: "Invalid transition parameters." };
   }
 
+  if (parsedStatus.data === "COLLECTED") {
+    return {
+      success: false,
+      code: "INVALID_TRANSITION",
+      error: "Orders cannot be directly transitioned to COLLECTED. Use collectOrderAction instead.",
+    };
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("transition_order", {
     p_order_id: parsedId.data,
@@ -164,88 +171,207 @@ export async function transitionOrderAction(
 /**
  * Verifies counter pickup token for ready orders through public.verify_pickup.
  */
-export async function verifyPickupAction(
-  token: string
-): Promise<{
+export type CollectionCard = {
+  order_id: string;
+  order_code: string;
+  first_name: string;
+  college_id_last4: string;
+  pickup_for_name?: string | null;
+  total_paise: number;
+  is_amber: boolean;
+  items: Array<{
+    id: string;
+    name: string;
+    quantity: number;
+    unit_price_paise: number;
+  }>;
+};
+
+export type PreviewCollectionResult = {
   success: boolean;
   code?: string;
   error?: string;
-  data?: VerifiedPickupOrder;
-  order?: VerifiedPickupOrder;
-}> {
-  const profile = await requireRole(["staff"]);
+  data?: CollectionCard;
+};
+
+export type CollectOrderResult = {
+  success: boolean;
+  code?: string;
+  error?: string;
+  data?: {
+    order_id: string;
+    order_code: string;
+    first_name: string;
+    college_id_last4: string;
+    pickup_for_name?: string | null;
+    total_paise: number;
+    collected_with: string;
+    collection_method: string;
+    items: Array<{
+      id: string;
+      name: string;
+      quantity: number;
+      unit_price_paise: number;
+    }>;
+  };
+};
+
+/**
+ * Previews collection credentials without altering state. Returns the scan card.
+ */
+export async function previewCollectionAction(input: {
+  orderRef: string;
+  code?: string;
+  pin?: string;
+}): Promise<PreviewCollectionResult> {
+  const profile = await requireRole(["staff", "admin"]);
   const canteenId = await resolveStaffCanteen(profile);
 
-  if (!canteenId) {
-    return {
-      success: false,
-      code: "NO_CANTEEN_ASSIGNED",
-      error: "No canteen assigned to your staff profile.",
-    };
-  }
-
-  const parsedToken = tokenSchema.safeParse(token.trim());
-  if (!parsedToken.success) {
-    return {
-      success: false,
-      code: "INVALID_TOKEN",
-      error: "Please enter a valid 6-digit numeric pickup token.",
-    };
+  const cleanRef = input.orderRef?.trim();
+  if (!cleanRef) {
+    return { success: false, code: "INVALID_INPUT", error: "Please provide an order reference or scan a valid QR." };
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("verify_pickup", {
+  const { data, error } = await supabase.rpc("preview_collection", {
     p_canteen_id: canteenId,
-    p_token: parsedToken.data,
+    p_order_ref: cleanRef,
+    p_code: input.code?.trim() || null,
+    p_pin: input.pin?.trim() || null,
   });
 
   if (error) {
     const rawMsg = error.message || "";
-    if (rawMsg.includes("RATE_LIMITED")) {
-      return {
-        success: false,
-        code: "RATE_LIMITED",
-        error: "Too many failed pickup attempts. Please wait 5 minutes before trying again.",
-      };
-    }
-    if (rawMsg.includes("FORBIDDEN")) {
-      return {
-        success: false,
-        code: "FORBIDDEN",
-        error: "You are not authorized to verify pickups for this canteen.",
-      };
-    }
+    const code = rawMsg.split(":")[0]?.trim() || "ERROR";
     return {
       success: false,
-      code: "VERIFY_FAILED",
-      error: rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Failed to verify pickup token.",
+      code,
+      error: rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Verification failed.",
     };
   }
 
-  const payload = data as { found: boolean } & VerifiedPickupOrder;
-  if (!payload || !payload.found) {
+  const res = data as { ok: boolean; error?: string; [key: string]: unknown };
+  if (!res || !res.ok) {
+    const errorMap: Record<string, string> = {
+      RATE_LIMITED: "Too many failed attempts. Please wait before trying again.",
+      PIN_LOCKED: "Too many failed PIN attempts. Order PIN is locked.",
+      INVALID_CODE: "Invalid or expired pickup code.",
+      INVALID_PIN: "Incorrect 4-digit PIN.",
+      PIN_REQUIRED: "PIN verification required for this high-value or bulk order.",
+      AMBER_REQUIRES_CODE_AND_PIN: "Orders over 5 items or ₹500 require both the rotating QR code and PIN.",
+      ORDER_NOT_READY: "Order is not marked ready yet.",
+      ALREADY_COLLECTED: "Order has already been collected.",
+      SECRET_NOT_FOUND: "No security credentials found for this order.",
+      CODE_OR_PIN_REQUIRED: "Please enter a valid 6-digit code or 4-digit PIN.",
+    };
     return {
       success: false,
-      code: "NOT_FOUND",
-      error: "No ready order found matching pickup token.",
+      code: res?.error || "VERIFY_FAILED",
+      error: (res?.error && errorMap[res.error]) || res?.error || "Verification failed.",
     };
   }
-
-  const verifiedOrder: VerifiedPickupOrder = {
-    order_id: payload.order_id,
-    order_code: payload.order_code,
-    status: payload.status,
-    total_paise: payload.total_paise,
-    payment_method: payload.payment_method,
-    payment_status: payload.payment_status,
-    student_name: payload.student_name,
-    items: payload.items || [],
-  };
 
   return {
     success: true,
-    data: verifiedOrder,
-    order: verifiedOrder,
+    data: {
+      order_id: res.order_id as string,
+      order_code: res.order_code as string,
+      first_name: res.first_name as string,
+      college_id_last4: res.college_id_last4 as string,
+      pickup_for_name: (res.pickup_for_name as string) || null,
+      total_paise: Number(res.total_paise || 0),
+      is_amber: Boolean(res.is_amber),
+      items: (res.items as CollectionCard["items"]) || [],
+    },
+  };
+}
+
+/**
+ * Atomically marks order as collected with payment confirmation.
+ */
+export async function collectOrderAction(input: {
+  orderId: string;
+  code?: string;
+  collectedWith: "CASH" | "UPI";
+  method: "SCAN" | "PIN" | "MANUAL";
+  pin?: string;
+  reason?: string;
+}): Promise<CollectOrderResult> {
+  await requireRole(["staff", "admin"]);
+  const parsedId = uuidSchema.safeParse(input.orderId);
+  if (!parsedId.success) {
+    return { success: false, code: "INVALID_INPUT", error: "Invalid order ID format." };
+  }
+
+  if (!["CASH", "UPI"].includes(input.collectedWith)) {
+    return { success: false, code: "INVALID_INPUT", error: "Payment method must be CASH or UPI." };
+  }
+
+  if (!["SCAN", "PIN", "MANUAL"].includes(input.method)) {
+    return { success: false, code: "INVALID_INPUT", error: "Collection method must be SCAN, PIN, or MANUAL." };
+  }
+
+  if (input.method === "MANUAL" && (!input.reason || input.reason.trim().length < 5)) {
+    return { success: false, code: "INVALID_INPUT", error: "Manual collection requires a reason of at least 5 characters." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("collect_order", {
+    p_order_id: parsedId.data,
+    p_code: input.code?.trim() || null,
+    p_collected_with: input.collectedWith,
+    p_method: input.method,
+    p_pin: input.pin?.trim() || null,
+    p_reason: input.reason?.trim() || null,
+  });
+
+  if (error) {
+    const rawMsg = error.message || "";
+    const code = rawMsg.split(":")[0]?.trim() || "ERROR";
+    return {
+      success: false,
+      code,
+      error: rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Collection failed.",
+    };
+  }
+
+  const res = data as { ok: boolean; error?: string; [key: string]: unknown };
+  if (!res || !res.ok) {
+    const errorMap: Record<string, string> = {
+      RATE_LIMITED: "Too many failed attempts. Please wait before trying again.",
+      PIN_LOCKED: "Too many failed PIN attempts. Order PIN is locked.",
+      INVALID_CODE: "Invalid or expired pickup code.",
+      INVALID_PIN: "Incorrect 4-digit PIN.",
+      PIN_REQUIRED: "PIN verification required for this high-value or bulk order.",
+      AMBER_REQUIRES_CODE_AND_PIN: "Orders over 5 items or ₹500 require both the rotating QR code and PIN.",
+      MANUAL_LIMIT: "Manual collection limit reached (maximum 10 per 24 hours per staff).",
+      ORDER_NOT_READY: "Order is not marked ready yet.",
+      ALREADY_COLLECTED: "Order has already been collected.",
+    };
+    return {
+      success: false,
+      code: res?.error || "COLLECT_FAILED",
+      error: (res?.error && errorMap[res.error]) || res?.error || "Collection failed.",
+    };
+  }
+
+  revalidatePath(`/orders/${parsedId.data}`, "page");
+  revalidatePath("/staff/kitchen", "page");
+  revalidatePath("/staff/pickup", "page");
+
+  return {
+    success: true,
+    data: {
+      order_id: res.order_id as string,
+      order_code: res.order_code as string,
+      first_name: res.first_name as string,
+      college_id_last4: res.college_id_last4 as string,
+      pickup_for_name: (res.pickup_for_name as string) || null,
+      total_paise: Number(res.total_paise || 0),
+      collected_with: res.collected_with as string,
+      collection_method: res.collection_method as string,
+      items: (res.items as CollectOrderResult["data"] extends { items: infer T } ? T : never) || [],
+    },
   };
 }
 

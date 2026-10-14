@@ -708,6 +708,74 @@ The database migrations must strictly be applied in sequential order:
 11. **Pre-check Audit Query** — Run read-only query (Section 14.4) to confirm zero student violations.
 12. `0010_allowed_email_domains.sql` — Campus domain restriction and signup hardening.
 13. `0011_cleanup_unconfirmed_users.sql` — Scheduled/admin cleanup routine for unconfirmed stale signups with dry-run support, staff/invited exclusion, and 200 batch deletion limit.
+14. `0013_collection_core.sql` — Collection core: TOTP rotating pickup code (60-second window, HMAC-SHA256), PIN derivation from secret, amber threshold validation (> 5 items or > ₹500), preview and collection procedures, manual collection audit, collection reports ("Not me"), and pickup_token deprecation.
+
+---
+
+## 16. Collection Core & Smart Counter Pickup
+
+Added in migration `0013_collection_core.sql`:
+
+### 16.1 Architecture & Token Invariant Resolution
+- **Deprecation of Static `pickup_token`**:
+  - Previously, `pickup_token` was a static 6-digit number on `public.orders`, viewable across the canteen by staff under table-level SELECT RLS.
+  - In `0013_collection_core.sql`, `pickup_token` is made nullable and set to `NULL` for all orders. New orders no longer generate static tokens.
+- **Separate Secrets Table (`public.order_pickup_secrets`)**:
+  - `order_id uuid PRIMARY KEY REFERENCES public.orders(id) ON DELETE CASCADE`
+  - `secret text NOT NULL`: 64-character cryptographic hex string derived from `replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')` (zero external extension dependencies).
+  - `failed_pin_attempts integer NOT NULL DEFAULT 0`
+  - `created_at timestamptz NOT NULL DEFAULT now()`
+  - **RLS & Security**: RLS enabled with 0 policies. All privileges revoked from `PUBLIC`, `anon`, and `authenticated`. Accessible strictly via `service_role` and `SECURITY DEFINER` routines. Neither students nor staff can ever select rows from this table.
+
+### 16.2 Internal Cryptographic Wrapper (`public.pickup_hmac`)
+- `public.pickup_hmac(p_key text, p_msg text) RETURNS bytea`:
+  - `SECURITY DEFINER`, `SET search_path = ''`.
+  - The **only** procedure in the entire database that references `pgcrypto`. Checks `extensions.hmac` with dynamic fallback to `public.hmac`.
+  - Revoked from `PUBLIC`, `anon`, and `authenticated`. Granted exclusively to `service_role`.
+
+### 16.3 Dynamic QR Payload & Rotating TOTP Codes
+- **QR Payload Format**: `'CC1:<order_id>:<code>'` (e.g. `CC1:123e4567-e89b-12d3-a456-426614174000:482910`).
+- **60-Second Window**: Evaluated as `floor(extract(epoch from clock_timestamp()) / 60)::bigint`.
+- **Tolerance**: Staff preview and collection procedures accept both the current window and the immediately preceding window (`window - 1`) to absorb network delays and clock skew.
+- **PIN Derivation**: A 4-digit numeric fallback PIN is deterministically derived from `public.pickup_hmac(secret, 'pin:' || order_id)`. The PIN is never stored in plaintext or hashed format in the database.
+
+### 16.4 Stored Procedures
+- **`public.get_pickup_code(p_order_id uuid) RETURNS jsonb`**:
+  - Accessible to authenticated student owning the order.
+  - Allowed **strictly and exclusively** when `order.status = 'READY'`. Returns `{ ok: false, error: 'ORDER_NOT_READY' }` otherwise.
+  - Returns `{ ok: true, order_id, order_code, code, seconds_remaining, pin, pickup_for_name }`. Never returns the secret.
+- **`public.preview_collection(p_canteen_id, p_order_ref, p_code, p_pin) RETURNS jsonb`**:
+  - Staff / Admin only. Does not alter database order state.
+  - Locates order by UUID or `order_code` (e.g. `CN10001`). Enforces canteen isolation for staff.
+  - Rate limiting: $\ge 10$ failed attempts in 5 minutes per staff, or $\ge 10$ failed attempts in 10 minutes per order returns `{ ok: false, error: 'RATE_LIMITED' }`.
+  - **Amber Threshold**: Evaluated if total item quantity $> 5$ or `total_paise > 50000` (> ₹500). Amber orders require **both** the rotating code and the 4-digit PIN. PIN-only collection is refused.
+  - Non-amber orders allow rotating code or PIN-only verification.
+  - Returns scan card data: `{ ok: true, order_id, order_code, first_name, college_id_last4, pickup_for_name, total_paise, is_amber, items }`. Never returns email or full name.
+- **`public.collect_order(p_order_id, p_code, p_collected_with, p_method, p_pin, p_reason) RETURNS jsonb`**:
+  - Staff / Admin only. Locks order `FOR UPDATE`.
+  - Accepts `p_collected_with IN ('CASH', 'UPI')` and `p_method IN ('SCAN', 'PIN', 'MANUAL')`.
+  - Re-verifies credentials and amber requirements atomically.
+  - **Manual Collection**: Allowed for students with depleted phone batteries or broken screens. Requires `p_reason` with length $\ge 5$ characters. Capped at 10 manual collections per staff member per rolling 24 hours (returns `{ ok: false, error: 'MANUAL_LIMIT' }`). Dispatches an alert notification to the student and logs to `public.admin_audit_log`.
+  - Transitions order to `COLLECTED`, sets `payment_status = 'PAID'`, records `collected_at`, `collected_by`, `collected_with`, `collection_method`, and `manual_collection_reason`.
+  - Logs `action = 'COLLECT_ORDER'` in `public.admin_audit_log`.
+- **`public.transition_order(p_order_id, p_to_status) RETURNS jsonb`**:
+  - Redefined to **strictly refuse `COLLECTED`** with `INVALID_TRANSITION: Orders cannot be directly transitioned to COLLECTED. Use public.collect_order instead.`
+  - Retains all other transitions (`PLACED` $\rightarrow$ `ACCEPTED`/`REJECTED`, `ACCEPTED` $\rightarrow$ `PREPARING`, `PREPARING` $\rightarrow$ `READY`).
+- **`public.report_unauthorized_collection(p_order_id uuid, p_reason text) RETURNS jsonb`**:
+  - Student dispute mechanism ("Not me").
+  - Allowed only for student's own order, strictly within 24 hours of `collected_at`.
+  - Enforces 30-day rolling cap of 3 dispute reports per student.
+  - Writes to `public.order_collection_reports` and logs to `public.admin_audit_log`.
+- **`public.admin_list_collection_reports(...)` & `public.admin_resolve_collection_report(...)`**:
+  - Administrator review and dispute resolution procedures with audit tracking.
+
+### 16.5 Quiet-Time Warning & Student UX Shift
+> [!IMPORTANT]
+> **Quiet-Time Notice for Deployment**:
+> - Applying migration `0013_collection_core.sql` immediately switches pickup verification from static tokens to dynamic 60-second TOTP codes.
+> - In-flight orders in `PLACED`, `ACCEPTED`, `PREPARING`, or `READY` status are automatically backfilled with a cryptographic secret during migration execution.
+> - **Student Screen Change**: A student whose order is currently in `READY` status will immediately see the new Dynamic Smart Pickup screen upon refresh: an animated 60-second countdown ring, rotating QR code, rotating 6-digit code, and 4-digit counter fallback PIN.
+> - Staff counter scanners running the updated application will scan `CC1:<order_id>:<code>`, render the green/amber preview card, and record cash or UPI collection with a single tap.
 
 
 
