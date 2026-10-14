@@ -215,12 +215,11 @@ BEGIN
   IF v_err_msg IS NULL THEN
     BEGIN
       v_trans_res := public.collect_order(
-        v_order_id,
-        NULL,
-        'CASH',
-        'MANUAL',
-        NULL,
-        'Verified student identity at counter'
+        p_canteen_id => v_canteen1_id,
+        p_order_id => v_order_id,
+        p_collected_with => 'CASH',
+        p_method => 'MANUAL',
+        p_reason => 'Verified student identity at counter'
       );
       IF (v_trans_res->>'ok')::boolean IS NOT TRUE THEN
         v_err_msg := 'collect_order returned ok=false: ' || (v_trans_res->>'error');

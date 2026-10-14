@@ -297,7 +297,8 @@ export async function collectOrderAction(input: {
   pin?: string;
   reason?: string;
 }): Promise<CollectOrderResult> {
-  await requireRole(["staff", "admin"]);
+  const profile = await requireRole(["staff", "admin"]);
+  const canteenId = await resolveStaffCanteen(profile);
   const parsedId = uuidSchema.safeParse(input.orderId);
   if (!parsedId.success) {
     return { success: false, code: "INVALID_INPUT", error: "Invalid order ID format." };
@@ -317,6 +318,7 @@ export async function collectOrderAction(input: {
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("collect_order", {
+    p_canteen_id: canteenId,
     p_order_id: parsedId.data,
     p_code: input.code?.trim() || null,
     p_collected_with: input.collectedWith,
