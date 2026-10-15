@@ -7,7 +7,7 @@
 -- Contents:
 --   1. New enums: collection_method_enum ('SCAN', 'PIN', 'MANUAL'), collected_with_enum ('CASH', 'UPI')
 --   2. New columns on public.orders (real schema names, collected_at already exists)
---   3. Secure order_pickup_secrets table (RLS on, NO policies, revoked from PUBLIC, anon, authenticated)
+--   3. Secure order_pickup_secrets table (RLS on, NO policies, revoked from PUBLIC, anon, authenticated, service_role)
 --   4. NEW pickup_collect_attempts table (leaves pickup_verify_attempts untouched)
 --   5. pgcrypto wrapper public.pickup_hmac() using extensions schema with SET search_path = ''
 --   6. Internal helpers: internal_get_pickup_pin, internal_get_pickup_code
@@ -17,6 +17,8 @@
 --  10. Dispute Reporting: order_collection_reports table (RLS on, NO policies)
 --      and functions: report_unauthorized_collection, admin_list_collection_reports, admin_resolve_collection_report
 --  11. Backfill secrets for in-flight orders
+
+BEGIN;
 
 -- 1. Custom Types
 DO $$
@@ -29,26 +31,30 @@ BEGIN
   END IF;
 END $$;
 
--- 2. New columns on public.orders (collected_at was created in 0001, so we do not re-add it)
+-- 2. New columns on public.orders (additive only, collected_at was created in 0001)
 ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS collection_method public.collection_method_enum,
   ADD COLUMN IF NOT EXISTS collected_with public.collected_with_enum,
   ADD COLUMN IF NOT EXISTS pickup_for_name text,
   ADD COLUMN IF NOT EXISTS is_manual_override boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS manual_override_reason text,
-  ADD COLUMN IF NOT EXISTS collected_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS failed_pin_attempts integer NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS is_pin_locked boolean NOT NULL DEFAULT false;
+  ADD COLUMN IF NOT EXISTS collected_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL;
 
--- 3. Secure Order Secrets Table (RLS on, no policies, revoked from everyone)
+-- 3. Secure Order Secrets Table (RLS on, no policies, revoked from everyone including service_role)
 CREATE TABLE IF NOT EXISTS public.order_pickup_secrets (
   order_id uuid PRIMARY KEY REFERENCES public.orders(id) ON DELETE CASCADE,
   secret text NOT NULL,
+  failed_pin_attempts integer NOT NULL DEFAULT 0,
+  is_pin_locked boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE public.order_pickup_secrets
+  ADD COLUMN IF NOT EXISTS failed_pin_attempts integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS is_pin_locked boolean NOT NULL DEFAULT false;
+
 ALTER TABLE public.order_pickup_secrets ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE public.order_pickup_secrets FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.order_pickup_secrets FROM PUBLIC, anon, authenticated, service_role;
 
 -- 4. NEW Attempts Table: pickup_collect_attempts (leaves pickup_verify_attempts untouched)
 CREATE TABLE IF NOT EXISTS public.pickup_collect_attempts (
@@ -62,7 +68,7 @@ CREATE TABLE IF NOT EXISTS public.pickup_collect_attempts (
 );
 
 ALTER TABLE public.pickup_collect_attempts ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE public.pickup_collect_attempts FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.pickup_collect_attempts FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE INDEX IF NOT EXISTS idx_pickup_collect_attempts_staff_time
   ON public.pickup_collect_attempts(staff_id, attempted_at DESC);
@@ -81,9 +87,9 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.pickup_hmac(text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.pickup_hmac(text, text) FROM PUBLIC, anon, authenticated, service_role;
 
--- 6. Internal Helpers for PIN and TOTP Code (No public or authenticated grants)
+-- 6. Internal Helpers for PIN and TOTP Code (Revoked from PUBLIC, anon, authenticated, service_role)
 CREATE OR REPLACE FUNCTION public.internal_get_pickup_pin(p_order_id uuid)
 RETURNS text
 LANGUAGE plpgsql
@@ -109,7 +115,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.internal_get_pickup_pin(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.internal_get_pickup_pin(uuid) FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.internal_get_pickup_code(p_order_id uuid, p_window_offset integer DEFAULT 0)
 RETURNS text
@@ -140,7 +146,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.internal_get_pickup_code(uuid, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.internal_get_pickup_code(uuid, integer) FROM PUBLIC, anon, authenticated, service_role;
 
 -- 7. Student RPC: get_pickup_code (requires active student who owns the order)
 CREATE OR REPLACE FUNCTION public.get_pickup_code(p_order_id uuid)
@@ -231,6 +237,7 @@ DECLARE
   v_staff_active boolean;
   v_staff_canteen uuid;
   v_order record;
+  v_secret_row record;
   v_student record;
   v_items jsonb;
   v_total_items integer;
@@ -242,6 +249,7 @@ DECLARE
   v_order_failures integer;
   v_code_valid boolean := false;
   v_pin_valid boolean := false;
+  v_is_pin_locked boolean := false;
 BEGIN
   v_staff_id := auth.uid();
   IF v_staff_id IS NULL THEN
@@ -260,6 +268,10 @@ BEGIN
     RAISE EXCEPTION 'FORBIDDEN: Staff or admin role required';
   END IF;
 
+  IF p_order_ref IS NULL OR btrim(p_order_ref) = '' THEN
+    RAISE EXCEPTION 'NOT_FOUND: Order not found';
+  END IF;
+
   SELECT * INTO v_order
   FROM public.orders
   WHERE (id::text = p_order_ref OR upper(order_code) = upper(p_order_ref));
@@ -268,16 +280,24 @@ BEGIN
     RAISE EXCEPTION 'NOT_FOUND: Order not found';
   END IF;
 
-  -- For staff compare order's canteen to caller's OWN profile canteen_id with IS DISTINCT FROM
+  -- For staff compare order's canteen to caller's OWN profile canteen_id with IS DISTINCT FROM.
+  -- Return NOT_FOUND to avoid confirming order existence across canteens.
   IF v_staff_role = 'staff'::public.user_role THEN
     IF v_staff_canteen IS NULL OR v_staff_canteen IS DISTINCT FROM v_order.canteen_id THEN
-      RAISE EXCEPTION 'FORBIDDEN: Staff member is not assigned to this canteen';
+      RAISE EXCEPTION 'NOT_FOUND: Order not found';
     END IF;
   END IF;
 
   IF v_order.status != 'READY'::public.order_status THEN
     RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
   END IF;
+
+  -- Read PIN counter & lock status from secure order_pickup_secrets
+  SELECT * INTO v_secret_row
+  FROM public.order_pickup_secrets
+  WHERE order_id = v_order.id;
+
+  v_is_pin_locked := coalesce(v_secret_row.is_pin_locked, false);
 
   -- Rate limit check per staff (10 failures in 5 min) and per order (10 failures in 10 min)
   SELECT count(*) INTO v_staff_failures
@@ -323,37 +343,46 @@ BEGIN
   END IF;
 
   IF v_is_amber THEN
-    IF NOT v_code_valid OR NOT v_pin_valid THEN
-      INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
-      VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW_AMBER', 'AMBER_CREDENTIALS_REQUIRED');
+    -- If PIN is locked on an amber order, amber verification cannot succeed
+    IF v_is_pin_locked THEN
+      RETURN jsonb_build_object('ok', false, 'error', 'PIN_LOCKED');
+    END IF;
 
-      IF p_pin IS NOT NULL AND NOT v_pin_valid THEN
-        UPDATE public.orders
+    IF NOT v_code_valid OR NOT v_pin_valid THEN
+      -- If a wrong PIN was explicitly provided, record PIN attempt failure
+      IF p_pin IS NOT NULL AND btrim(p_pin) != '' AND NOT v_pin_valid THEN
+        UPDATE public.order_pickup_secrets
         SET failed_pin_attempts = failed_pin_attempts + 1,
             is_pin_locked = CASE WHEN failed_pin_attempts + 1 >= 3 THEN true ELSE false END
-        WHERE id = v_order.id;
+        WHERE order_id = v_order.id;
+
+        INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
+        VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW_AMBER', 'WRONG_PIN');
+      ELSIF p_code IS NOT NULL AND btrim(p_code) != '' AND NOT v_code_valid THEN
+        INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
+        VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW_AMBER', 'INVALID_CODE');
       END IF;
 
+      -- Incomplete amber credentials (e.g. scanning QR code before entering PIN) are NOT logged as failures
       RETURN jsonb_build_object('ok', false, 'error', 'AMBER_REQUIRES_BOTH');
     END IF;
   ELSE
     IF NOT v_code_valid AND NOT v_pin_valid THEN
-      -- If only PIN was tried and failed, or both missing/wrong
       INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
       VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW', 'INVALID_CREDENTIALS');
 
-      IF p_pin IS NOT NULL AND NOT v_pin_valid THEN
-        UPDATE public.orders
+      IF p_pin IS NOT NULL AND btrim(p_pin) != '' AND NOT v_pin_valid THEN
+        UPDATE public.order_pickup_secrets
         SET failed_pin_attempts = failed_pin_attempts + 1,
             is_pin_locked = CASE WHEN failed_pin_attempts + 1 >= 3 THEN true ELSE false END
-        WHERE id = v_order.id;
+        WHERE order_id = v_order.id;
       END IF;
 
       RETURN jsonb_build_object('ok', false, 'error', 'INVALID_CODE');
     END IF;
 
     -- If PIN path is attempted and PIN is locked
-    IF NOT v_code_valid AND v_pin_valid AND v_order.is_pin_locked THEN
+    IF NOT v_code_valid AND v_pin_valid AND v_is_pin_locked THEN
       RETURN jsonb_build_object('ok', false, 'error', 'PIN_LOCKED');
     END IF;
   END IF;
@@ -411,6 +440,7 @@ DECLARE
   v_staff_active boolean;
   v_staff_canteen uuid;
   v_order record;
+  v_secret_row record;
   v_total_items integer;
   v_is_amber boolean;
   v_expected_code_curr text;
@@ -418,6 +448,7 @@ DECLARE
   v_expected_pin text;
   v_code_valid boolean := false;
   v_pin_valid boolean := false;
+  v_is_pin_locked boolean := false;
   v_manual_count integer;
   v_staff_failures integer;
   v_order_failures integer;
@@ -440,11 +471,12 @@ BEGIN
     RAISE EXCEPTION 'FORBIDDEN: Staff or admin role required';
   END IF;
 
-  IF p_collected_with NOT IN ('CASH', 'UPI') THEN
+  -- Strict IS NULL or NOT IN validation for collected_with and method
+  IF p_collected_with IS NULL OR p_collected_with NOT IN ('CASH', 'UPI') THEN
     RAISE EXCEPTION 'INVALID_INPUT: collected_with must be CASH or UPI';
   END IF;
 
-  IF p_method NOT IN ('SCAN', 'PIN', 'MANUAL') THEN
+  IF p_method IS NULL OR p_method NOT IN ('SCAN', 'PIN', 'MANUAL') THEN
     RAISE EXCEPTION 'INVALID_INPUT: method must be SCAN, PIN, or MANUAL';
   END IF;
 
@@ -458,10 +490,11 @@ BEGIN
     RAISE EXCEPTION 'NOT_FOUND: Order not found';
   END IF;
 
-  -- For staff compare order's canteen to caller's OWN profile canteen_id with IS DISTINCT FROM (ignore client p_canteen_id)
+  -- For staff compare order's canteen to caller's OWN profile canteen_id with IS DISTINCT FROM (ignore client p_canteen_id).
+  -- Return NOT_FOUND to avoid confirming order existence across canteens.
   IF v_staff_role = 'staff'::public.user_role THEN
     IF v_staff_canteen IS NULL OR v_staff_canteen IS DISTINCT FROM v_order.canteen_id THEN
-      RAISE EXCEPTION 'FORBIDDEN: Cannot collect order outside assigned canteen';
+      RAISE EXCEPTION 'NOT_FOUND: Order not found';
     END IF;
   END IF;
 
@@ -473,7 +506,15 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
   END IF;
 
-  -- Rate limit checks on pickup_collect_attempts
+  -- Lock and read secrets row
+  SELECT * INTO v_secret_row
+  FROM public.order_pickup_secrets
+  WHERE order_id = v_order.id
+  FOR UPDATE;
+
+  v_is_pin_locked := coalesce(v_secret_row.is_pin_locked, false);
+
+  -- Rate limit checks
   SELECT count(*) INTO v_staff_failures
   FROM public.pickup_collect_attempts
   WHERE staff_id = v_staff_id
@@ -505,6 +546,7 @@ BEGIN
       RETURN jsonb_build_object('ok', false, 'error', 'MANUAL_REASON_REQUIRED');
     END IF;
 
+    -- Staff manual override cap: 10 per staff per 24 hours
     SELECT count(*) INTO v_manual_count
     FROM public.orders
     WHERE collected_by = v_staff_id
@@ -517,10 +559,13 @@ BEGIN
 
   ELSIF p_method = 'PIN' THEN
     IF v_is_amber THEN
+      IF v_is_pin_locked THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'PIN_LOCKED');
+      END IF;
       RETURN jsonb_build_object('ok', false, 'error', 'AMBER_REQUIRES_BOTH');
     END IF;
 
-    IF v_order.is_pin_locked THEN
+    IF v_is_pin_locked THEN
       RETURN jsonb_build_object('ok', false, 'error', 'PIN_LOCKED');
     END IF;
 
@@ -529,10 +574,10 @@ BEGIN
       INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
       VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PIN', 'WRONG_PIN');
 
-      UPDATE public.orders
+      UPDATE public.order_pickup_secrets
       SET failed_pin_attempts = failed_pin_attempts + 1,
           is_pin_locked = CASE WHEN failed_pin_attempts + 1 >= 3 THEN true ELSE false END
-      WHERE id = v_order.id;
+      WHERE order_id = v_order.id;
 
       RETURN jsonb_build_object('ok', false, 'error', 'WRONG_PIN');
     END IF;
@@ -554,18 +599,26 @@ BEGIN
     END IF;
 
     IF v_is_amber THEN
+      IF v_is_pin_locked THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'PIN_LOCKED');
+      END IF;
+
       -- Amber strictly requires BOTH rotating code and PIN
       IF NOT v_code_valid OR NOT v_pin_valid THEN
-        INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
-        VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'SCAN_AMBER', 'AMBER_CREDENTIALS_FAILED');
-
-        IF p_pin IS NOT NULL AND NOT v_pin_valid THEN
-          UPDATE public.orders
+        IF p_pin IS NOT NULL AND btrim(p_pin) != '' AND NOT v_pin_valid THEN
+          UPDATE public.order_pickup_secrets
           SET failed_pin_attempts = failed_pin_attempts + 1,
               is_pin_locked = CASE WHEN failed_pin_attempts + 1 >= 3 THEN true ELSE false END
-          WHERE id = v_order.id;
+          WHERE order_id = v_order.id;
+
+          INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
+          VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'SCAN_AMBER', 'WRONG_PIN');
+        ELSIF p_code IS NOT NULL AND btrim(p_code) != '' AND NOT v_code_valid THEN
+          INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
+          VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'SCAN_AMBER', 'INVALID_CODE');
         END IF;
 
+        -- Incomplete amber credentials (e.g. code provided but PIN not yet entered) are not logged as failures
         RETURN jsonb_build_object('ok', false, 'error', 'AMBER_REQUIRES_BOTH');
       END IF;
     ELSE
@@ -636,7 +689,7 @@ CREATE TABLE IF NOT EXISTS public.order_collection_reports (
   order_id uuid NOT NULL UNIQUE REFERENCES public.orders(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   reason text NOT NULL,
-  status text NOT NULL DEFAULT 'PENDING',
+  status text NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'RESOLVED', 'DISMISSED')),
   admin_notes text,
   resolved_at timestamptz,
   resolved_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -660,6 +713,7 @@ DECLARE
   v_profile record;
   v_order record;
   v_recent_reports_count integer;
+  v_reason text;
 BEGIN
   v_user_id := auth.uid();
   IF v_user_id IS NULL THEN
@@ -674,7 +728,23 @@ BEGIN
     RAISE EXCEPTION 'USER_INACTIVE: User profile is deactivated or does not exist';
   END IF;
 
-  IF p_reason IS NULL OR length(btrim(p_reason)) < 5 THEN
+  IF p_reason IS NULL THEN
+    RAISE EXCEPTION 'INVALID_INPUT: Reason must be at least 5 characters long';
+  END IF;
+
+  -- Sanitize reason: strip invisible/bidi, collapse spaces, strip controls, trim, truncate 500, trim again, empty -> NULL
+  v_reason := p_reason;
+  v_reason := regexp_replace(v_reason, '[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]', '', 'g');
+  v_reason := regexp_replace(v_reason, '\s+', ' ', 'g');
+  v_reason := regexp_replace(v_reason, '[\x00-\x1F\x7F]', '', 'g');
+  v_reason := btrim(v_reason);
+  v_reason := left(v_reason, 500);
+  v_reason := btrim(v_reason);
+  IF v_reason = '' THEN
+    v_reason := NULL;
+  END IF;
+
+  IF v_reason IS NULL OR length(v_reason) < 5 THEN
     RAISE EXCEPTION 'INVALID_INPUT: Reason must be at least 5 characters long';
   END IF;
 
@@ -712,15 +782,20 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'REPORT_LIMIT_EXCEEDED');
   END IF;
 
-  INSERT INTO public.order_collection_reports (
-    order_id,
-    user_id,
-    reason
-  ) VALUES (
-    v_order.id,
-    v_user_id,
-    btrim(p_reason)
-  );
+  BEGIN
+    INSERT INTO public.order_collection_reports (
+      order_id,
+      user_id,
+      reason
+    ) VALUES (
+      v_order.id,
+      v_user_id,
+      v_reason
+    );
+  EXCEPTION
+    WHEN unique_violation THEN
+      RETURN jsonb_build_object('ok', false, 'error', 'ALREADY_REPORTED');
+  END;
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -735,7 +810,9 @@ GRANT EXECUTE ON FUNCTION public.report_unauthorized_collection(uuid, text) TO a
 
 -- Admin report management functions
 CREATE OR REPLACE FUNCTION public.admin_list_collection_reports(
-  p_status text DEFAULT NULL
+  p_status text DEFAULT NULL,
+  p_limit integer DEFAULT 50,
+  p_offset integer DEFAULT 0
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -747,6 +824,8 @@ DECLARE
   v_role public.user_role;
   v_active boolean;
   v_result jsonb;
+  v_limit integer;
+  v_offset integer;
 BEGIN
   v_admin_id := auth.uid();
   IF v_admin_id IS NULL THEN
@@ -761,8 +840,16 @@ BEGIN
     RAISE EXCEPTION 'FORBIDDEN: Admin role required';
   END IF;
 
-  SELECT coalesce(jsonb_agg(
-    jsonb_build_object(
+  IF p_status IS NOT NULL AND p_status NOT IN ('PENDING', 'RESOLVED', 'DISMISSED') THEN
+    RAISE EXCEPTION 'INVALID_INPUT: Status must be PENDING, RESOLVED, or DISMISSED';
+  END IF;
+
+  v_limit := greatest(1, least(coalesce(p_limit, 50), 100));
+  v_offset := greatest(0, coalesce(p_offset, 0));
+
+  SELECT coalesce(jsonb_agg(item), '[]'::jsonb) INTO v_result
+  FROM (
+    SELECT jsonb_build_object(
       'id', r.id,
       'order_id', r.order_id,
       'order_code', o.order_code,
@@ -774,21 +861,32 @@ BEGIN
       'status', r.status,
       'admin_notes', r.admin_notes,
       'created_at', r.created_at,
-      'resolved_at', r.resolved_at
-    ) ORDER BY r.created_at DESC
-  ), '[]'::jsonb) INTO v_result
-  FROM public.order_collection_reports r
-  JOIN public.orders o ON o.id = r.order_id
-  JOIN public.profiles p ON p.id = r.user_id
-  LEFT JOIN public.canteens c ON c.id = o.canteen_id
-  WHERE (p_status IS NULL OR r.status = p_status);
+      'resolved_at', r.resolved_at,
+      'collection_method', o.collection_method,
+      'collected_with', o.collected_with,
+      'is_manual_override', o.is_manual_override,
+      'manual_override_reason', o.manual_override_reason,
+      'collected_at', o.collected_at,
+      'collecting_staff_name', staff.full_name,
+      'collected_by_name', staff.full_name
+    ) AS item
+    FROM public.order_collection_reports r
+    JOIN public.orders o ON o.id = r.order_id
+    JOIN public.profiles p ON p.id = r.user_id
+    LEFT JOIN public.canteens c ON c.id = o.canteen_id
+    LEFT JOIN public.profiles staff ON staff.id = o.collected_by
+    WHERE (p_status IS NULL OR r.status = p_status)
+    ORDER BY r.created_at DESC
+    LIMIT v_limit
+    OFFSET v_offset
+  ) sub;
 
   RETURN v_result;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.admin_list_collection_reports(text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.admin_list_collection_reports(text) TO authenticated;
+REVOKE ALL ON FUNCTION public.admin_list_collection_reports(text, integer, integer) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_list_collection_reports(text, integer, integer) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.admin_resolve_collection_report(
   p_report_id uuid,
@@ -805,6 +903,7 @@ DECLARE
   v_role public.user_role;
   v_active boolean;
   v_report record;
+  v_notes text;
 BEGIN
   v_admin_id := auth.uid();
   IF v_admin_id IS NULL THEN
@@ -823,17 +922,45 @@ BEGIN
     RAISE EXCEPTION 'INVALID_INPUT: Resolution must be RESOLVED or DISMISSED';
   END IF;
 
+  -- Sanitize admin notes
+  IF p_notes IS NOT NULL THEN
+    v_notes := p_notes;
+    v_notes := regexp_replace(v_notes, '[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]', '', 'g');
+    v_notes := regexp_replace(v_notes, '\s+', ' ', 'g');
+    v_notes := regexp_replace(v_notes, '[\x00-\x1F\x7F]', '', 'g');
+    v_notes := btrim(v_notes);
+    v_notes := left(v_notes, 500);
+    v_notes := btrim(v_notes);
+    IF v_notes = '' THEN
+      v_notes := NULL;
+    END IF;
+  ELSE
+    v_notes := NULL;
+  END IF;
+
+  -- Lock report row FOR UPDATE
   SELECT * INTO v_report
   FROM public.order_collection_reports
-  WHERE id = p_report_id;
+  WHERE id = p_report_id
+  FOR UPDATE;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'NOT_FOUND: Report % does not exist', p_report_id;
   END IF;
 
+  -- Idempotent check: if already resolved, return changed: false with zero audit rows written
+  IF v_report.status != 'PENDING' THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'changed', false,
+      'report_id', p_report_id,
+      'status', v_report.status
+    );
+  END IF;
+
   UPDATE public.order_collection_reports
   SET status = p_resolution,
-      admin_notes = p_notes,
+      admin_notes = v_notes,
       resolved_at = now(),
       resolved_by = v_admin_id
   WHERE id = p_report_id;
@@ -849,10 +976,15 @@ BEGIN
     'RESOLVE_COLLECTION_REPORT',
     'order_collection_report',
     p_report_id::text,
-    jsonb_build_object('order_id', v_report.order_id, 'resolution', p_resolution, 'notes', p_notes)
+    jsonb_build_object('order_id', v_report.order_id, 'resolution', p_resolution, 'notes', v_notes)
   );
 
-  RETURN jsonb_build_object('ok', true, 'report_id', p_report_id, 'status', p_resolution);
+  RETURN jsonb_build_object(
+    'ok', true,
+    'changed', true,
+    'report_id', p_report_id,
+    'status', p_resolution
+  );
 END;
 $$;
 
@@ -869,3 +1001,4 @@ WHERE o.status NOT IN ('COLLECTED'::public.order_status, 'CANCELLED'::public.ord
   );
 
 NOTIFY pgrst, 'reload schema';
+COMMIT;

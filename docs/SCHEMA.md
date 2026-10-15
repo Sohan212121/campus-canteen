@@ -281,9 +281,9 @@ public.estimate_ready_time(
 
 ---
 
-## 8. Phase 5: Order Placement Procedure (`public.place_order`)
+## 8. Order Placement Procedure (`public.place_order`)
 
-Added in migration `0003_place_order.sql`:
+Originally added in migration `0003_place_order.sql`, updated with student role isolation in `0007_role_isolation.sql`, and cut over to smart pickup in `0014_collection_cutover.sql`:
 
 ### 8.1 Function Signature
 ```sql
@@ -292,32 +292,39 @@ public.place_order(
   p_items jsonb, -- array of {"menu_item_id": uuid, "quantity": integer}
   p_payment_method public.payment_method,
   p_idempotency_key text,
-  p_requested_at timestamptz DEFAULT NULL
+  p_requested_at timestamptz DEFAULT NULL,
+  p_pickup_for_name text DEFAULT NULL
 ) RETURNS jsonb
 ```
 - **Security**: `SECURITY DEFINER`, `SET search_path = ''`.
 - **Permissions**: Revoked from `PUBLIC`, `anon`; granted to `authenticated`, `service_role`.
-- **Caller Context**: Strictly derives user from `auth.uid()`. Does not accept an explicit user ID parameter.
+- **Caller Context**: Strictly derives user from `auth.uid()`. Role must be `student` and active.
+- **5-Arg Signature Dropped**: Exact 5-argument signature `(uuid, jsonb, public.payment_method, text, timestamptz)` dropped in `0014_collection_cutover.sql` with post-apply assertion verifying exactly one overload exists.
 
 ### 8.2 Execution Guarantees
 1. **Idempotency**: Dual-check pattern (evaluated at start and re-checked immediately after acquiring the canteen row lock). Concurrent race conditions on `(user_id, idempotency_key)` are caught by a sub-block `unique_violation` handler that returns the committed order with `was_duplicate = true` while rolling back stock decrements.
-2. **Active Order Limit**: Maximum 3 active orders per user (`PLACED`, `ACCEPTED`, `PREPARING`, `READY`).
-3. **Deadlock Prevention**: Target `menu_items` rows locked `FOR UPDATE ORDER BY id ASC`.
-4. **Price Integrity**: Prices calculated exclusively from locked database rows; client prices are completely untrusted.
-5. **Token Generation**: Generates a 6-digit numeric token (`(100000 + floor(random() * 900000)::int)::text`) with bounded retries.
-6. **Audit & Alerts**: Automatically creates a record in `public.notifications` upon successful placement.
+2. **Canteen Lock**: Acquires `FOR UPDATE` on `public.canteens` before executing `estimate_ready_time` to prevent race conditions during operating hours transitions.
+3. **Active Order Limit**: Maximum 3 active orders per user (`PLACED`, `ACCEPTED`, `PREPARING`, `READY`).
+4. **Deadlock Prevention & Stock Guard**: Target `menu_items` rows locked `FOR UPDATE ORDER BY id ASC`. Null quantity guard (`v_qty IS NULL OR v_qty < 1 OR v_qty > MAX_ITEM_QTY`) strictly prevents invalid inputs.
+5. **Price Integrity**: Prices calculated exclusively from locked database rows; client prices are completely untrusted.
+6. **Pickup Designee Name Sanitization**:
+   - Order: Strip invisible/bidi characters (`U+200B-200F`, `U+202A-202E`, `U+2060`, `U+2066-2069`, `U+FEFF`), collapse `\s+ -> ' '`, strip leftover control characters (`[\x00-\x1F\x7F]`), `btrim`, truncate to 40 characters, `btrim` again, and map empty string to `NULL`.
+   - Never raises an exception on name length.
+7. **Zero Static Token**: Order inserted with `pickup_token = NULL`.
+8. **Cryptographic Secret Row**: Atomically inserts a 64-character hex secret into `public.order_pickup_secrets` for dynamic TOTP and PIN generation.
+9. **Audit & Alerts**: Automatically creates a record in `public.notifications` upon successful placement.
 
 ### 8.3 Error Codes Taxonomy
 | Error Code | Trigger Condition |
 |---|---|
 | `UNAUTHENTICATED` | `auth.uid()` is null |
 | `USER_INACTIVE` | Profile deactivated or not found |
+| `FORBIDDEN` | Caller is not a student |
 | `INVALID_PAYMENT_METHOD` | Payment method other than `PAY_AT_PICKUP` |
 | `INVALID_IDEMPOTENCY_KEY` | Key is null, empty, or exceeds 64 characters |
 | `INVALID_INPUT` | Empty items, > 20 distinct items, or item quantity not in 1..10 |
 | `CANTEEN_NOT_FOUND` | Specified canteen ID does not exist |
 | `CANTEEN_CLOSED` | Canteen is inactive or outside operating hours |
-| `ORDERS_CLOSED` | Pre-order cutoff time reached for today |
 | `TOO_MANY_ACTIVE_ORDERS` | User already has 3 active orders |
 | `ITEM_UNAVAILABLE` | Item inactive, unavailable, or belongs to another canteen |
 | `INSUFFICIENT_STOCK` | Requested quantity exceeds available daily stock |
@@ -339,9 +346,9 @@ Added in migration `0004_order_tracking.sql`:
 
 ---
 
-## 10. Phase 7: Staff Kitchen Operations & Counter Pickup
+## 10. Phase 7: Staff Kitchen Operations & Order Lifecycle
 
-Added in migration `0005_staff_operations.sql`:
+Added in migration `0005_staff_operations.sql` and updated in `0014_collection_cutover.sql`:
 
 ### 10.1 Order Lifecycle Transition (`public.transition_order`)
 - **Signature**: `public.transition_order(p_order_id uuid, p_to_status public.order_status) RETURNS jsonb`
@@ -352,29 +359,17 @@ Added in migration `0005_staff_operations.sql`:
   - `PLACED` $\rightarrow$ `ACCEPTED` or `REJECTED`
   - `ACCEPTED` $\rightarrow$ `PREPARING`
   - `PREPARING` $\rightarrow$ `READY`
-  - `READY` $\rightarrow$ `COLLECTED`
-  - *Important Constraint*: **`ACCEPTED` orders cannot be rejected yet**; rejection is permitted only while an order is in `PLACED` stage.
+  - *Collection Cutover Constraint*: **Direct transition to `COLLECTED` is strictly forbidden** (`FORBIDDEN: Orders can only be collected via the collect_order function`). Counter collections must occur exclusively via `public.collect_order`.
+  - Rejection is permitted only while an order is in `PLACED` stage.
 - **Idempotency**: Same-status requests return `{ "order_id": ..., "status": ..., "was_noop": true }` to absorb network retries and double-taps safely.
 - **Settlement & Side Effects**:
-  - Updates matching timestamp (`accepted_at`, `preparing_at`, `ready_at`, `collected_at`, `rejected_at`).
-  - On `COLLECTED`: If `payment_method = 'PAY_AT_PICKUP'`, automatically sets `payment_status = 'PAID'`.
+  - Updates matching timestamp (`accepted_at`, `preparing_at`, `ready_at`, `rejected_at`).
   - On `REJECTED`: Restores reserved stock via deadlock-free row locks on `menu_items`.
 
-### 10.2 Pickup Token Verification (`public.verify_pickup`)
-- **Signature**: `public.verify_pickup(p_canteen_id uuid, p_token text) RETURNS jsonb`
-- **Security**: `SECURITY DEFINER`, `search_path = ''`.
-- **Behavior**:
-  - Matches orders currently in status `READY` with matching `pickup_token`.
-  - On miss: logs failed attempt in `public.pickup_verify_attempts` and returns `{ "found": false }` (does not raise, ensuring failed attempt persists).
-  - Rate limiting: $\ge 10$ failed attempts in 5 minutes raises `RATE_LIMITED`.
-  - Returns order details, student name, total, and line items without changing status (status transition to `COLLECTED` is executed separately).
-
-### 10.3 Pickup Verify Attempts Ledger (`public.pickup_verify_attempts`)
-- Stores failed attempts for brute-force rate-limiting.
-- Protected by Row Level Security (RLS) with zero policies: accessible exclusively by service_role and `SECURITY DEFINER` routines.
-
-### 10.4 Staff RLS & Token Visibility Invariant
-- **Important Invariant**: Under database RLS (`0002_rls.sql`), canteen staff can SELECT `orders` belonging to their assigned canteen. Because `pickup_token` exists on `orders`, PostgreSQL allows staff to read it. **However, staff application code and queries must NEVER select `pickup_token`**. Counter collection verification must always occur through the student presenting the token or QR code to `public.verify_pickup`.
+### 10.2 Counter Pickup Verification & Cutover
+- **Legacy `public.verify_pickup` Dropped**: The static token verification procedure is dropped in `0014_collection_cutover.sql`.
+- **Static `pickup_token` Deprecation**: `public.orders.pickup_token` is made nullable and cleared to `NULL` for all existing orders. New orders no longer generate static tokens.
+- **Smart Counter Collection**: All counter pickup operations transitioned to `public.preview_collection` and `public.collect_order` (Section 16).
 
 ---
 
@@ -708,8 +703,8 @@ The database migrations must strictly be applied in sequential order:
 11. **Pre-check Audit Query** — Run read-only query (Section 14.4) to confirm zero student violations.
 12. `0010_allowed_email_domains.sql` — Campus domain restriction and signup hardening.
 13. `0011_cleanup_unconfirmed_users.sql` — Scheduled/admin cleanup routine for unconfirmed stale signups with dry-run support, staff/invited exclusion, and 200 batch deletion limit.
-14. `0013_collection_core.sql` — Collection Core v2 (Additive): New orders columns, `pickup_collect_attempts`, `order_pickup_secrets` (RLS on, 0 policies), `pickup_hmac` wrapper (`extensions.hmac` with empty search_path), internal TOTP/PIN helpers, `get_pickup_code`, `preview_collection`, `collect_order`, dispute reporting (`order_collection_reports`, `report_unauthorized_collection`), and in-flight secrets backfill.
-15. `0014_collection_cutover.sql` — Collection Cutover v2: Replaces `transition_order` (strictly refuses `COLLECTED`), replaces `place_order` (adds `p_pickup_for_name`, generates secret row, removes static token loop), drops `verify_pickup`, nullifies existing `pickup_token`s, and updates `handle_order_status_notification` trigger function to notify on `COLLECTED` (with manual override notice).
+14. `0013_collection_core.sql` — Collection Core v2 (Additive): New orders columns, `pickup_collect_attempts`, `order_pickup_secrets` (RLS on, 0 policies, revoked from PUBLIC, anon, authenticated, service_role), `pickup_hmac` wrapper (`extensions.hmac` with empty search_path, revoked from service_role too), internal TOTP/PIN helpers (revoked from service_role too), `get_pickup_code`, `preview_collection`, `collect_order`, dispute reporting (`order_collection_reports`, `report_unauthorized_collection`), and in-flight secrets backfill.
+15. `0014_collection_cutover.sql` — Collection Cutover v2: Replaces `transition_order` (strictly refuses `COLLECTED`), replaces `place_order` based on 0007 definition (exact 5-arg DROP, adds `p_pickup_for_name`, generates secret row, inserts NULL token), drops `verify_pickup`, nullifies existing `pickup_token`s, updates `handle_order_status_notification` trigger function (revoked from PUBLIC, anon, authenticated), and appends idempotent secrets backfill to the end.
 16. Deploy updated web application.
 
 ---
@@ -725,14 +720,19 @@ Added in migrations `0013_collection_core.sql` (additive) and `0014_collection_c
 - **Separate Secrets Table (`public.order_pickup_secrets`)**:
   - `order_id uuid PRIMARY KEY REFERENCES public.orders(id) ON DELETE CASCADE`
   - `secret text NOT NULL`: 64-character cryptographic hex string derived from `replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')` (zero external extension dependencies).
+  - `failed_pin_attempts integer NOT NULL DEFAULT 0`
+  - `is_pin_locked boolean NOT NULL DEFAULT false`
   - `created_at timestamptz NOT NULL DEFAULT now()`
-  - **RLS & Security**: RLS enabled with 0 policies. All privileges revoked from `PUBLIC`, `anon`, and `authenticated`. Accessible strictly via `service_role` and `SECURITY DEFINER` routines. Neither students nor staff can ever select rows from this table.
+  - **RLS & Security**: RLS enabled with 0 policies. All privileges revoked from `PUBLIC`, `anon`, `authenticated`, and `service_role`. Accessible strictly via `SECURITY DEFINER` routines. Neither students nor staff can ever select rows from this table.
 
-### 16.2 Internal Cryptographic Wrapper (`public.pickup_hmac`)
+### 16.2 Internal Cryptographic Wrapper (`public.pickup_hmac`) & Helpers
 - `public.pickup_hmac(p_key text, p_msg text) RETURNS bytea`:
   - `SECURITY DEFINER`, `SET search_path = ''`.
-  - The **only** procedure in the entire database that references `pgcrypto`. Checks `extensions.hmac` with dynamic fallback to `public.hmac`.
-  - Revoked from `PUBLIC`, `anon`, and `authenticated`. Granted exclusively to `service_role`.
+  - The **only** procedure in the database referencing `pgcrypto`. Checks `extensions.hmac` with dynamic fallback to `public.hmac`.
+  - Revoked from `PUBLIC`, `anon`, `authenticated`, and `service_role`.
+- `public.internal_get_pickup_pin(p_order_id uuid) RETURNS text` & `public.internal_get_pickup_code(p_order_id uuid, p_window_offset integer) RETURNS text`:
+  - `SECURITY DEFINER`, `SET search_path = ''`.
+  - Revoked from `PUBLIC`, `anon`, `authenticated`, and `service_role`.
 
 ### 16.3 Dynamic QR Payload & Rotating TOTP Codes
 - **QR Payload Format**: `'CC1:<order_id>:<code>'` (e.g. `CC1:123e4567-e89b-12d3-a456-426614174000:482910`).
@@ -747,28 +747,38 @@ Added in migrations `0013_collection_core.sql` (additive) and `0014_collection_c
   - Returns `{ ok: true, order_id, order_code, code, seconds_remaining, pin, pickup_for_name }`. Never returns the secret.
 - **`public.preview_collection(p_canteen_id, p_order_ref, p_code, p_pin) RETURNS jsonb`**:
   - Staff / Admin only. Does not alter database order state.
-  - Locates order by UUID or `order_code` (e.g. `CN10001`). Enforces canteen isolation for staff.
-  - Rate limiting: $\ge 10$ failed attempts in 5 minutes per staff, or $\ge 10$ failed attempts in 10 minutes per order returns `{ ok: false, error: 'RATE_LIMITED' }`.
-  - **Amber Threshold**: Evaluated if total item quantity $> 5$ or `total_paise > 50000` (> ₹500). Amber orders require **both** the rotating code and the 4-digit PIN. PIN-only collection is refused.
-  - Non-amber orders allow rotating code or PIN-only verification.
-  - Returns scan card data: `{ ok: true, order_id, order_code, first_name, college_id_last4, pickup_for_name, total_paise, is_amber, items }`. Never returns email or full name.
-- **`public.collect_order(p_order_id, p_code, p_collected_with, p_method, p_pin, p_reason) RETURNS jsonb`**:
+  - Locates order by UUID or `order_code` (e.g. `CN10001`). Enforces canteen isolation for staff: returns `NOT_FOUND` (not `FORBIDDEN`) on cross-canteen queries.
+  - Rate limiting: $\ge 10$ failed attempts in 5 minutes per staff returns `RATE_LIMITED_STAFF`; $\ge 10$ failed attempts in 10 minutes per order returns `RATE_LIMITED_ORDER`.
+  - **Amber Threshold**: Evaluated if total item quantity $> 5$ or `total_paise > 50000` (> ₹500). Amber orders require **both** the rotating code and the 4-digit PIN. PIN-only collection is refused. If PIN is locked, returns `PIN_LOCKED`.
+  - **Incomplete Credentials Protection**: Scenarios where a valid rotating code was scanned but PIN has not yet been submitted are NOT logged as failures in `pickup_collect_attempts`.
+  - Non-amber orders allow rotating code or PIN-only verification. If PIN is locked, valid rotating code SCAN still succeeds.
+  - Returns scan card data: `{ ok: true, order_id, order_code, first_name, college_id_last4, pickup_for_name, total_paise, total_items, is_amber, items }`. Never returns email or full name.
+- **`public.collect_order(p_canteen_id, p_order_id, p_collected_with, p_method, p_code, p_pin, p_reason) RETURNS jsonb`**:
   - Staff / Admin only. Locks order `FOR UPDATE`.
-  - Accepts `p_collected_with IN ('CASH', 'UPI')` and `p_method IN ('SCAN', 'PIN', 'MANUAL')`.
-  - Re-verifies credentials and amber requirements atomically.
+  - Rejects `NULL` `p_collected_with` and `p_method` strictly with `INVALID_INPUT`. Accepts `p_collected_with IN ('CASH', 'UPI')` and `p_method IN ('SCAN', 'PIN', 'MANUAL')`.
+  - Cross-canteen lookups return `NOT_FOUND` (not `FORBIDDEN`).
+  - Re-verifies credentials and amber requirements atomically. Incomplete amber credentials are not logged as failures.
+  - 3 wrong PIN attempts lock the order PIN counter (`is_pin_locked = true`), returning `PIN_LOCKED`. A valid QR scan on a non-amber PIN-locked order continues to succeed.
   - **Manual Collection**: Allowed for students with depleted phone batteries or broken screens. Requires `p_reason` with length $\ge 5$ characters. Capped at 10 manual collections per staff member per rolling 24 hours (returns `{ ok: false, error: 'MANUAL_LIMIT' }`). Dispatches an alert notification to the student and logs to `public.admin_audit_log`.
-  - Transitions order to `COLLECTED`, sets `payment_status = 'PAID'`, records `collected_at`, `collected_by`, `collected_with`, `collection_method`, and `manual_collection_reason`.
-  - Logs `action = 'COLLECT_ORDER'` in `public.admin_audit_log`.
+  - Transitions order to `COLLECTED`, sets `payment_status = 'PAID'`, records `collected_at`, `collected_by`, `collected_with`, `collection_method`, and `manual_override_reason`.
+  - Idempotent against double collection: second call returns `{ ok: false, error: 'ALREADY_COLLECTED' }`.
+  - Logs `action = 'ORDER_COLLECTED'` in `public.admin_audit_log`.
 - **`public.transition_order(p_order_id, p_to_status) RETURNS jsonb`**:
-  - Redefined to **strictly refuse `COLLECTED`** with `INVALID_TRANSITION: Orders cannot be directly transitioned to COLLECTED. Use public.collect_order instead.`
+  - Redefined to **strictly refuse `COLLECTED`** with `FORBIDDEN: Orders can only be collected via the collect_order function`.
   - Retains all other transitions (`PLACED` $\rightarrow$ `ACCEPTED`/`REJECTED`, `ACCEPTED` $\rightarrow$ `PREPARING`, `PREPARING` $\rightarrow$ `READY`).
 - **`public.report_unauthorized_collection(p_order_id uuid, p_reason text) RETURNS jsonb`**:
   - Student dispute mechanism ("Not me").
   - Allowed only for student's own order, strictly within 24 hours of `collected_at`.
   - Enforces 30-day rolling cap of 3 dispute reports per student.
-  - Writes to `public.order_collection_reports` and logs to `public.admin_audit_log`.
+  - Sanitization order: strip invisible/bidi characters (`[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]`), collapse `\s+ -> ' '`, strip leftover control characters (`[\x00-\x1F\x7F]`), `btrim`, truncate 500, `btrim`, empty -> `NULL`. Minimum length 5 characters.
+  - Writes to `public.order_collection_reports`. Duplicate reports on same order return `ALREADY_REPORTED`.
 - **`public.admin_list_collection_reports(...)` & `public.admin_resolve_collection_report(...)`**:
-  - Administrator review and dispute resolution procedures with audit tracking.
+  - Administrator review and dispute resolution procedures.
+  - Admin notes sanitized with standard sanitization order.
+  - Resolving locks report row `FOR UPDATE`. If already resolved, returns `{ ok: true, changed: false }` with zero duplicate audit rows written. Writes `action = 'RESOLVE_COLLECTION_REPORT'` in `public.admin_audit_log`.
+- **`public.handle_order_status_notification()`**:
+  - Dispatches notifications on status changes including `COLLECTED` (distinguishing manual overrides).
+  - Privileges revoked from `PUBLIC`, `anon`, and `authenticated`.
 
 ### 16.5 Quiet-Time Warning & Student UX Shift
 > [!IMPORTANT]

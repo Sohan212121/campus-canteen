@@ -2,10 +2,15 @@
 -- Description:
 --   Cutover step for smart counter pickup.
 --   1. Replaces transition_order to strictly REFUSE COLLECTED.
---   2. Drops old 5-arg place_order and recreates with p_pickup_for_name (sanitized <= 40 chars, control chars stripped),
---      secret row generation, and NULL pickup_token.
+--   2. Drops old 5-arg place_order and recreates based on 0007 definition with p_pickup_for_name,
+--      sanitization, secret row generation, and NULL pickup_token.
 --   3. Drops verify_pickup and clears existing pickup_tokens on orders.
---   4. Updates handle_order_status_notification trigger function to notify on COLLECTED (with manual override notice).
+--   4. Updates handle_order_status_notification trigger function to notify on COLLECTED (with manual override notice)
+--      and revokes public/anon/authenticated permissions.
+--   5. Asserts post-apply check: exactly one place_order overload exists.
+--   6. Backfills secrets for in-flight orders idempotently at the end.
+
+BEGIN;
 
 -- 1. Update transition_order: Refuse COLLECTED
 CREATE OR REPLACE FUNCTION public.transition_order(
@@ -179,8 +184,8 @@ DECLARE
   v_total_paise integer := 0;
   v_order_id uuid;
   v_order_code text;
-  v_secret text;
   v_pickup_for_name text;
+  v_secret text;
 
   v_err_msg text;
   v_err_hint text;
@@ -213,12 +218,20 @@ BEGIN
     RAISE EXCEPTION 'INVALID_IDEMPOTENCY_KEY: Valid idempotency key is required';
   END IF;
 
-  -- Validate and sanitize pickup designee name (trimmed, max 40 chars, control chars stripped)
-  v_pickup_for_name := regexp_replace(trim(coalesce(p_pickup_for_name, '')), '[\x00-\x1F\x7F]', '', 'g');
-  IF length(v_pickup_for_name) = 0 THEN
+  -- 3.1 Sanitization of pickup designee name (never raise on length)
+  IF p_pickup_for_name IS NOT NULL THEN
+    v_pickup_for_name := p_pickup_for_name;
+    v_pickup_for_name := regexp_replace(v_pickup_for_name, '[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]', '', 'g');
+    v_pickup_for_name := regexp_replace(v_pickup_for_name, '\s+', ' ', 'g');
+    v_pickup_for_name := regexp_replace(v_pickup_for_name, '[\x00-\x1F\x7F]', '', 'g');
+    v_pickup_for_name := btrim(v_pickup_for_name);
+    v_pickup_for_name := left(v_pickup_for_name, 40);
+    v_pickup_for_name := btrim(v_pickup_for_name);
+    IF v_pickup_for_name = '' THEN
+      v_pickup_for_name := NULL;
+    END IF;
+  ELSE
     v_pickup_for_name := NULL;
-  ELSIF length(v_pickup_for_name) > 40 THEN
-    RAISE EXCEPTION 'INVALID_INPUT: pickup_for_name cannot exceed 40 characters';
   END IF;
 
   -- 4. Preliminary Idempotency Check (fast return if already placed)
@@ -357,6 +370,7 @@ BEGIN
         v_menu_item.name, v_menu_item.stock, v_qty;
     END IF;
 
+    -- Accumulate total price from locked fresh row values
     v_total_paise := v_total_paise + (v_menu_item.price_paise * v_qty);
   END LOOP;
 
@@ -370,6 +384,7 @@ BEGIN
         v_err_msg = MESSAGE_TEXT,
         v_err_hint = PG_EXCEPTION_HINT;
 
+      -- Re-raise with the same message and hint preserved
       IF v_err_hint IS NOT NULL AND length(v_err_hint) > 0 THEN
         RAISE EXCEPTION '%', v_err_msg USING HINT = v_err_hint;
       ELSE
@@ -467,6 +482,9 @@ BEGIN
 
   EXCEPTION
     WHEN unique_violation THEN
+      -- In the event of a simultaneous race condition on (user_id, idempotency_key),
+      -- this sub-block automatically rolls back the stock decrement.
+      -- Fetch and return the previously committed order.
       SELECT 
         o.id, o.order_code, o.status, o.total_paise, 
         o.estimated_ready_at, o.pickup_window_end, o.requested_pickup_at
@@ -487,7 +505,7 @@ BEGIN
         );
       END IF;
 
-      RAISE;
+      RAISE; -- Re-raise if not idempotency violation
   END;
 
   -- 12. Return Success Payload
@@ -498,9 +516,7 @@ BEGIN
     'total_paise', v_total_paise,
     'estimated_ready_at', v_est_record.estimated_ready_at,
     'pickup_window_end', v_est_record.pickup_window_end,
-    'prep_minutes_total', v_est_record.prep_minutes_total,
     'requested_pickup_at', p_requested_at,
-    'pickup_for_name', v_pickup_for_name,
     'was_duplicate', false
   );
 END;
@@ -578,4 +594,32 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.handle_order_status_notification() FROM PUBLIC, anon, authenticated;
+
+-- 5. Post-apply check: verify exactly one place_order overload exists in public schema
+DO $$
+DECLARE
+  v_overload_count integer;
+BEGIN
+  SELECT count(*) INTO v_overload_count
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public'
+    AND p.proname = 'place_order';
+
+  IF v_overload_count <> 1 THEN
+    RAISE EXCEPTION 'POST_APPLY_CHECK_FAILED: Expected exactly 1 overload for public.place_order, found %', v_overload_count;
+  END IF;
+END $$;
+
+-- 6. Idempotent secrets backfill for existing in-flight orders appended to the end of 0014
+INSERT INTO public.order_pickup_secrets (order_id, secret)
+SELECT o.id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')
+FROM public.orders o
+WHERE o.status NOT IN ('COLLECTED'::public.order_status, 'CANCELLED'::public.order_status, 'REJECTED'::public.order_status)
+  AND NOT EXISTS (
+    SELECT 1 FROM public.order_pickup_secrets s WHERE s.order_id = o.id
+  );
+
 NOTIFY pgrst, 'reload schema';
+COMMIT;
