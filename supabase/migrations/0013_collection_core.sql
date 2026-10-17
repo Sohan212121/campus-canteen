@@ -200,8 +200,23 @@ BEGIN
     );
   END IF;
 
+  IF NOT EXISTS (SELECT 1 FROM public.order_pickup_secrets WHERE order_id = p_order_id) THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error', 'PICKUP_UNAVAILABLE'
+    );
+  END IF;
+
   v_code := public.internal_get_pickup_code(p_order_id, 0);
   v_pin := public.internal_get_pickup_pin(p_order_id);
+
+  IF v_code IS NULL OR v_pin IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error', 'PICKUP_UNAVAILABLE'
+    );
+  END IF;
+
   v_seconds_remaining := 60 - (floor(extract(epoch from clock_timestamp()))::bigint % 60);
 
   RETURN jsonb_build_object(
@@ -296,6 +311,10 @@ BEGIN
   SELECT * INTO v_secret_row
   FROM public.order_pickup_secrets
   WHERE order_id = v_order.id;
+
+  IF v_secret_row.order_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'NO_PICKUP_SECRET');
+  END IF;
 
   v_is_pin_locked := coalesce(v_secret_row.is_pin_locked, false);
 
@@ -512,6 +531,10 @@ BEGIN
   WHERE order_id = v_order.id
   FOR UPDATE;
 
+  IF p_method IN ('SCAN', 'PIN') AND v_secret_row.order_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'NO_PICKUP_SECRET');
+  END IF;
+
   v_is_pin_locked := coalesce(v_secret_row.is_pin_locked, false);
 
   -- Rate limit checks
@@ -570,7 +593,7 @@ BEGIN
     END IF;
 
     v_expected_pin := public.internal_get_pickup_pin(v_order.id);
-    IF p_pin IS NULL OR p_pin != v_expected_pin THEN
+    IF p_pin IS NULL OR v_expected_pin IS NULL OR p_pin IS DISTINCT FROM v_expected_pin THEN
       INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
       VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PIN', 'WRONG_PIN');
 

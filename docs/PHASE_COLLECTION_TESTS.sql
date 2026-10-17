@@ -11,13 +11,14 @@
 --   6. Amber orders require BOTH rotating code and PIN; incomplete amber credentials are not logged as failures.
 --   7. 3 wrong PINs lock PIN counter (PIN_LOCKED); failure rows persist; valid QR scan still succeeds.
 --   8. Double collect is rejected (ALREADY_COLLECTED).
---   9. Manual collection requires reason >= 5 chars and capped at 10/day per staff.
+--   9. Manual collection requires reason >= 5 chars, success notification copy, and capped at 10/day per staff.
 --  10. transition_order strictly refuses transition to COLLECTED.
 --  11. Rate limits: 10 failures in 5 min per staff, 10 failures in 10 min per order.
 --  12. Unauthorized collection dispute reporting: 24h window, 3 reports/month limit, duplicate rejected (ALREADY_REPORTED),
 --      admin list with pagination/details, and admin resolve row locking (already resolved -> changed: false, no audit row).
 --  13. place_order: p_pickup_for_name sanitization, truncation to 40, empty -> NULL, NULL pickup_token, secret generation.
---  14. Payment status becomes PAID upon collection; admin_audit_log row written for ORDER_COLLECTED.
+--  14. Missing secret handling: NO_PICKUP_SECRET for SCAN & PIN, PICKUP_UNAVAILABLE for get_pickup_code.
+--  15. Payment status becomes PAID upon collection; admin_audit_log row written for ORDER_COLLECTED.
 -- ==============================================================================
 
 BEGIN;
@@ -255,6 +256,9 @@ BEGIN
     END IF;
 
     RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (6, 'get_pickup_code tests', false, 'Unexpected error: ' || SQLERRM);
   END;
 
   -- ----------------------------------------------------------------------------
@@ -311,6 +315,9 @@ BEGIN
     END IF;
 
     RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (9, 'preview_collection tests', false, 'Unexpected error: ' || SQLERRM);
   END;
 
   -- ----------------------------------------------------------------------------
@@ -345,6 +352,9 @@ BEGIN
     END;
 
     RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (11, 'collect_order validation tests', false, 'Unexpected error: ' || SQLERRM);
   END;
 
   -- ----------------------------------------------------------------------------
@@ -366,6 +376,9 @@ BEGIN
     END;
 
     RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (13, 'Cross-canteen collect test', false, 'Unexpected error: ' || SQLERRM);
   END;
 
   -- ----------------------------------------------------------------------------
@@ -394,12 +407,15 @@ BEGIN
     -- Compute guaranteed-wrong PIN
     v_wrong_pin := lpad(((v_pin::integer + 1) % 10000)::text, 4, '0');
 
+    -- 6.1 Incomplete amber credentials in preview (only code scanned) -> AMBER_REQUIRES_BOTH without failure log
+    RESET ROLE;
+    SELECT count(*) INTO v_attempts_before FROM public.pickup_collect_attempts WHERE order_id = v_order_amber_id;
+
     SET LOCAL ROLE authenticated;
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
-
-    -- 6.1 Incomplete amber credentials in preview (only code scanned) -> AMBER_REQUIRES_BOTH without failure log
-    SELECT count(*) INTO v_attempts_before FROM public.pickup_collect_attempts WHERE order_id = v_order_amber_id;
     v_res := public.preview_collection(v_canteen_a, v_order_amber_id::text, v_code, NULL);
+
+    RESET ROLE;
     SELECT count(*) INTO v_attempts_after FROM public.pickup_collect_attempts WHERE order_id = v_order_amber_id;
 
     IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'AMBER_REQUIRES_BOTH' AND v_attempts_before = v_attempts_after THEN
@@ -409,8 +425,14 @@ BEGIN
     END IF;
 
     -- 6.2 Incomplete amber credentials in collect (only code scanned) -> AMBER_REQUIRES_BOTH without failure log
+    RESET ROLE;
     SELECT count(*) INTO v_attempts_before FROM public.pickup_collect_attempts WHERE order_id = v_order_amber_id;
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
     v_res := public.collect_order(v_canteen_a, v_order_amber_id, 'CASH', 'SCAN', v_code, NULL, NULL);
+
+    RESET ROLE;
     SELECT count(*) INTO v_attempts_after FROM public.pickup_collect_attempts WHERE order_id = v_order_amber_id;
 
     IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'AMBER_REQUIRES_BOTH' AND v_attempts_before = v_attempts_after THEN
@@ -420,6 +442,8 @@ BEGIN
     END IF;
 
     -- 6.3 PIN-only on amber order refused
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
     v_res := public.collect_order(v_canteen_a, v_order_amber_id, 'CASH', 'PIN', NULL, v_pin, NULL);
     IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'AMBER_REQUIRES_BOTH' THEN
       INSERT INTO _test_results VALUES (16, 'Amber PIN-only collection refused', true, 'Returned AMBER_REQUIRES_BOTH');
@@ -428,7 +452,11 @@ BEGIN
     END IF;
 
     -- 6.4 Amber with BOTH rotating code and PIN succeeds, updates payment_status to PAID, writes audit row
+    RESET ROLE;
     SELECT count(*) INTO v_audit_count FROM public.admin_audit_log WHERE action = 'ORDER_COLLECTED' AND target_id = v_order_amber_id::text;
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
     v_res := public.collect_order(v_canteen_a, v_order_amber_id, 'UPI', 'SCAN', v_code, v_pin, NULL);
 
     IF (v_res->>'ok')::boolean = true AND v_res->>'status' = 'COLLECTED' THEN
@@ -448,6 +476,9 @@ BEGIN
     END IF;
 
     RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (14, 'Amber orders tests', false, 'Unexpected error: ' || SQLERRM);
   END;
 
   -- ----------------------------------------------------------------------------
@@ -505,9 +536,19 @@ BEGIN
       INSERT INTO _test_results VALUES (19, 'Valid scan succeeds on PIN-locked order', false, 'Scan collection failed: ' || v_res::text);
     END IF;
 
-    -- ----------------------------------------------------------------------------
-    -- TEST 8: Double Collect is rejected
-    -- ----------------------------------------------------------------------------
+    RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (18, 'Wrong PIN and PIN lock tests', false, 'Unexpected error: ' || SQLERRM);
+  END;
+
+  -- ----------------------------------------------------------------------------
+  -- TEST 8: Double Collect is rejected
+  -- ----------------------------------------------------------------------------
+  BEGIN
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
     v_res := public.collect_order(v_canteen_a, v_order_pin_id, 'CASH', 'SCAN', v_code, NULL, NULL);
     IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'ALREADY_COLLECTED' THEN
       INSERT INTO _test_results VALUES (20, 'Double collect rejected with ALREADY_COLLECTED', true, 'Idempotently protected against repeated counter collections');
@@ -516,10 +557,13 @@ BEGIN
     END IF;
 
     RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (20, 'Double collect test', false, 'Unexpected error: ' || SQLERRM);
   END;
 
   -- ----------------------------------------------------------------------------
-  -- TEST 9: Manual Collection: Minimum Reason Length and 10/day Limit
+  -- TEST 9: Manual Collection: Minimum Reason, Success Notification, and 10/day Limit
   -- ----------------------------------------------------------------------------
   BEGIN
     RESET ROLE;
@@ -546,7 +590,35 @@ BEGIN
       INSERT INTO _test_results VALUES (21, 'Manual collection requires min 5 char reason', false, 'Allowed short reason: ' || v_res::text);
     END IF;
 
-    -- 9.2 Insert 10 previous manual collection orders for Staff Alpha in last 24h
+    -- 9.2 Manual collection succeeds, sets manual override flag and reason, and generates manual override notification
+    v_res := public.collect_order(v_canteen_a, v_order_temp_id, 'CASH', 'MANUAL', NULL, NULL, 'Phone battery died completely');
+    IF (v_res->>'ok')::boolean = true AND v_res->>'status' = 'COLLECTED' THEN
+      RESET ROLE;
+      IF EXISTS (
+        SELECT 1 FROM public.orders
+        WHERE id = v_order_temp_id
+          AND status = 'COLLECTED'
+          AND is_manual_override = true
+          AND manual_override_reason = 'Phone battery died completely'
+          AND collection_method = 'MANUAL'
+          AND collected_with = 'CASH'
+          AND collected_by = v_staff_a_id
+      ) AND EXISTS (
+        SELECT 1 FROM public.notifications
+        WHERE order_id = v_order_temp_id
+          AND user_id = v_student_id
+          AND title = 'Order Collected'
+          AND body LIKE '%marked collected manually by canteen staff%please report it immediately%'
+      ) THEN
+        INSERT INTO _test_results VALUES (22, 'Manual collection success and notification copy', true, 'Order collected, is_manual_override recorded, warning notification sent');
+      ELSE
+        INSERT INTO _test_results VALUES (22, 'Manual collection success and notification copy', false, 'Order state or notification body mismatch');
+      END IF;
+    ELSE
+      INSERT INTO _test_results VALUES (22, 'Manual collection success and notification copy', false, 'collect_order MANUAL failed: ' || v_res::text);
+    END IF;
+
+    -- 9.3 Insert 10 previous manual collection orders for Staff Alpha in last 24h
     RESET ROLE;
     FOR v_i IN 1..10 LOOP
       INSERT INTO public.orders (
@@ -560,18 +632,33 @@ BEGIN
       );
     END LOOP;
 
+    -- Create another ready order to test the limit on
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_a, 'READY', 2000, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_temp_id;
+
+    INSERT INTO public.order_pickup_secrets (order_id, secret)
+    VALUES (v_order_temp_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
+
     -- 11th manual collection attempt must be blocked by MANUAL_LIMIT
     SET LOCAL ROLE authenticated;
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
 
     v_res := public.collect_order(v_canteen_a, v_order_temp_id, 'CASH', 'MANUAL', NULL, NULL, 'Phone battery died completely');
     IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'MANUAL_LIMIT' THEN
-      INSERT INTO _test_results VALUES (22, 'Manual collection capped at 10 per 24 hours per staff', true, 'Returned MANUAL_LIMIT on 11th attempt');
+      INSERT INTO _test_results VALUES (23, 'Manual collection capped at 10 per 24 hours per staff', true, 'Returned MANUAL_LIMIT on 11th attempt');
     ELSE
-      INSERT INTO _test_results VALUES (22, 'Manual collection capped at 10 per 24 hours per staff', false, 'Allowed manual collection beyond limit: ' || v_res::text);
+      INSERT INTO _test_results VALUES (23, 'Manual collection capped at 10 per 24 hours per staff', false, 'Allowed manual collection beyond limit: ' || v_res::text);
     END IF;
 
     RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (21, 'Manual collection tests', false, 'Unexpected error: ' || SQLERRM);
   END;
 
   -- ----------------------------------------------------------------------------
@@ -593,16 +680,19 @@ BEGIN
 
     BEGIN
       PERFORM public.transition_order(v_order_temp_id, 'COLLECTED'::public.order_status);
-      INSERT INTO _test_results VALUES (23, 'transition_order strictly refuses COLLECTED', false, 'Allowed direct transition to COLLECTED');
+      INSERT INTO _test_results VALUES (24, 'transition_order strictly refuses COLLECTED', false, 'Allowed direct transition to COLLECTED');
     EXCEPTION WHEN OTHERS THEN
       IF SQLERRM LIKE '%FORBIDDEN%collect_order function%' THEN
-        INSERT INTO _test_results VALUES (23, 'transition_order strictly refuses COLLECTED', true, 'Correctly raised FORBIDDEN: Orders can only be collected via collect_order');
+        INSERT INTO _test_results VALUES (24, 'transition_order strictly refuses COLLECTED', true, 'Correctly raised FORBIDDEN: Orders can only be collected via collect_order');
       ELSE
-        INSERT INTO _test_results VALUES (23, 'transition_order strictly refuses COLLECTED', false, 'Unexpected error message: ' || SQLERRM);
+        INSERT INTO _test_results VALUES (24, 'transition_order strictly refuses COLLECTED', false, 'Unexpected error message: ' || SQLERRM);
       END IF;
     END;
 
     RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (24, 'transition_order strictly refuses COLLECTED', false, 'Unexpected error: ' || SQLERRM);
   END;
 
   -- ----------------------------------------------------------------------------
@@ -611,6 +701,39 @@ BEGIN
   BEGIN
     RESET ROLE;
 
+    -- Temp order in Canteen Beta so Staff Beta passes the canteen boundary check
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_b, 'READY', 2000, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_temp_id;
+
+    INSERT INTO public.order_pickup_secrets (order_id, secret)
+    VALUES (v_order_temp_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
+
+    -- Insert 10 failure rows for Staff Beta
+    FOR v_i IN 1..10 LOOP
+      INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome, attempted_at)
+      VALUES (v_staff_b_id, v_order_temp_id, v_canteen_b, 'PREVIEW', 'INVALID_CREDENTIALS', now() - interval '1 minute');
+    END LOOP;
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_b_id)::text, true);
+
+    v_res := public.preview_collection(v_canteen_b, v_order_temp_id::text, '123456', NULL);
+    IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'RATE_LIMITED_STAFF' THEN
+      INSERT INTO _test_results VALUES (25, 'preview_collection staff rate limit (10 in 5m)', true, 'Returned RATE_LIMITED_STAFF');
+    ELSE
+      INSERT INTO _test_results VALUES (25, 'preview_collection staff rate limit (10 in 5m)', false, 'Expected RATE_LIMITED_STAFF but got: ' || v_res::text);
+    END IF;
+
+    -- Clean up staff attempts scoped strictly to this temp order
+    RESET ROLE;
+    DELETE FROM public.pickup_collect_attempts WHERE order_id = v_order_temp_id;
+
+    -- Create temp READY order in Canteen Alpha for testing order limit via Staff Alpha
     INSERT INTO public.orders (
       user_id, canteen_id, status, total_paise, payment_method, payment_status,
       estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
@@ -622,30 +745,14 @@ BEGIN
     INSERT INTO public.order_pickup_secrets (order_id, secret)
     VALUES (v_order_temp_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
 
-    -- Insert 10 failure rows for Staff Beta
-    FOR v_i IN 1..10 LOOP
+    -- Spread 10 failure rows across different staff (5 staff B + 5 admin) so no single staff has >= 10 in 5m, and staff A has 0
+    FOR v_i IN 1..5 LOOP
       INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome, attempted_at)
-      VALUES (v_staff_b_id, v_order_temp_id, v_canteen_a, 'PREVIEW', 'INVALID_CREDENTIALS', now() - interval '1 minute');
+      VALUES (v_staff_b_id, v_order_temp_id, v_canteen_a, 'PREVIEW', 'INVALID_CREDENTIALS', now() - interval '2 minutes');
     END LOOP;
-
-    SET LOCAL ROLE authenticated;
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_b_id)::text, true);
-
-    v_res := public.preview_collection(v_canteen_b, v_order_temp_id::text, '123456', NULL);
-    IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'RATE_LIMITED_STAFF' THEN
-      INSERT INTO _test_results VALUES (24, 'preview_collection staff rate limit (10 in 5m)', true, 'Returned RATE_LIMITED_STAFF');
-    ELSE
-      INSERT INTO _test_results VALUES (24, 'preview_collection staff rate limit (10 in 5m)', false, 'Expected RATE_LIMITED_STAFF but got: ' || v_res::text);
-    END IF;
-
-    -- Clean up staff attempts scoped strictly to this temp order
-    RESET ROLE;
-    DELETE FROM public.pickup_collect_attempts WHERE order_id = v_order_temp_id;
-
-    -- Insert 10 failure rows for the specific order across different staff
-    FOR v_i IN 1..10 LOOP
+    FOR v_i IN 1..5 LOOP
       INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome, attempted_at)
-      VALUES (v_staff_a_id, v_order_temp_id, v_canteen_a, 'PREVIEW', 'INVALID_CREDENTIALS', now() - interval '2 minutes');
+      VALUES (v_admin_id, v_order_temp_id, v_canteen_a, 'PREVIEW', 'INVALID_CREDENTIALS', now() - interval '2 minutes');
     END LOOP;
 
     SET LOCAL ROLE authenticated;
@@ -653,12 +760,15 @@ BEGIN
 
     v_res := public.preview_collection(v_canteen_a, v_order_temp_id::text, '123456', NULL);
     IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'RATE_LIMITED_ORDER' THEN
-      INSERT INTO _test_results VALUES (25, 'preview_collection order rate limit (10 in 10m)', true, 'Returned RATE_LIMITED_ORDER');
+      INSERT INTO _test_results VALUES (26, 'preview_collection order rate limit (10 in 10m)', true, 'Returned RATE_LIMITED_ORDER');
     ELSE
-      INSERT INTO _test_results VALUES (25, 'preview_collection order rate limit (10 in 10m)', false, 'Expected RATE_LIMITED_ORDER but got: ' || v_res::text);
+      INSERT INTO _test_results VALUES (26, 'preview_collection order rate limit (10 in 10m)', false, 'Expected RATE_LIMITED_ORDER but got: ' || v_res::text);
     END IF;
 
     RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (25, 'Rate limit tests', false, 'Unexpected error: ' || SQLERRM);
   END;
 
   -- ----------------------------------------------------------------------------
@@ -681,9 +791,9 @@ BEGIN
 
     v_report_res := public.report_unauthorized_collection(v_order_temp_id, 'Not collected by me');
     IF (v_report_res->>'ok')::boolean = false AND v_report_res->>'error' = 'ORDER_NOT_COLLECTED' THEN
-      INSERT INTO _test_results VALUES (26, 'Dispute report refused on uncollected order', true, 'Returned ORDER_NOT_COLLECTED');
+      INSERT INTO _test_results VALUES (27, 'Dispute report refused on uncollected order', true, 'Returned ORDER_NOT_COLLECTED');
     ELSE
-      INSERT INTO _test_results VALUES (26, 'Dispute report refused on uncollected order', false, 'Unexpected response: ' || v_report_res::text);
+      INSERT INTO _test_results VALUES (27, 'Dispute report refused on uncollected order', false, 'Unexpected response: ' || v_report_res::text);
     END IF;
 
     -- 12.2 Report on order collected > 24 hours ago returns REPORT_WINDOW_EXPIRED
@@ -703,9 +813,9 @@ BEGIN
 
     v_report_res := public.report_unauthorized_collection(v_order_expired_id, 'Collected over 24 hours ago');
     IF (v_report_res->>'ok')::boolean = false AND v_report_res->>'error' = 'REPORT_WINDOW_EXPIRED' THEN
-      INSERT INTO _test_results VALUES (27, 'Dispute report refused beyond 24h window', true, 'Returned REPORT_WINDOW_EXPIRED');
+      INSERT INTO _test_results VALUES (28, 'Dispute report refused beyond 24h window', true, 'Returned REPORT_WINDOW_EXPIRED');
     ELSE
-      INSERT INTO _test_results VALUES (27, 'Dispute report refused beyond 24h window', false, 'Allowed dispute after 24h window: ' || v_report_res::text);
+      INSERT INTO _test_results VALUES (28, 'Dispute report refused beyond 24h window', false, 'Allowed dispute after 24h window: ' || v_report_res::text);
     END IF;
 
     -- 12.3 Valid report within 24 hours succeeds, sanitizes reason, duplicate returns ALREADY_REPORTED
@@ -732,12 +842,12 @@ BEGIN
       -- Duplicate report attempt
       v_report_res := public.report_unauthorized_collection(v_order_dispute_id, 'Trying duplicate report');
       IF (v_report_res->>'ok')::boolean = false AND v_report_res->>'error' = 'ALREADY_REPORTED' THEN
-        INSERT INTO _test_results VALUES (28, 'Valid dispute created and duplicate blocked', true, 'Created report successfully and duplicate returned ALREADY_REPORTED');
+        INSERT INTO _test_results VALUES (29, 'Valid dispute created and duplicate blocked', true, 'Created report successfully and duplicate returned ALREADY_REPORTED');
       ELSE
-        INSERT INTO _test_results VALUES (28, 'Valid dispute created and duplicate blocked', false, 'Duplicate was not blocked: ' || v_report_res::text);
+        INSERT INTO _test_results VALUES (29, 'Valid dispute created and duplicate blocked', false, 'Duplicate was not blocked: ' || v_report_res::text);
       END IF;
     ELSE
-      INSERT INTO _test_results VALUES (28, 'Valid dispute created and duplicate blocked', false, 'Creation failed: ' || v_report_res::text);
+      INSERT INTO _test_results VALUES (29, 'Valid dispute created and duplicate blocked', false, 'Creation failed: ' || v_report_res::text);
     END IF;
 
     -- 12.4 Monthly limit: 3 reports in 30 days
@@ -774,9 +884,9 @@ BEGIN
 
     v_report_res := public.report_unauthorized_collection(v_order_temp_id, '4th dispute report attempt');
     IF (v_report_res->>'ok')::boolean = false AND v_report_res->>'error' = 'REPORT_LIMIT_EXCEEDED' THEN
-      INSERT INTO _test_results VALUES (29, 'Dispute report monthly cap (3 per 30 days)', true, 'Returned REPORT_LIMIT_EXCEEDED on 4th report');
+      INSERT INTO _test_results VALUES (30, 'Dispute report monthly cap (3 per 30 days)', true, 'Returned REPORT_LIMIT_EXCEEDED on 4th report');
     ELSE
-      INSERT INTO _test_results VALUES (29, 'Dispute report monthly cap (3 per 30 days)', false, 'Expected REPORT_LIMIT_EXCEEDED but got: ' || v_report_res::text);
+      INSERT INTO _test_results VALUES (30, 'Dispute report monthly cap (3 per 30 days)', false, 'Expected REPORT_LIMIT_EXCEEDED but got: ' || v_report_res::text);
     END IF;
 
     -- 12.5 Admin List and Admin Resolve with Row Locking & Zero Double Audit
@@ -788,13 +898,17 @@ BEGIN
 
     v_admin_list := public.admin_list_collection_reports('PENDING', 10, 0);
     IF jsonb_array_length(v_admin_list) > 0 THEN
-      INSERT INTO _test_results VALUES (30, 'admin_list_collection_reports pagination & details', true, 'Returned dispute reports list to admin');
+      INSERT INTO _test_results VALUES (31, 'admin_list_collection_reports pagination & details', true, 'Returned dispute reports list to admin');
     ELSE
-      INSERT INTO _test_results VALUES (30, 'admin_list_collection_reports pagination & details', false, 'Returned empty list for pending reports');
+      INSERT INTO _test_results VALUES (31, 'admin_list_collection_reports pagination & details', false, 'Returned empty list for pending reports');
     END IF;
 
-    -- Resolve report
+    -- Read audit log row count strictly after RESET ROLE
+    RESET ROLE;
     SELECT count(*) INTO v_audit_count FROM public.admin_audit_log WHERE action = 'RESOLVE_COLLECTION_REPORT' AND target_id = v_report_id::text;
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin_id)::text, true);
 
     v_res := public.admin_resolve_collection_report(v_report_id, 'RESOLVED', 'Refunded via campus wallet');
     IF (v_res->>'ok')::boolean = true AND (v_res->>'changed')::boolean = true AND v_res->>'status' = 'RESOLVED' THEN
@@ -803,26 +917,30 @@ BEGIN
       IF (v_res->>'ok')::boolean = true AND (v_res->>'changed')::boolean = false THEN
         RESET ROLE;
         IF (SELECT count(*) FROM public.admin_audit_log WHERE action = 'RESOLVE_COLLECTION_REPORT' AND target_id = v_report_id::text) = v_audit_count + 1 THEN
-          INSERT INTO _test_results VALUES (31, 'admin_resolve_collection_report idempotency & audit', true, 'Resolved report, audit row written, repeat returned changed:false');
+          INSERT INTO _test_results VALUES (32, 'admin_resolve_collection_report idempotency & audit', true, 'Resolved report, audit row written, repeat returned changed:false');
         ELSE
-          INSERT INTO _test_results VALUES (31, 'admin_resolve_collection_report idempotency & audit', false, 'Audit row count mismatch');
+          INSERT INTO _test_results VALUES (32, 'admin_resolve_collection_report idempotency & audit', false, 'Audit row count mismatch');
         END IF;
       ELSE
-        INSERT INTO _test_results VALUES (31, 'admin_resolve_collection_report idempotency & audit', false, 'Repeat resolve failed idempotency check: ' || v_res::text);
+        INSERT INTO _test_results VALUES (32, 'admin_resolve_collection_report idempotency & audit', false, 'Repeat resolve failed idempotency check: ' || v_res::text);
       END IF;
     ELSE
-      INSERT INTO _test_results VALUES (31, 'admin_resolve_collection_report idempotency & audit', false, 'Initial resolution failed: ' || v_res::text);
+      INSERT INTO _test_results VALUES (32, 'admin_resolve_collection_report idempotency & audit', false, 'Initial resolution failed: ' || v_res::text);
     END IF;
 
     RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (27, 'Dispute reporting tests', false, 'Unexpected error: ' || SQLERRM);
   END;
 
   -- ----------------------------------------------------------------------------
   -- TEST 13: place_order sanitization, truncation, NULL pickup_token, secret insert
+  -- Using student2 so active order count (< 3) is not exceeded
   -- ----------------------------------------------------------------------------
   BEGIN
     SET LOCAL ROLE authenticated;
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_student_id)::text, true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_student2_id)::text, true);
 
     -- Call place_order with dirty pickup designee name (bidi, whitespace, controls, length > 40)
     v_res := public.place_order(
@@ -850,15 +968,79 @@ BEGIN
         SELECT 1 FROM public.order_pickup_secrets
         WHERE order_id = v_order_temp_id AND secret IS NOT NULL AND length(secret) = 64
       ) THEN
-        INSERT INTO _test_results VALUES (32, 'place_order sanitizes pickup_for_name, NULL token, creates secret', true, 'Sanitized & truncated <= 40, pickup_token is NULL, 64-char secret generated');
+        INSERT INTO _test_results VALUES (33, 'place_order sanitizes pickup_for_name, NULL token, creates secret', true, 'Sanitized & truncated <= 40, pickup_token is NULL, 64-char secret generated');
       ELSE
-        INSERT INTO _test_results VALUES (32, 'place_order sanitizes pickup_for_name, NULL token, creates secret', false, 'Database row validation failed for placed order');
+        INSERT INTO _test_results VALUES (33, 'place_order sanitizes pickup_for_name, NULL token, creates secret', false, 'Database row validation failed for placed order');
       END IF;
     ELSE
-      INSERT INTO _test_results VALUES (32, 'place_order sanitizes pickup_for_name, NULL token, creates secret', false, 'place_order call failed: ' || v_res::text);
+      INSERT INTO _test_results VALUES (33, 'place_order sanitizes pickup_for_name, NULL token, creates secret', false, 'place_order call failed: ' || v_res::text);
     END IF;
 
     RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (33, 'place_order sanitization tests', false, 'Unexpected error: ' || SQLERRM);
+  END;
+
+  -- ----------------------------------------------------------------------------
+  -- TEST 14: Missing Secret Handling: NO_PICKUP_SECRET & PICKUP_UNAVAILABLE
+  -- ----------------------------------------------------------------------------
+  BEGIN
+    RESET ROLE;
+
+    -- Create a READY order specifically for testing missing secret behavior
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_a, 'READY', 2000, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_temp_id;
+
+    -- Explicitly delete the secret row to simulate missing pickup secret
+    DELETE FROM public.order_pickup_secrets WHERE order_id = v_order_temp_id;
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    -- 14.1 SCAN and PIN methods return NO_PICKUP_SECRET and do not collect order
+    v_res := public.collect_order(v_canteen_a, v_order_temp_id, 'CASH', 'SCAN', '123456', NULL, NULL);
+    IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'NO_PICKUP_SECRET' THEN
+      v_res := public.collect_order(v_canteen_a, v_order_temp_id, 'CASH', 'PIN', NULL, '1234', NULL);
+      IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'NO_PICKUP_SECRET' THEN
+        v_res := public.preview_collection(v_canteen_a, v_order_temp_id::text, '123456', NULL);
+        IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'NO_PICKUP_SECRET' THEN
+          RESET ROLE;
+          IF EXISTS (SELECT 1 FROM public.orders WHERE id = v_order_temp_id AND status = 'READY') THEN
+            INSERT INTO _test_results VALUES (34, 'NO_PICKUP_SECRET for SCAN and PIN without collecting order', true, 'SCAN and PIN rejected with NO_PICKUP_SECRET; order remains in READY status');
+          ELSE
+            INSERT INTO _test_results VALUES (34, 'NO_PICKUP_SECRET for SCAN and PIN without collecting order', false, 'Order was collected or status modified despite missing secret');
+          END IF;
+        ELSE
+          INSERT INTO _test_results VALUES (34, 'NO_PICKUP_SECRET for SCAN and PIN without collecting order', false, 'preview_collection failed to return NO_PICKUP_SECRET: ' || v_res::text);
+        END IF;
+      ELSE
+        INSERT INTO _test_results VALUES (34, 'NO_PICKUP_SECRET for SCAN and PIN without collecting order', false, 'collect_order PIN failed to return NO_PICKUP_SECRET: ' || v_res::text);
+      END IF;
+    ELSE
+      INSERT INTO _test_results VALUES (34, 'NO_PICKUP_SECRET for SCAN and PIN without collecting order', false, 'collect_order SCAN failed to return NO_PICKUP_SECRET: ' || v_res::text);
+    END IF;
+
+    -- 14.2 get_pickup_code returns PICKUP_UNAVAILABLE when secret is missing
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_student_id)::text, true);
+
+    v_res := public.get_pickup_code(v_order_temp_id);
+    IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'PICKUP_UNAVAILABLE' THEN
+      INSERT INTO _test_results VALUES (35, 'get_pickup_code returns PICKUP_UNAVAILABLE when secret missing', true, 'Correctly returned PICKUP_UNAVAILABLE instead of ok:true with null code/pin');
+    ELSE
+      INSERT INTO _test_results VALUES (35, 'get_pickup_code returns PICKUP_UNAVAILABLE when secret missing', false, 'Expected PICKUP_UNAVAILABLE but got: ' || v_res::text);
+    END IF;
+
+    RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (34, 'Missing secret error handling tests', false, 'Unexpected error: ' || SQLERRM);
   END;
 
 END;
@@ -895,8 +1077,8 @@ BEGIN
 
   IF v_fail_count > 0 THEN
     RAISE EXCEPTION 'TEST SUITE FAILED: % out of % tests failed.%', v_fail_count, v_total, v_fail_summary;
-  ELSIF v_total < 32 THEN
-    RAISE EXCEPTION 'TEST SUITE INCOMPLETE: Expected 32 tests, but only % ran.', v_total;
+  ELSIF v_total < 35 THEN
+    RAISE EXCEPTION 'TEST SUITE INCOMPLETE: Expected 35 tests, but only % ran.', v_total;
   ELSE
     RAISE NOTICE 'SUCCESS: All % Collection test cases passed successfully.', v_pass_count;
   END IF;
