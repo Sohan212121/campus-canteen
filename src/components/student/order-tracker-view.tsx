@@ -15,6 +15,7 @@ import {
   KeyRound,
   ShieldAlert,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -82,6 +83,8 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
   // Dynamic TOTP code & countdown state for READY orders
   const [pickupData, setPickupData] = useState<PickupCodeResult["data"] | null>(null);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(60);
+  const [pickupError, setPickupError] = useState<string | null>(null);
+  const [isPickupLoading, setIsPickupLoading] = useState<boolean>(false);
 
   // Dispute "Not Me" modal state
   const [showDisputeModal, setShowDisputeModal] = useState(false);
@@ -154,10 +157,36 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
     let isMounted = true;
 
     const fetchCode = async () => {
-      const res = await getPickupCodeAction(order.id);
-      if (isMounted && res.success && res.data) {
-        setPickupData(res.data);
-        setSecondsRemaining(Math.max(1, res.data.seconds_remaining));
+      setIsPickupLoading(true);
+      try {
+        const res = await getPickupCodeAction(order.id);
+        if (!isMounted) return;
+
+        if (res.success && res.data) {
+          setPickupData(res.data);
+          setPickupError(null);
+          setSecondsRemaining(Math.max(1, res.data.seconds_remaining));
+        } else {
+          let message = "Pickup verification is temporarily unavailable. Please present your order code at the counter.";
+          if (res.code === "ORDER_NOT_READY") {
+            message = "This order is not ready for pickup yet. Please wait for the kitchen to call your order.";
+          } else if (res.code === "PICKUP_UNAVAILABLE") {
+            message = "Counter pickup verification is temporarily unavailable. Please show your order code to staff.";
+          } else if (res.code === "NO_PICKUP_SECRET") {
+            message = "Pickup code could not be generated. Please collect your order directly using your order reference.";
+          } else if (res.error) {
+            message = res.error;
+          }
+          setPickupError(message);
+        }
+      } catch {
+        if (isMounted) {
+          setPickupError("Unable to load pickup code. Please check your network connection.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsPickupLoading(false);
+        }
       }
     };
 
@@ -444,6 +473,66 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
                   Authorized collector: {pickupData.pickup_for_name || order.pickup_for_name}
                 </div>
               )}
+            </div>
+          ) : pickupError ? (
+            <div className="py-6 px-4 flex flex-col items-center justify-center space-y-3 text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-foreground">
+                  Pickup Code Unavailable
+                </p>
+                <p className="text-xs text-muted-foreground max-w-xs">
+                  {pickupError}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isPickupLoading}
+                onClick={async () => {
+                  setIsPickupLoading(true);
+                  try {
+                    const res = await getPickupCodeAction(order.id);
+                    if (res.success && res.data) {
+                      setPickupData(res.data);
+                      setPickupError(null);
+                      setSecondsRemaining(Math.max(1, res.data.seconds_remaining));
+                    } else {
+                      let message = "Pickup verification is temporarily unavailable. Please present your order code at the counter.";
+                      if (res.code === "ORDER_NOT_READY") {
+                        message = "This order is not ready for pickup yet. Please wait for the kitchen to call your order.";
+                      } else if (res.code === "PICKUP_UNAVAILABLE") {
+                        message = "Counter pickup verification is temporarily unavailable. Please show your order code to staff.";
+                      } else if (res.code === "NO_PICKUP_SECRET") {
+                        message = "Pickup code could not be generated. Please collect your order directly using your order reference.";
+                      } else if (res.error) {
+                        message = res.error;
+                      }
+                      setPickupError(message);
+                    }
+                  } catch {
+                    setPickupError("Unable to load pickup code. Please check your network connection.");
+                  } finally {
+                    setIsPickupLoading(false);
+                  }
+                }}
+                className="text-xs font-semibold h-8 rounded-lg gap-1.5"
+              >
+                {isPickupLoading ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Checking...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-3 w-3" />
+                    Retry Code
+                  </>
+                )}
+              </Button>
             </div>
           ) : (
             <div className="py-8 flex flex-col items-center justify-center space-y-2 text-muted-foreground">

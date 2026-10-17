@@ -59,7 +59,15 @@ export default async function OrderDetailPage({
     .eq("id", orderId)
     .maybeSingle();
 
-  if (error || !order) {
+  if (error) {
+    console.error("[OrderDetailPage] Failed to fetch order:", {
+      code: error.code,
+      message: error.message,
+    });
+    throw new Error("We couldn't load this order. Please try again.");
+  }
+
+  if (!order) {
     notFound();
   }
 
