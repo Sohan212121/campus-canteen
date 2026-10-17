@@ -18,7 +18,6 @@ vi.mock("next/cache", () => ({
 }));
 
 import {
-  getPickupCodeAction,
   reportUnauthorizedCollectionAction,
 } from "@/server/actions/order";
 import {
@@ -35,49 +34,6 @@ describe("Collection Core Unit & Action Tests", () => {
       id: "user-1",
       role: "student",
       is_active: true,
-    });
-  });
-
-  describe("getPickupCodeAction", () => {
-    it("validates UUID before calling get_pickup_code RPC", async () => {
-      const result = await getPickupCodeAction("invalid-uuid");
-      expect(result.success).toBe(false);
-      expect(result.code).toBe("INVALID_INPUT");
-      expect(mockRpc).not.toHaveBeenCalled();
-    });
-
-    it("maps ORDER_NOT_READY error when order is not in ready state", async () => {
-      mockRpc.mockResolvedValue({
-        data: { ok: false, error: "ORDER_NOT_READY" },
-        error: null,
-      });
-
-      const result = await getPickupCodeAction(validOrderId);
-      expect(result.success).toBe(false);
-      expect(result.code).toBe("ORDER_NOT_READY");
-      expect(result.error).toContain("not ready for pickup");
-    });
-
-    it("returns rotating code, countdown seconds, and PIN on success", async () => {
-      mockRpc.mockResolvedValue({
-        data: {
-          ok: true,
-          order_id: validOrderId,
-          order_code: "CN10001",
-          code: "543210",
-          seconds_remaining: 42,
-          pin: "7890",
-          pickup_for_name: "Friend Alex",
-        },
-        error: null,
-      });
-
-      const result = await getPickupCodeAction(validOrderId);
-      expect(result.success).toBe(true);
-      expect(result.data?.code).toBe("543210");
-      expect(result.data?.seconds_remaining).toBe(42);
-      expect(result.data?.pin).toBe("7890");
-      expect(result.data?.pickup_for_name).toBe("Friend Alex");
     });
   });
 

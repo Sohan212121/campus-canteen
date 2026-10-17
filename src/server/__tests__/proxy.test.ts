@@ -119,6 +119,19 @@ describe("proxy (UX redirects & loop invariants)", () => {
       const res = await proxy(req);
       expect(res.headers.get("location")).toBe("https://example.com/login");
     });
+
+    it("returns 401 JSON for unauthenticated visitor on /api/* routes", async () => {
+      const req = createMockRequest("/api/orders/some-id/pickup-code");
+      const res = await proxy(req);
+      expect(res.status).toBe(401);
+      expect(res.headers.get("location")).toBeNull();
+      const body = await res.json();
+      expect(body).toEqual({
+        ok: false,
+        code: "UNAUTHENTICATED",
+        error: "Authentication required",
+      });
+    });
   });
 
   describe("deactivated accounts", () => {
@@ -129,6 +142,22 @@ describe("proxy (UX redirects & loop invariants)", () => {
       const req = createMockRequest("/menu");
       const res = await proxy(req);
       expect(res.headers.get("location")).toBe("https://example.com/auth/deactivated");
+    });
+
+    it("returns 403 JSON for deactivated user on /api/* routes", async () => {
+      mockGetUser.mockResolvedValue({ data: { user: { id: "deact-user" } } });
+      mockProfile({ role: "student", is_active: false });
+
+      const req = createMockRequest("/api/orders/some-id/pickup-code");
+      const res = await proxy(req);
+      expect(res.status).toBe(403);
+      expect(res.headers.get("location")).toBeNull();
+      const body = await res.json();
+      expect(body).toEqual({
+        ok: false,
+        code: "FORBIDDEN",
+        error: "Account is inactive",
+      });
     });
 
     it.each(["/set-password", "/auth/pending-activation", "/auth/confirm"])(

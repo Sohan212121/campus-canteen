@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
@@ -17,7 +17,7 @@ import {
   X,
   RefreshCw,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
@@ -33,13 +33,31 @@ import {
 import {
   cancelOrderAction,
   getReorderItemsAction,
-  getPickupCodeAction,
   reportUnauthorizedCollectionAction,
-  type PickupCodeResult,
 } from "@/server/actions/order";
+import {
+  computeExpiresAtMonotonic,
+  calculateSecondsRemaining,
+  calculateNextRefreshDelayMs,
+} from "@/lib/pickup-countdown";
 import { MenuItemImage } from "@/components/ui/menu-item-image";
 import { RateOrderItemsSection } from "@/components/student/rate-order-items-section";
 import { cn } from "@/lib/utils";
+
+export interface PickupCodeData {
+  order_id: string;
+  order_code: string;
+  code: string;
+  seconds_remaining: number;
+  pin: string;
+  pickup_for_name?: string | null;
+}
+
+export interface PickupErrorInfo {
+  message: string;
+  isAuthError?: boolean;
+  canRetryManually?: boolean;
+}
 
 export interface OrderDetailData {
   id: string;
@@ -81,10 +99,38 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   // Dynamic TOTP code & countdown state for READY orders
-  const [pickupData, setPickupData] = useState<PickupCodeResult["data"] | null>(null);
+  const [pickupData, setPickupData] = useState<PickupCodeData | null>(null);
+  const [expiresAtPerf, setExpiresAtPerf] = useState<number | null>(null);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(60);
-  const [pickupError, setPickupError] = useState<string | null>(null);
+  const [pickupError, setPickupError] = useState<PickupErrorInfo | null>(null);
   const [isPickupLoading, setIsPickupLoading] = useState<boolean>(false);
+  const [screenReaderAnnouncement, setScreenReaderAnnouncement] = useState<string>("");
+
+  // Refs for StrictMode, race conditions, request sequencing, and retries
+  const isFetchingRef = useRef<boolean>(false);
+  const requestIdRef = useRef<number>(0);
+  const sameCodeRetryCountRef = useRef<number>(0);
+  const networkRetryCountRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const latestOrderRef = useRef(order);
+  const fetchPickupCodeRef = useRef<((isManualRetry?: boolean) => Promise<void>) | null>(null);
+
+  // Sync latest order into ref safely in an effect
+  useEffect(() => {
+    latestOrderRef.current = order;
+  }, [order]);
+
+  // Adjust state during render when status leaves READY (per React 19 recommended pattern)
+  const [prevStatus, setPrevStatus] = useState(order.status);
+  if (order.status !== prevStatus) {
+    setPrevStatus(order.status);
+    if (order.status !== "READY") {
+      setPickupData(null);
+      setExpiresAtPerf(null);
+      setPickupError(null);
+      setIsPickupLoading(false);
+    }
+  }
 
   // Dispute "Not Me" modal state
   const [showDisputeModal, setShowDisputeModal] = useState(false);
@@ -149,64 +195,252 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
     };
   }, [order.id]);
 
-  // Fetch rotating TOTP pickup code and drive 60-second countdown ring
   const isReady = order.status === "READY";
+
+  const fetchPickupCode = useCallback(async (isManualRetry = false) => {
+    const currentOrder = latestOrderRef.current;
+    if (currentOrder.status !== "READY") return;
+
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    setIsPickupLoading(true);
+
+    if (isManualRetry) {
+      networkRetryCountRef.current = 0;
+      sameCodeRetryCountRef.current = 0;
+    }
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const timeoutId = window.setTimeout(() => {
+      controller.abort();
+    }, 8000);
+
+    const thisRequestId = ++requestIdRef.current;
+
+    try {
+      const response = await fetch(`/api/orders/${currentOrder.id}/pickup-code`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+
+      window.clearTimeout(timeoutId);
+
+      if (
+        thisRequestId !== requestIdRef.current ||
+        latestOrderRef.current.status !== "READY" ||
+        latestOrderRef.current.id !== currentOrder.id
+      ) {
+        return;
+      }
+
+      if (response.status === 401) {
+        setPickupError({
+          message: "Please sign in again to view your pickup code.",
+          isAuthError: true,
+          canRetryManually: false,
+        });
+        setPickupData(null);
+        setExpiresAtPerf(null);
+        return;
+      }
+
+      if (response.status === 403) {
+        setPickupError({
+          message: "You do not have permission to view this order's pickup code.",
+          isAuthError: false,
+          canRetryManually: false,
+        });
+        setPickupData(null);
+        setExpiresAtPerf(null);
+        return;
+      }
+
+      if (response.status === 404) {
+        setPickupError({
+          message: "Pickup code details could not be found.",
+          isAuthError: false,
+          canRetryManually: false,
+        });
+        setPickupData(null);
+        setExpiresAtPerf(null);
+        return;
+      }
+
+      let json: { ok: boolean; code?: string; error?: string; data?: PickupCodeData };
+      try {
+        json = await response.json();
+      } catch {
+        throw new Error("Invalid response from server");
+      }
+
+      if (!response.ok || !json.ok) {
+        const errCode = json?.code || "FAILED";
+        let message = json?.error || "Pickup code is currently unavailable.";
+        if (errCode === "ORDER_NOT_READY") {
+          message = "Order is not ready for pickup yet. Please wait for the canteen to call your order.";
+        } else if (errCode === "PICKUP_UNAVAILABLE") {
+          message = "Counter pickup verification is temporarily unavailable. Please show your order code to staff.";
+        } else if (errCode === "NO_PICKUP_SECRET") {
+          message = "Digital pickup code could not be verified. Please collect directly at the counter.";
+        }
+
+        setPickupError({
+          message,
+          canRetryManually: true,
+        });
+        setPickupData(null);
+        setExpiresAtPerf(null);
+        return;
+      }
+
+      const newData = json.data;
+      if (!newData || !newData.code) {
+        throw new Error("Incomplete pickup code data received");
+      }
+
+      // Check if server returned identical code as before (fetched slightly early)
+      if (pickupData && newData.code === pickupData.code && sameCodeRetryCountRef.current < 3) {
+        sameCodeRetryCountRef.current++;
+        window.setTimeout(() => {
+          fetchPickupCodeRef.current?.();
+        }, 1000);
+        return;
+      }
+
+      sameCodeRetryCountRef.current = 0;
+      networkRetryCountRef.current = 0;
+
+      const nowPerf = performance.now();
+      const expiresAt = computeExpiresAtMonotonic(newData.seconds_remaining, nowPerf);
+
+      setPickupData(newData);
+      setPickupError(null);
+      setExpiresAtPerf(expiresAt);
+      setSecondsRemaining(calculateSecondsRemaining(expiresAt, nowPerf));
+
+      // Trigger screen reader live announcement only when code rotates
+      setScreenReaderAnnouncement("Code refreshed");
+    } catch (err: unknown) {
+      window.clearTimeout(timeoutId);
+
+      if (
+        thisRequestId !== requestIdRef.current ||
+        latestOrderRef.current.status !== "READY" ||
+        latestOrderRef.current.id !== currentOrder.id
+      ) {
+        return;
+      }
+
+      if (err instanceof DOMException && err.name === "AbortError" && thisRequestId !== requestIdRef.current) {
+        return;
+      }
+
+      const currentNetworkRetries = networkRetryCountRef.current;
+      if (currentNetworkRetries < 3) {
+        const backoffDelays = [3000, 6000, 12000];
+        const nextDelay = backoffDelays[currentNetworkRetries] ?? 12000;
+        networkRetryCountRef.current = currentNetworkRetries + 1;
+
+        setPickupError({
+          message: "Can't refresh the code. Retrying...",
+          canRetryManually: false,
+        });
+
+        window.setTimeout(() => {
+          fetchPickupCodeRef.current?.();
+        }, nextDelay);
+      } else {
+        setPickupError({
+          message: "Unable to refresh pickup code. Please check your connection.",
+          canRetryManually: true,
+        });
+      }
+    } finally {
+      isFetchingRef.current = false;
+      setIsPickupLoading(false);
+    }
+  }, [pickupData]);
+
+  // Keep fetchPickupCodeRef in sync
+  useEffect(() => {
+    fetchPickupCodeRef.current = fetchPickupCode;
+  }, [fetchPickupCode]);
+
+  // Initial fetch when status becomes READY or order.id changes
+  useEffect(() => {
+    if (!isReady) {
+      isFetchingRef.current = false;
+      requestIdRef.current++;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      return;
+    }
+
+    fetchPickupCodeRef.current?.();
+
+    return () => {
+      // Cleanup: avoid leaving isFetchingRef stuck in StrictMode!
+      isFetchingRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, [isReady, order.id]);
+
+  // Pure countdown display interval (zero network calls, pure monotonic calculation)
+  useEffect(() => {
+    if (!isReady || expiresAtPerf === null) return;
+
+    const intervalId = window.setInterval(() => {
+      setSecondsRemaining(calculateSecondsRemaining(expiresAtPerf));
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isReady, expiresAtPerf]);
+
+  // Schedule next refresh right after expiry (+1000ms buffer, clamped 1000-61000ms)
+  useEffect(() => {
+    if (!isReady || expiresAtPerf === null) return;
+
+    const delay = calculateNextRefreshDelayMs(expiresAtPerf);
+    const timerId = window.setTimeout(() => {
+      fetchPickupCode();
+    }, delay);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [isReady, expiresAtPerf, fetchPickupCode]);
+
+  // Refresh immediately when tab becomes visible if code is expired
   useEffect(() => {
     if (!isReady) return;
 
-    let isMounted = true;
-
-    const fetchCode = async () => {
-      setIsPickupLoading(true);
-      try {
-        const res = await getPickupCodeAction(order.id);
-        if (!isMounted) return;
-
-        if (res.success && res.data) {
-          setPickupData(res.data);
-          setPickupError(null);
-          setSecondsRemaining(Math.max(1, res.data.seconds_remaining));
-        } else {
-          let message = "Pickup verification is temporarily unavailable. Please present your order code at the counter.";
-          if (res.code === "ORDER_NOT_READY") {
-            message = "This order is not ready for pickup yet. Please wait for the kitchen to call your order.";
-          } else if (res.code === "PICKUP_UNAVAILABLE") {
-            message = "Counter pickup verification is temporarily unavailable. Please show your order code to staff.";
-          } else if (res.code === "NO_PICKUP_SECRET") {
-            message = "Pickup code could not be generated. Please collect your order directly using your order reference.";
-          } else if (res.error) {
-            message = res.error;
-          }
-          setPickupError(message);
-        }
-      } catch {
-        if (isMounted) {
-          setPickupError("Unable to load pickup code. Please check your network connection.");
-        }
-      } finally {
-        if (isMounted) {
-          setIsPickupLoading(false);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        const remaining = calculateSecondsRemaining(expiresAtPerf);
+        if (expiresAtPerf === null || remaining <= 0) {
+          fetchPickupCode();
         }
       }
     };
 
-    fetchCode();
-
-    const timer = window.setInterval(() => {
-      setSecondsRemaining((prev) => {
-        if (prev <= 1) {
-          fetchCode();
-          return 60;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
-      isMounted = false;
-      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [order.id, isReady]);
+  }, [isReady, expiresAtPerf, fetchPickupCode]);
 
   const handleCancelOrder = async () => {
     setIsCancelling(true);
@@ -405,8 +639,17 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
 
           {pickupData?.code ? (
             <div className="space-y-4">
-              {/* QR Code Container */}
-              <div className="mx-auto flex h-48 w-48 items-center justify-center rounded-2xl bg-white p-3 shadow-sm border border-border/40">
+              {/* Screen reader polite live region: announced ONLY when code rotates */}
+              <div className="sr-only" aria-live="polite" aria-atomic="true">
+                {screenReaderAnnouncement}
+              </div>
+
+              {/* QR Code Container with accessibility attributes */}
+              <div
+                role="img"
+                aria-label={`Counter Pickup QR Code for Order #${order.order_code}`}
+                className="mx-auto flex h-48 w-48 items-center justify-center rounded-2xl bg-white p-3 shadow-sm border border-border/40"
+              >
                 <QRCodeSVG
                   value={`CC1:${order.id}:${pickupData.code}`}
                   size={168}
@@ -415,10 +658,15 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
                 />
               </div>
 
+              {/* Text alternative for QR */}
+              <p className="sr-only">
+                Order reference #{order.order_code}, Pickup rotating code: {pickupData.code}, Backup PIN: {pickupData.pin}
+              </p>
+
               {/* 60s Countdown Ring & Rotating 6-Digit Code */}
               <div className="flex flex-col items-center justify-center space-y-2">
                 <div className="inline-flex items-center gap-3 rounded-xl bg-muted/60 px-4 py-2 border border-border shadow-2xs">
-                  <div className="relative flex items-center justify-center h-8 w-8">
+                  <div className="relative flex items-center justify-center h-8 w-8" aria-hidden="true">
                     <svg className="h-8 w-8 -rotate-90" viewBox="0 0 36 36">
                       <circle
                         cx="18"
@@ -484,55 +732,41 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
                   Pickup Code Unavailable
                 </p>
                 <p className="text-xs text-muted-foreground max-w-xs">
-                  {pickupError}
+                  {pickupError.message}
                 </p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isPickupLoading}
-                onClick={async () => {
-                  setIsPickupLoading(true);
-                  try {
-                    const res = await getPickupCodeAction(order.id);
-                    if (res.success && res.data) {
-                      setPickupData(res.data);
-                      setPickupError(null);
-                      setSecondsRemaining(Math.max(1, res.data.seconds_remaining));
-                    } else {
-                      let message = "Pickup verification is temporarily unavailable. Please present your order code at the counter.";
-                      if (res.code === "ORDER_NOT_READY") {
-                        message = "This order is not ready for pickup yet. Please wait for the kitchen to call your order.";
-                      } else if (res.code === "PICKUP_UNAVAILABLE") {
-                        message = "Counter pickup verification is temporarily unavailable. Please show your order code to staff.";
-                      } else if (res.code === "NO_PICKUP_SECRET") {
-                        message = "Pickup code could not be generated. Please collect your order directly using your order reference.";
-                      } else if (res.error) {
-                        message = res.error;
-                      }
-                      setPickupError(message);
-                    }
-                  } catch {
-                    setPickupError("Unable to load pickup code. Please check your network connection.");
-                  } finally {
-                    setIsPickupLoading(false);
-                  }
-                }}
-                className="text-xs font-semibold h-8 rounded-lg gap-1.5"
-              >
-                {isPickupLoading ? (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Checking...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-3 w-3" />
-                    Retry Code
-                  </>
-                )}
-              </Button>
+              {pickupError.isAuthError ? (
+                <Link
+                  href="/login"
+                  className={buttonVariants({
+                    size: "sm",
+                    className: "text-xs font-semibold h-8 rounded-lg",
+                  })}
+                >
+                  Sign In Again
+                </Link>
+              ) : pickupError.canRetryManually ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isPickupLoading}
+                  onClick={() => fetchPickupCode(true)}
+                  className="text-xs font-semibold h-8 rounded-lg gap-1.5"
+                >
+                  {isPickupLoading ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Checking...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-3 w-3" />
+                      Retry Code
+                    </>
+                  )}
+                </Button>
+              ) : null}
             </div>
           ) : (
             <div className="py-8 flex flex-col items-center justify-center space-y-2 text-muted-foreground">

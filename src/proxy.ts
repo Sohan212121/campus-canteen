@@ -84,6 +84,12 @@ export async function proxy(request: NextRequest) {
     ) {
       return supabaseResponse;
     }
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { ok: false, code: "UNAUTHENTICATED", error: "Authentication required" },
+        { status: 401, headers: { "Cache-Control": "no-store" } }
+      );
+    }
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);
@@ -108,6 +114,12 @@ export async function proxy(request: NextRequest) {
       pathname === "/auth/confirm"
     ) {
       return supabaseResponse;
+    }
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { ok: false, code: "FORBIDDEN", error: "Account is inactive" },
+        { status: 403, headers: { "Cache-Control": "no-store" } }
+      );
     }
     const deactUrl = request.nextUrl.clone();
     deactUrl.pathname = "/auth/deactivated";

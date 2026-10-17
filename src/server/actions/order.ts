@@ -473,64 +473,6 @@ export async function getReorderItemsAction(orderId: string): Promise<GetReorder
   };
 }
 
-export type PickupCodeResult = {
-  success: boolean;
-  code?: string;
-  error?: string;
-  data?: {
-    order_id: string;
-    order_code: string;
-    code: string;
-    seconds_remaining: number;
-    pin: string;
-    pickup_for_name?: string | null;
-  };
-};
-
-/**
- * Retrieves the dynamic rotating 6-digit TOTP pickup code and PIN for an order in READY status.
- */
-export async function getPickupCodeAction(orderId: string): Promise<PickupCodeResult> {
-  await requireRole(["student"]);
-  const parsed = z.string().uuid("Invalid order ID").safeParse(orderId);
-  if (!parsed.success) {
-    return { success: false, code: "INVALID_INPUT", error: "Invalid order ID" };
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_pickup_code", {
-    p_order_id: parsed.data,
-  });
-
-  if (error) {
-    return {
-      success: false,
-      code: error.message.split(":")[0]?.trim() || "ERROR",
-      error: error.message.replace(/^[A-Z_]+:\s*/, ""),
-    };
-  }
-
-  const res = data as { ok: boolean; error?: string; [key: string]: unknown };
-  if (!res || !res.ok) {
-    return {
-      success: false,
-      code: res?.error || "FAILED",
-      error: res?.error === "ORDER_NOT_READY" ? "Order is not ready for pickup yet" : "Unable to retrieve pickup code",
-    };
-  }
-
-  return {
-    success: true,
-    data: {
-      order_id: res.order_id as string,
-      order_code: res.order_code as string,
-      code: res.code as string,
-      seconds_remaining: Number(res.seconds_remaining || 0),
-      pin: res.pin as string,
-      pickup_for_name: (res.pickup_for_name as string) || null,
-    },
-  };
-}
 
 /**
  * Allows a student to dispute an unauthorized collection within 24 hours of collection.
