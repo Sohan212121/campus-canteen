@@ -388,6 +388,10 @@ export async function adminUpdateCanteenSettingsAction(
     return { success: false, error: "Invalid canteen ID." };
   }
 
+  if (settings.hold_minutes < 5 || settings.hold_minutes > 120) {
+    return { success: false, error: "Hold window must be between 5 and 120 minutes." };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.rpc("admin_update_canteen_settings", {
     p_canteen_id: parsedId.data,
@@ -798,3 +802,191 @@ export async function uploadMenuImageAction(
     data: { publicUrl: publicUrlData.publicUrl },
   };
 }
+
+// ---------------------------------------------------------------------------
+// 9. Student Strikes & Penalty Management
+// ---------------------------------------------------------------------------
+
+export type StudentStrikeRow = {
+  student_id: string;
+  student_name: string;
+  college_id_last4: string;
+  strike_count: number;
+  last_no_show_at: string | null;
+  is_limited: boolean;
+};
+
+export async function adminListStudentStrikesAction(): Promise<ActionResult<StudentStrikeRow[]>> {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_list_student_strikes");
+
+  if (error) {
+    return { success: false, error: error.message || "Failed to list student strikes." };
+  }
+
+  return { success: true, data: data as StudentStrikeRow[] };
+}
+
+export async function adminClearStudentStrikesAction(
+  studentId: string,
+  reason: string = "Cleared by admin"
+): Promise<ActionResult> {
+  await requireRole(["admin"]);
+  const parsedId = uuidSchema.safeParse(studentId);
+  if (!parsedId.success) {
+    return { success: false, error: "Invalid student ID." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_clear_student_strikes", {
+    p_student_id: parsedId.data,
+    p_reason: reason.trim() || "Cleared by admin",
+  });
+
+  if (error) {
+    return { success: false, error: error.message || "Failed to clear strikes." };
+  }
+
+  revalidatePath("/admin/strikes");
+  return { success: true, data: undefined };
+}
+
+// ---------------------------------------------------------------------------
+// 10. Daily Financial & Operational Reconciliation
+// ---------------------------------------------------------------------------
+
+export type DailyReconciliationData = {
+  date: string;
+  canteen_id: string | null;
+  canteens: Array<{
+    canteen_id: string;
+    canteen_name: string;
+    collected_count: number;
+    total_collected_paise: number;
+    cash_collected_count: number;
+    cash_collected_paise: number;
+    upi_collected_count: number;
+    upi_collected_paise: number;
+    manual_override_count: number;
+    late_handover_count: number;
+    no_show_count: number;
+  }>;
+  staff: Array<{
+    canteen_id: string;
+    canteen_name: string;
+    staff_id: string;
+    staff_name: string;
+    collected_count: number;
+    total_collected_paise: number;
+    cash_count: number;
+    cash_paise: number;
+    upi_count: number;
+    upi_paise: number;
+    manual_count: number;
+    manual_rate_pct: number;
+    late_handover_count: number;
+  }>;
+  summary: {
+    target_date: string;
+    total_collected_count: number;
+    total_collected_paise: number;
+    total_cash_paise: number;
+    total_upi_paise: number;
+    total_manual_count: number;
+    total_late_handover_count: number;
+    total_no_show_count: number;
+  };
+};
+
+export async function getDailyReconciliationAction(
+  date?: string,
+  canteenId?: string
+): Promise<ActionResult<DailyReconciliationData>> {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+
+  const rpcParams: Record<string, unknown> = {};
+  if (date) rpcParams.p_date = date;
+  if (canteenId) rpcParams.p_canteen_id = canteenId;
+
+  const { data, error } = await supabase.rpc("get_daily_reconciliation", rpcParams);
+
+  if (error) {
+    return { success: false, error: error.message.replace(/^[A-Z_]+:\s*/, "") || "Failed to fetch reconciliation." };
+  }
+
+  return { success: true, data: data as DailyReconciliationData };
+}
+
+// ---------------------------------------------------------------------------
+// 11. Collection Dispute Reports
+// ---------------------------------------------------------------------------
+
+export type AdminCollectionReportRow = {
+  id: string;
+  order_id: string;
+  order_code: string;
+  user_id: string;
+  student_name: string;
+  student_college_id: string | null;
+  canteen_name: string | null;
+  reason: string;
+  status: "PENDING" | "RESOLVED" | "DISMISSED";
+  admin_notes: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  collection_method: string;
+  collected_with: string;
+  is_manual_override: boolean;
+  manual_override_reason: string | null;
+  collected_at: string;
+  collecting_staff_name: string | null;
+};
+
+export async function adminListCollectionReportsAction(
+  status?: string,
+  limit: number = 50,
+  offset: number = 0
+): Promise<ActionResult<AdminCollectionReportRow[]>> {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_list_collection_reports", {
+    p_status: status && status !== "ALL" ? status : null,
+    p_limit: limit,
+    p_offset: offset,
+  });
+
+  if (error) {
+    return { success: false, error: error.message || "Failed to list collection reports." };
+  }
+
+  return { success: true, data: (data || []) as AdminCollectionReportRow[] };
+}
+
+export async function adminResolveCollectionReportAction(
+  reportId: string,
+  resolution: "RESOLVED" | "DISMISSED",
+  notes?: string
+): Promise<ActionResult> {
+  await requireRole(["admin"]);
+  const parsedId = uuidSchema.safeParse(reportId);
+  if (!parsedId.success) {
+    return { success: false, error: "Invalid report ID." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_resolve_collection_report", {
+    p_report_id: parsedId.data,
+    p_resolution: resolution,
+    p_notes: notes?.trim() || null,
+  });
+
+  if (error) {
+    return { success: false, error: error.message || "Failed to resolve report." };
+  }
+
+  revalidatePath("/admin/reports");
+  return { success: true, data: undefined };
+}
+

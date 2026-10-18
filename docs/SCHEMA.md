@@ -816,6 +816,82 @@ Added in migrations `0013_collection_core.sql` (additive), `0014_collection_cuto
 > - **Student Screen Change**: A student whose order is currently in `READY` status will immediately see the new Dynamic Smart Pickup screen upon refresh: an animated 60-second countdown ring, rotating QR code, rotating 6-digit code, and 4-digit counter fallback PIN.
 > - Staff counter scanners running the updated application will scan `CC1:<order_id>:<code>`, render the green/amber preview card, and record cash or UPI collection with a single tap.
 
+---
+
+## 17. Order Expiry, No-Show Lifecycle, & Daily Reconciliation
+
+Added in migrations `0016_order_status_no_show.sql` and `0017_no_show_enforcement.sql`.
+
+### 17.1 Two-Stage Migration & Deployment Sequence
+PostgreSQL requires enum type extensions to be committed before new values can be referenced in composite types, PL/pgSQL routines, or check constraints within transactional migration blocks.
+1. **Migration 0016 (`0016_order_status_no_show.sql`)**:
+   - Standalone `ALTER TYPE public.order_status ADD VALUE IF NOT EXISTS 'NO_SHOW';`
+   - Must execute outside any transaction block (`no BEGIN / COMMIT`).
+   - Followed by `NOTIFY pgrst, 'reload schema';`.
+2. **Migration 0017 (`0017_no_show_enforcement.sql`)**:
+   - Executes inside a standard transaction block (`BEGIN ... COMMIT`).
+   - Contains all table definitions, indexes, RPC replacements, and policy updates.
+
+### 17.2 Database Objects
+- **`public.student_strike_resets`**:
+  Tracks administrative strike clears without modifying historical order records.
+  | Column | Type | Constraints / Default | Description |
+  |---|---|---|---|
+  | `student_id` | `uuid` | PK, REFERENCES `profiles(id)` ON DELETE CASCADE | Student whose strikes were cleared |
+  | `cleared_at` | `timestamptz` | NOT NULL, `DEFAULT clock_timestamp()` | Timestamp of clearing |
+  | `cleared_by` | `uuid` | NOT NULL, REFERENCES `profiles(id)` | Admin who cleared strikes |
+  | `reason` | `text` | NOT NULL | Mandatory administrative rationale |
+- **Index `idx_orders_status_ready_at`**:
+  `CREATE INDEX idx_orders_status_ready_at ON public.orders (status, ready_at) WHERE status = 'READY';`
+  Enables instant index scans during periodic sweep routines without sequential table scans.
+
+### 17.3 Hold Window Expiry & Concurrency Architecture
+- **Expiry Base**: Calculated from actual `ready_at` (`ready_at + (canteen.hold_minutes * interval '1 minute')`). If `ready_at` is NULL (legacy), falls back to `pickup_window_end`.
+- **Concurrency Locking**:
+  - `preview_collection`, `get_pickup_code`, and `collect_order` lock the order row using `FOR UPDATE`.
+  - The sweep routine `mark_no_shows` locks qualifying rows using `FOR UPDATE OF o SKIP LOCKED`.
+  - All status updates are strictly guarded with `WHERE status = 'READY'` to guarantee that collection and expiry sweep cannot both win.
+- **Lazy Expiry**:
+  - `get_pickup_code`: Returns `{ ok: false, error: 'PICKUP_EXPIRED', status: 'NO_SHOW' }` and lazily marks the order `NO_SHOW`.
+  - `preview_collection`: Returns `{ ok: false, error: 'PICKUP_EXPIRED', status: 'NO_SHOW' }` and lazily marks the order `NO_SHOW`.
+  - `collect_order`: If expired, blocks method `SCAN` and `PIN`. If within 6 hours of expiry and method is `MANUAL`, permits a Late Handover with mandatory reason ($\ge 5$ characters) and transitions order to `COLLECTED`.
+- **Stock Invariant**: Stock is never restored upon `NO_SHOW` (the kitchen has already prepared the food).
+
+### 17.4 Sweep Routine (`public.mark_no_shows`)
+- **Signature**: `public.mark_no_shows(p_canteen_id uuid DEFAULT NULL) RETURNS jsonb`
+- **Security**: Accessible to staff (restricted to their assigned canteen), admin, and automated background workers (e.g. `pg_cron` / postgres superuser).
+- **Batch Processing**: Capped at 200 orders per invocation using `FOR UPDATE OF o SKIP LOCKED`.
+- **Audit & Notification**: Dispatches `'Order Expired'` notification to each student and records `action = 'ORDER_NO_SHOW'` in `public.admin_audit_log`.
+- **Maintenance**: Automatically purges expired `pickup_collect_attempts` older than 7 days.
+- **Scheduler**: Does not install hardcoded cron triggers. Can be scheduled via `pg_cron`:
+  ```sql
+  SELECT cron.schedule('sweep-canteen-no-shows', '* * * * *', $$SELECT public.mark_no_shows(NULL)$$);
+  ```
+
+### 17.5 Serial No-Show Enforcement & Strike Rules
+- **Strike Calculation**:
+  - An order counts as a strike if and only if:
+    1. Its status is `NO_SHOW`.
+    2. Its `ready_at` occurred within the rolling 30-day window (`ready_at >= clock_timestamp() - interval '30 days'`).
+    3. Its `ready_at` is strictly after the student's latest `cleared_at` in `student_strike_resets` (`cleared_at IS NULL OR ready_at > cleared_at`).
+    4. An `'Order Ready'` notification was successfully recorded for that order (confirming the student was notified).
+- **Penalties for Serial No-Shows ($\ge 2$ active strikes)**:
+  - Total order quantity capped at 2 items (`SUM(quantity) <= 2`).
+  - Total order value capped at ₹200 (`total_paise <= 20000`).
+  - Maximum concurrent active orders (`PLACED`, `ACCEPTED`, `PREPARING`, `READY`) capped at 2.
+  - Non-compliant checkout attempts are rejected with `ACCOUNT_LIMITED`.
+- **Student Status Function**:
+  - `public.get_my_account_status() RETURNS jsonb`: Student-only read-only RPC returning `{ strikes, is_limited, active_orders_count, active_order_limit, can_order, max_items_allowed, max_order_paise }` so client apps can proactively warn students before checkout.
+
+### 17.6 Daily Reconciliation & Operational Bounds
+- **Canteen Hold Minutes Bounds**: Validated as $5 \le hold\_minutes \le 120$ in `admin_update_canteen_settings`.
+- **Reconciliation Function (`public.get_daily_reconciliation`)**:
+  - Admin only.
+  - Aggregates orders strictly within IST day boundaries (`date_trunc('day', timezone('Asia/Kolkata', collected_at))`).
+  - Categorizes revenue by `collected_with` (`CASH` vs `UPI`).
+  - Distinguishes manual late handovers from on-time collections.
+  - Reports count of `NO_SHOW` and `CANCELLED` orders.
+
 
 
 

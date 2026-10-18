@@ -15,12 +15,18 @@ import {
   X,
   MessageSquare,
   Globe,
+  Receipt,
+  AlertTriangle,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "@/server/actions/auth";
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  { label: "Reconciliation", href: "/admin/reconciliation", icon: Receipt },
+  { label: "Strikes", href: "/admin/strikes", icon: AlertTriangle },
+  { label: "Reports", href: "/admin/reports", icon: FileText },
   { label: "Menu", href: "/admin/menu", icon: UtensilsCrossed },
   { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
   { label: "Reviews", href: "/admin/reviews", icon: MessageSquare },

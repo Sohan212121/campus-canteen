@@ -37,13 +37,15 @@ export default async function OrderDetailPage({
       total_paise,
       pickup_for_name,
       placed_at,
+      ready_at,
       collected_at,
       requested_pickup_at,
       estimated_ready_at,
       pickup_window_end,
       canteens (
         name,
-        location
+        location,
+        hold_minutes
       ),
       order_items (
         id,
@@ -102,6 +104,7 @@ export default async function OrderDetailPage({
     total_paise: order.total_paise,
     pickup_for_name: order.pickup_for_name,
     placed_at: order.placed_at,
+    ready_at: order.ready_at,
     collected_at: order.collected_at,
     requested_pickup_at: order.requested_pickup_at,
     estimated_ready_at: order.estimated_ready_at,

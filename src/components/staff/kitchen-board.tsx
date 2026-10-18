@@ -32,6 +32,7 @@ import {
   type StaffOrderStatus,
   getStaffBoardDataAction,
   transitionOrderAction,
+  sweepCanteenNoShowsAction,
 } from "@/server/actions/staff";
 import { OrderDetailDrawer } from "@/components/staff/order-detail-drawer";
 import { MenuItemImage } from "@/components/ui/menu-item-image";
@@ -98,9 +99,23 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
     ])
   );
 
+  // Debounced sweep trigger (at most once every 60 seconds)
+  const lastSweepRef = useRef<number>(0);
+  const triggerCanteenSweep = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastSweepRef.current < 60000) return;
+    lastSweepRef.current = now;
+    try {
+      await sweepCanteenNoShowsAction();
+    } catch {
+      // background sweep error non-blocking
+    }
+  }, []);
+
   // Debounced board refresh
   const refreshBoard = useCallback(async () => {
     setIsRefreshing(true);
+    triggerCanteenSweep();
     try {
       const data = await getStaffBoardDataAction();
       if (data.canteenId) {
@@ -135,7 +150,7 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
       setIsRefreshing(false);
       isInitialLoad.current = false;
     }
-  }, [audioEnabled]);
+  }, [audioEnabled, triggerCanteenSweep]);
 
   // Realtime subscription & 10s polling fallback
   useEffect(() => {

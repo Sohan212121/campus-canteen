@@ -26,6 +26,8 @@ import { MenuItemImage } from "@/components/ui/menu-item-image";
 import {
   placeOrderAction,
   getPickupEstimateAction,
+  getMyAccountStatusAction,
+  type AccountStatusData,
 } from "@/server/actions/order";
 
 interface CheckoutViewProps {
@@ -62,6 +64,17 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [networkErrorOccurred, setNetworkErrorOccurred] = useState(false);
   const [suggestedEarliestAt, setSuggestedEarliestAt] = useState<string | null>(null);
+
+  // Account Status & Limits (Strikes & Active Order Cap)
+  const [accountStatus, setAccountStatus] = useState<AccountStatusData | null>(null);
+
+  useEffect(() => {
+    getMyAccountStatusAction().then((res) => {
+      if (res.success && res.data) {
+        setAccountStatus(res.data);
+      }
+    });
+  }, []);
 
   // 1. Load fresh prices and verify item availability
   useEffect(() => {
@@ -221,6 +234,10 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
   }, [items, serverDetails]);
 
   const subtotalPaise = lineItems.reduce((acc, l) => acc + l.lineTotal, 0);
+  const totalItemCount = lineItems.reduce((acc, l) => acc + l.effectiveQty, 0);
+  const exceedsItemLimit = Boolean(accountStatus?.is_limited && totalItemCount > (accountStatus?.max_items_allowed ?? 2));
+  const exceedsPriceLimit = Boolean(accountStatus?.is_limited && subtotalPaise > (accountStatus?.max_order_paise ?? 20000));
+  const reachedActiveOrderLimit = Boolean(accountStatus && accountStatus.active_orders_count >= accountStatus.active_order_limit);
 
   // 5. Submit Order Handler
   const handlePlaceOrder = async () => {
@@ -268,6 +285,12 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
       }
 
       if (result.code === "TOO_MANY_ACTIVE_ORDERS") {
+        toast.error(result.error);
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (result.code === "ACCOUNT_LIMITED") {
         toast.error(result.error);
         setIsSubmitting(false);
         return;
@@ -354,6 +377,38 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
         </Link>
         <h1 className="text-xl font-bold tracking-tight">Checkout</h1>
       </div>
+
+      {/* Account Limit Proactive Alerts */}
+      {accountStatus?.is_limited && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-1.5 text-xs text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2 font-bold text-sm text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>Account Limited ({accountStatus.strikes} uncollected {accountStatus.strikes === 1 ? "order" : "orders"})</span>
+          </div>
+          <p className="leading-relaxed">
+            Due to uncollected orders within the 30-day window, your account is restricted to a maximum of {accountStatus.max_items_allowed ?? 2} items and {formatPaise(accountStatus.max_order_paise ?? 20000)} per order.
+          </p>
+          {(exceedsItemLimit || exceedsPriceLimit) && (
+            <p className="font-semibold text-destructive mt-1">
+              {exceedsItemLimit && `Your cart has ${totalItemCount} items (max ${accountStatus.max_items_allowed ?? 2}). `}
+              {exceedsPriceLimit && `Subtotal is ${formatPaise(subtotalPaise)} (max ${formatPaise(accountStatus.max_order_paise ?? 20000)}). `}
+              Please adjust your cart before proceeding.
+            </p>
+          )}
+        </div>
+      )}
+
+      {reachedActiveOrderLimit && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 space-y-1 text-xs text-destructive">
+          <div className="flex items-center gap-2 font-bold text-sm">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>Active Order Limit Reached</span>
+          </div>
+          <p className="leading-relaxed">
+            You currently have {accountStatus?.active_orders_count} active orders (limit is {accountStatus?.active_order_limit}). Please collect your ready orders or wait for them to finish before placing a new one.
+          </p>
+        </div>
+      )}
 
       {/* Network Error Retry Card */}
       {networkErrorOccurred && (
@@ -578,7 +633,14 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
         <Button
           type="button"
           onClick={handlePlaceOrder}
-          disabled={isSubmitting || isEstimating || (mode === "SCHEDULED" && !scheduledTimeString)}
+          disabled={
+            isSubmitting ||
+            isEstimating ||
+            (mode === "SCHEDULED" && !scheduledTimeString) ||
+            exceedsItemLimit ||
+            exceedsPriceLimit ||
+            reachedActiveOrderLimit
+          }
           className="w-full h-12 text-base font-semibold shadow-xs gap-2"
         >
           {isSubmitting ? (

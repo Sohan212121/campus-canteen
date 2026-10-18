@@ -17,6 +17,7 @@ const orderStatusSchema = z.enum([
   "COLLECTED",
   "CANCELLED",
   "REJECTED",
+  "NO_SHOW",
 ]);
 
 export type StaffOrderStatus = z.infer<typeof orderStatusSchema>;
@@ -179,6 +180,8 @@ function getOrderNotReadyMessage(status?: string | null): string {
       return "This order was cancelled. Do not hand it over.";
     case "REJECTED":
       return "This order was rejected. Do not hand it over.";
+    case "NO_SHOW":
+      return "This order expired past its pickup window and was marked as no-show. Do not hand it over.";
     case "PLACED":
     case "ACCEPTED":
     case "PREPARING":
@@ -194,6 +197,7 @@ function getOrderNotReadyMessage(status?: string | null): string {
 const COLLECTION_ERROR_MESSAGES: Record<string, string> = {
   ORDER_NOT_READY: "This order can't be collected right now.",
   ALREADY_COLLECTED: "Already collected. This order was handed over.",
+  PICKUP_EXPIRED: "This order has expired past the collection window.",
   INVALID_CODE: "Invalid or expired pickup code.",
   WRONG_PIN: "Incorrect 4-digit PIN.",
   PIN_LOCKED: "Too many failed PIN attempts. Order PIN is locked.",
@@ -235,6 +239,8 @@ export type PreviewCollectionResult = {
   code?: string;
   error?: string;
   status?: string;
+  order_id?: string;
+  order_code?: string;
   data?: CollectionCard;
 };
 
@@ -243,11 +249,13 @@ export type CollectOrderResult = {
   code?: string;
   error?: string;
   status?: string;
+  is_late_handover?: boolean;
   data?: {
     order_id: string;
     order_code: string;
     status: string;
     collected_at: string;
+    is_late_handover?: boolean;
   };
 };
 
@@ -303,6 +311,8 @@ export async function previewCollectionAction(input: {
       success: false,
       code,
       status,
+      order_id: typeof res?.order_id === "string" ? res.order_id : undefined,
+      order_code: typeof res?.order_code === "string" ? res.order_code : undefined,
       error: errorMsg,
     };
   }
@@ -402,12 +412,49 @@ export async function collectOrderAction(input: {
 
   return {
     success: true,
+    is_late_handover: Boolean(res.is_late_handover),
     data: {
       order_id: res.order_id as string,
       order_code: res.order_code as string,
       status: (res.status as string) || "COLLECTED",
       collected_at: (res.collected_at as string) || new Date().toISOString(),
+      is_late_handover: Boolean(res.is_late_handover),
     },
+  };
+}
+
+/**
+ * Triggers canteen sweep to transition expired READY orders to NO_SHOW.
+ */
+export async function sweepCanteenNoShowsAction(): Promise<{
+  success: boolean;
+  markedCount?: number;
+  error?: string;
+}> {
+  const profile = await requireRole(["staff", "admin"]);
+  const canteenId = await resolveStaffCanteen(profile);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("mark_no_shows", {
+    p_canteen_id: canteenId,
+  });
+
+  if (error) {
+    return {
+      success: false,
+      error: error.message || "Failed to sweep expired orders.",
+    };
+  }
+
+  const res = data as { ok?: boolean; marked_count?: number };
+  if (res && res.marked_count && res.marked_count > 0) {
+    revalidatePath("/staff");
+    revalidatePath("/staff/pickup");
+  }
+
+  return {
+    success: true,
+    markedCount: res?.marked_count ?? 0,
   };
 }
 

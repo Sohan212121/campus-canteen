@@ -46,6 +46,13 @@ export function PickupScannerView() {
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
+  // Late Handover Modal State (for orders expired within 6 hours)
+  const [expiredOrderId, setExpiredOrderId] = useState<string | null>(null);
+  const [expiredOrderCode, setExpiredOrderCode] = useState<string | null>(null);
+  const [showLateHandoverModal, setShowLateHandoverModal] = useState(false);
+  const [lateHandoverReason, setLateHandoverReason] = useState("");
+  const [isSubmittingLateHandover, setIsSubmittingLateHandover] = useState(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Stop camera tracks on unmount
@@ -68,6 +75,8 @@ export function PickupScannerView() {
     setErrorMessage(null);
     setErrorCode(null);
     setErrorStatus(null);
+    setExpiredOrderId(null);
+    setExpiredOrderCode(null);
     setIsVerifying(true);
     try {
       const res = await previewCollectionAction({
@@ -84,6 +93,10 @@ export function PickupScannerView() {
         toast.error(err);
         setVerifiedCard(null);
         setPaused(false);
+        if (res.code === "PICKUP_EXPIRED") {
+          setExpiredOrderId(res.order_id || null);
+          setExpiredOrderCode(res.order_code || null);
+        }
         if (code && res.code === "AMBER_REQUIRES_BOTH") {
           setLastScannedCode(code);
           setOrderCodeInput(orderRef);
@@ -93,6 +106,8 @@ export function PickupScannerView() {
         setVerifiedCard(res.data);
         setErrorCode(null);
         setErrorStatus(null);
+        setExpiredOrderId(null);
+        setExpiredOrderCode(null);
         if (code) setLastScannedCode(code);
         toast.success(`Order #${res.data.order_code} verified!`);
       }
@@ -187,6 +202,10 @@ export function PickupScannerView() {
     setErrorMessage(null);
     setErrorCode(null);
     setErrorStatus(null);
+    setExpiredOrderId(null);
+    setExpiredOrderCode(null);
+    setShowLateHandoverModal(false);
+    setLateHandoverReason("");
     setOrderCodeInput("");
     setCodeInput("");
     setPinInput("");
@@ -456,7 +475,9 @@ export function PickupScannerView() {
               errorStatus === "COLLECTED" ||
               errorStatus === "CANCELLED" ||
               errorStatus === "REJECTED" ||
-              errorCode === "ALREADY_COLLECTED";
+              errorStatus === "NO_SHOW" ||
+              errorCode === "ALREADY_COLLECTED" ||
+              errorCode === "PICKUP_EXPIRED";
 
             const isNotReadyStatus =
               !isStopStatus &&
@@ -472,6 +493,8 @@ export function PickupScannerView() {
               bannerTitle = "Order Cancelled";
             } else if (errorStatus === "REJECTED") {
               bannerTitle = "Order Rejected";
+            } else if (errorStatus === "NO_SHOW" || errorCode === "PICKUP_EXPIRED") {
+              bannerTitle = "Hold Window Expired (No-Show)";
             } else if (isNotReadyStatus) {
               bannerTitle = "Order Not Ready";
             } else if (errorCode === "PIN_LOCKED") {
@@ -525,6 +548,16 @@ export function PickupScannerView() {
                         className="mt-2 text-xs font-bold bg-background text-foreground hover:bg-muted"
                       >
                         Enter Student PIN
+                      </Button>
+                    )}
+                    {errorCode === "PICKUP_EXPIRED" && expiredOrderId && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowLateHandoverModal(true)}
+                        className="mt-2 text-xs font-bold border-destructive/40 bg-background text-destructive hover:bg-destructive/10"
+                      >
+                        Manual Late Handover (Within 6h)
                       </Button>
                     )}
                   </div>
@@ -695,6 +728,104 @@ export function PickupScannerView() {
             </Card>
           )}
         </>
+      )}
+
+      {/* Manual Late Handover Modal (Permitted within 6 hours of hold window expiry) */}
+      {showLateHandoverModal && expiredOrderId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in">
+          <Card className="w-full max-w-md border shadow-lg bg-card text-card-foreground">
+            <CardHeader className="pb-3 border-b border-border/40">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ShieldAlert className="h-5 w-5 text-amber-500" />
+                Manual Late Handover {expiredOrderCode ? `#${expiredOrderCode}` : ""}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4 text-xs">
+              <p className="text-muted-foreground leading-relaxed">
+                This order expired after the canteen hold window. Late handovers are permitted within 6 hours of expiry if the student arrived late at the counter. A reason (minimum 5 characters) is required and will be logged in the campus audit log.
+              </p>
+              <div className="space-y-1.5">
+                <label className="font-bold text-foreground">
+                  Reason for Late Handover (Min 5 chars):
+                </label>
+                <Input
+                  placeholder="e.g. Student arrived late, verified student ID"
+                  value={lateHandoverReason}
+                  onChange={(e) => setLateHandoverReason(e.target.value)}
+                  className="bg-background text-xs"
+                />
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="font-bold text-foreground">Payment Received As:</span>
+                <div className="inline-flex rounded-lg border bg-muted p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setCollectedWith("CASH")}
+                    className={`px-3 py-1 text-xs font-bold rounded-md ${
+                      collectedWith === "CASH" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    CASH
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCollectedWith("UPI")}
+                    className={`px-3 py-1 text-xs font-bold rounded-md ${
+                      collectedWith === "UPI" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    UPI
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isSubmittingLateHandover}
+                  onClick={() => setShowLateHandoverModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={isSubmittingLateHandover || lateHandoverReason.trim().length < 5}
+                  onClick={async () => {
+                    setIsSubmittingLateHandover(true);
+                    try {
+                      const res = await collectOrderAction({
+                        orderId: expiredOrderId,
+                        method: "MANUAL",
+                        reason: lateHandoverReason.trim(),
+                        collectedWith,
+                      });
+                      if (res.success && res.data) {
+                        toast.success(`Late handover confirmed for Order #${res.data.order_code}!`);
+                        resetState();
+                      } else {
+                        toast.error(res.error || "Late handover failed");
+                      }
+                    } catch {
+                      toast.error("Network error during late handover");
+                    } finally {
+                      setIsSubmittingLateHandover(false);
+                    }
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                >
+                  {isSubmittingLateHandover ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                      Handing Over...
+                    </>
+                  ) : (
+                    "Confirm Late Handover"
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );

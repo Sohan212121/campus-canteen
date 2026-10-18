@@ -68,6 +68,7 @@ export interface OrderDetailData {
   total_paise: number;
   pickup_for_name?: string | null;
   placed_at: string;
+  ready_at?: string | null;
   collected_at?: string | null;
   requested_pickup_at: string | null;
   estimated_ready_at: string;
@@ -75,6 +76,7 @@ export interface OrderDetailData {
   canteens: {
     name: string;
     location: string | null;
+    hold_minutes?: number;
   } | null;
   order_items: Array<{
     id: string;
@@ -104,6 +106,30 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
   const [pickupError, setPickupError] = useState<PickupErrorInfo | null>(null);
   const [isPickupLoading, setIsPickupLoading] = useState<boolean>(false);
   const [screenReaderAnnouncement, setScreenReaderAnnouncement] = useState<string>("");
+  const [holdRemainingSeconds, setHoldRemainingSeconds] = useState<number | null>(null);
+
+  // Hold window countdown effect
+  useEffect(() => {
+    if (order.status !== "READY") {
+      return;
+    }
+
+    const holdMins = order.canteens?.hold_minutes ?? 15;
+    const baseMs = order.ready_at ? new Date(order.ready_at).getTime() : new Date(order.pickup_window_end).getTime();
+    const expiryMs = order.ready_at ? baseMs + holdMins * 60 * 1000 : baseMs;
+
+    const tick = () => {
+      const remaining = Math.max(0, Math.floor((expiryMs - Date.now()) / 1000));
+      setHoldRemainingSeconds(remaining);
+      if (remaining === 0 && order.status === "READY") {
+        setOrder((prev) => ({ ...prev, status: "NO_SHOW" }));
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [order.status, order.ready_at, order.pickup_window_end, order.canteens?.hold_minutes]);
 
   // Refs for StrictMode, race conditions, request sequencing, and retries
   const isFetchingRef = useRef<boolean>(false);
@@ -128,6 +154,7 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
       setExpiresAtPerf(null);
       setPickupError(null);
       setIsPickupLoading(false);
+      setHoldRemainingSeconds(null);
     }
   }
 
@@ -626,13 +653,31 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
       {/* DYNAMIC SECURE SMART PICKUP QR & ROTATING CODE (SHOWN ONLY AT READY STATUS) */}
       {order.status === "READY" && (
         <section className="rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 via-card to-card p-5 text-center space-y-4 shadow-sm animate-in fade-in zoom-in-95 duration-200">
-          <div className="space-y-1">
-            <Badge className="bg-emerald-600 text-white font-bold uppercase tracking-wider text-[10px]">
-              Ready for Collection
-            </Badge>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Badge className="bg-emerald-600 text-white font-bold uppercase tracking-wider text-[10px]">
+                Ready for Collection
+              </Badge>
+              {holdRemainingSeconds !== null && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[10px] font-semibold gap-1",
+                    holdRemainingSeconds <= 300
+                      ? "border-destructive text-destructive bg-destructive/10 animate-pulse font-bold"
+                      : "border-amber-500/50 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+                  )}
+                >
+                  <Clock className="h-3 w-3" />
+                  {holdRemainingSeconds > 0
+                    ? `Collect within ${Math.floor(holdRemainingSeconds / 60)}m ${String(holdRemainingSeconds % 60).padStart(2, "0")}s`
+                    : "Hold window expired"}
+                </Badge>
+              )}
+            </div>
             <h2 className="text-base font-bold text-foreground">Dynamic Counter Pickup QR</h2>
             <p className="text-xs text-muted-foreground">
-              Show this QR code at the counter to collect your food.
+              Show this QR code at the counter to collect your food before the hold window ends.
             </p>
           </div>
 
@@ -773,6 +818,22 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
               <p className="text-xs">Generating secure pickup code...</p>
             </div>
           )}
+        </section>
+      )}
+
+      {/* NO_SHOW Alert Section */}
+      {order.status === "NO_SHOW" && (
+        <section className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5 text-center space-y-3 shadow-xs">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive mx-auto">
+            <AlertCircle className="h-6 w-6" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-base font-bold text-foreground">Pickup Window Expired (No-Show)</h2>
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+              This order was marked as a no-show because it was not collected within the canteen&apos;s hold window. 
+              Prepared items cannot be refunded. If you are already at the counter within 6 hours, ask canteen staff to perform a manual handover.
+            </p>
+          </div>
         </section>
       )}
 

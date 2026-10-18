@@ -1,7 +1,7 @@
 export const CANCELLABLE_STATUSES = ["PLACED"] as const;
 export type CancellableStatus = (typeof CANCELLABLE_STATUSES)[number];
 
-export const TERMINAL_STATUSES = ["CANCELLED", "REJECTED", "COLLECTED"] as const;
+export const TERMINAL_STATUSES = ["CANCELLED", "REJECTED", "COLLECTED", "NO_SHOW"] as const;
 export type TerminalStatus = (typeof TERMINAL_STATUSES)[number];
 
 export const ACTIVE_STATUSES = ["PLACED", "ACCEPTED", "PREPARING", "READY"] as const;
@@ -126,6 +126,12 @@ export function getStatusBadgeConfig(status: string): {
         label: "Rejected",
         variant: "destructive",
         className: "bg-destructive/10 text-destructive border-destructive/20",
+      };
+    case "NO_SHOW":
+      return {
+        label: "Expired / No-Show",
+        variant: "destructive",
+        className: "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20",
       };
     default:
       return {

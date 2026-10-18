@@ -134,11 +134,19 @@ export async function placeOrderAction(rawInput: unknown): Promise<PlaceOrderRes
       };
     }
 
+    if (rawMsg.includes("ACCOUNT_LIMITED")) {
+      return {
+        success: false,
+        code: "ACCOUNT_LIMITED",
+        error: rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Account restricted due to 3 or more no-shows. Limit: 2 items total and ₹200 max.",
+      };
+    }
+
     if (rawMsg.includes("TOO_MANY_ACTIVE_ORDERS")) {
       return {
         success: false,
         code: "TOO_MANY_ACTIVE_ORDERS",
-        error: "You already have 3 active orders waiting or in preparation. Please collect them first.",
+        error: rawMsg.replace(/^[A-Z_]+:\s*/, "") || "You have reached the maximum active orders limit.",
       };
     }
 
@@ -524,4 +532,40 @@ export async function reportUnauthorizedCollectionAction(
 
   revalidatePath(`/orders/${parsedId.data}`, "page");
   return { success: true };
+}
+
+export type AccountStatusData = {
+  strikes: number;
+  is_limited: boolean;
+  active_orders_count: number;
+  active_order_limit: number;
+  can_order: boolean;
+  max_items_allowed: number | null;
+  max_order_paise: number | null;
+};
+
+export type StudentAccountStatus = AccountStatusData;
+
+export async function getMyAccountStatusAction(): Promise<{
+  success: boolean;
+  code?: string;
+  error?: string;
+  data?: AccountStatusData;
+}> {
+  await requireRole(["student"]);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_my_account_status");
+
+  if (error) {
+    return {
+      success: false,
+      code: error.message.split(":")[0]?.trim() || "ERROR",
+      error: error.message.replace(/^[A-Z_]+:\s*/, "") || "Failed to fetch account status.",
+    };
+  }
+
+  return {
+    success: true,
+    data: data as StudentAccountStatus,
+  };
 }

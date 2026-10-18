@@ -37,6 +37,7 @@ const statusOptions = [
   "COLLECTED",
   "CANCELLED",
   "REJECTED",
+  "NO_SHOW",
 ];
 
 export function OrdersView({ initialData }: OrdersViewProps) {
@@ -99,6 +100,8 @@ export function OrdersView({ initialData }: OrdersViewProps) {
         return <Badge variant="destructive">Cancelled</Badge>;
       case "REJECTED":
         return <Badge variant="destructive">Rejected</Badge>;
+      case "NO_SHOW":
+        return <Badge variant="destructive" className="bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20">No-Show</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }

@@ -93,8 +93,8 @@ export function SettingsView({ canteen }: SettingsViewProps) {
     }
 
     const holdNum = parseInt(holdMinutes, 10);
-    if (isNaN(holdNum) || holdNum < 0 || holdNum > 120) {
-      toast.error("Hold window must be between 0 and 120 minutes.");
+    if (isNaN(holdNum) || holdNum < 5 || holdNum > 120) {
+      toast.error("Hold window must be between 5 and 120 minutes.");
       return;
     }
 
@@ -273,14 +273,14 @@ export function SettingsView({ canteen }: SettingsViewProps) {
                   <label className="text-xs font-semibold">Hold Window (Minutes)</label>
                   <Input
                     type="number"
-                    min="0"
+                    min="5"
                     max="120"
                     required
                     value={holdMinutes}
                     onChange={(e) => setHoldMinutes(e.target.value)}
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Pickup window food is kept warm (0-120m).
+                    Duration food is kept warm after readiness before expiring as NO_SHOW (5-120m).
                   </p>
                 </div>
               </div>
