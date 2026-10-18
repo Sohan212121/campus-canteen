@@ -43,6 +43,7 @@ export function PickupScannerView() {
   const [verifiedCard, setVerifiedCard] = useState<CollectionCard | null>(null);
   const [lastScannedCode, setLastScannedCode] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -64,6 +65,7 @@ export function PickupScannerView() {
 
   const handlePreview = async (orderRef: string, code?: string, pin?: string) => {
     setErrorMessage(null);
+    setErrorCode(null);
     setIsVerifying(true);
     try {
       const res = await previewCollectionAction({
@@ -74,12 +76,19 @@ export function PickupScannerView() {
 
       if (!res.success || !res.data) {
         const err = res.error || "Verification failed";
+        setErrorCode(res.code || null);
         setErrorMessage(err);
         toast.error(err);
         setVerifiedCard(null);
         setPaused(false);
+        if (code && res.code === "AMBER_REQUIRES_BOTH") {
+          setLastScannedCode(code);
+          setOrderCodeInput(orderRef);
+          setCodeInput(code);
+        }
       } else {
         setVerifiedCard(res.data);
+        setErrorCode(null);
         if (code) setLastScannedCode(code);
         toast.success(`Order #${res.data.order_code} verified!`);
       }
@@ -167,6 +176,7 @@ export function PickupScannerView() {
   const resetState = () => {
     setVerifiedCard(null);
     setErrorMessage(null);
+    setErrorCode(null);
     setOrderCodeInput("");
     setCodeInput("");
     setPinInput("");
@@ -333,9 +343,9 @@ export function PickupScannerView() {
                 Order Items ({verifiedCard.items.length})
               </h4>
               <div className="rounded-xl border border-border/40 divide-y divide-border/30 bg-background/50 overflow-hidden text-sm">
-                {verifiedCard.items.map((item) => (
+                {verifiedCard.items.map((item, index) => (
                   <div
-                    key={item.id}
+                    key={`${index}-${item.name}`}
                     className="flex items-center justify-between p-2.5"
                   >
                     <div>
@@ -440,6 +450,16 @@ export function PickupScannerView() {
                   <p className="text-xs text-destructive/90 mt-0.5">
                     {errorMessage}
                   </p>
+                  {errorCode === "AMBER_REQUIRES_BOTH" && mode === "camera" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setMode("manual")}
+                      className="mt-2 text-xs font-bold bg-background text-foreground hover:bg-muted"
+                    >
+                      Enter Student PIN
+                    </Button>
+                  )}
                 </div>
               </div>
               <Button

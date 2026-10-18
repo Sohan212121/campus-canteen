@@ -169,6 +169,29 @@ export async function transitionOrderAction(
 }
 
 /**
+ * Error messages mapped directly from preview_collection and collect_order database functions.
+ */
+const COLLECTION_ERROR_MESSAGES: Record<string, string> = {
+  ORDER_NOT_READY: "Order is not marked ready yet.",
+  ALREADY_COLLECTED: "Order has already been collected.",
+  INVALID_CODE: "Invalid or expired pickup code.",
+  WRONG_PIN: "Incorrect 4-digit PIN.",
+  PIN_LOCKED: "Too many failed PIN attempts. Order PIN is locked.",
+  AMBER_REQUIRES_BOTH: "Orders over 5 items or ₹500 require both the rotating QR code and PIN.",
+  RATE_LIMITED_STAFF: "Staff collection rate limit reached (10 failed attempts in 5 minutes). Please wait.",
+  RATE_LIMITED_ORDER: "Order collection rate limit reached (10 failed attempts in 10 minutes). Please wait.",
+  MANUAL_REASON_REQUIRED: "Manual collection requires a reason of at least 5 characters.",
+  MANUAL_LIMIT: "Manual collection limit reached (maximum 10 per 24 hours per staff).",
+  NO_PICKUP_SECRET: "No security credentials found for this order.",
+  // Legacy / fallback mappings
+  RATE_LIMITED: "Too many failed attempts. Please wait before trying again.",
+  INVALID_PIN: "Incorrect 4-digit PIN.",
+  AMBER_REQUIRES_CODE_AND_PIN: "Orders over 5 items or ₹500 require both the rotating QR code and PIN.",
+  SECRET_NOT_FOUND: "No security credentials found for this order.",
+  CODE_OR_PIN_REQUIRED: "Please enter a valid 6-digit code or 4-digit PIN.",
+};
+
+/**
  * Verifies counter pickup token for ready orders through public.verify_pickup.
  */
 export type CollectionCard = {
@@ -178,9 +201,9 @@ export type CollectionCard = {
   college_id_last4: string;
   pickup_for_name?: string | null;
   total_paise: number;
+  total_items?: number;
   is_amber: boolean;
   items: Array<{
-    id: string;
     name: string;
     quantity: number;
     unit_price_paise: number;
@@ -201,14 +224,15 @@ export type CollectOrderResult = {
   data?: {
     order_id: string;
     order_code: string;
-    first_name: string;
-    college_id_last4: string;
+    status: string;
+    collected_at: string;
+    first_name?: string;
+    college_id_last4?: string;
     pickup_for_name?: string | null;
-    total_paise: number;
-    collected_with: string;
-    collection_method: string;
-    items: Array<{
-      id: string;
+    total_paise?: number;
+    collected_with?: string;
+    collection_method?: string;
+    items?: Array<{
       name: string;
       quantity: number;
       unit_price_paise: number;
@@ -246,28 +270,17 @@ export async function previewCollectionAction(input: {
     return {
       success: false,
       code,
-      error: rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Verification failed.",
+      error: (code && COLLECTION_ERROR_MESSAGES[code]) || rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Verification failed.",
     };
   }
 
   const res = data as { ok: boolean; error?: string; [key: string]: unknown };
   if (!res || !res.ok) {
-    const errorMap: Record<string, string> = {
-      RATE_LIMITED: "Too many failed attempts. Please wait before trying again.",
-      PIN_LOCKED: "Too many failed PIN attempts. Order PIN is locked.",
-      INVALID_CODE: "Invalid or expired pickup code.",
-      INVALID_PIN: "Incorrect 4-digit PIN.",
-      PIN_REQUIRED: "PIN verification required for this high-value or bulk order.",
-      AMBER_REQUIRES_CODE_AND_PIN: "Orders over 5 items or ₹500 require both the rotating QR code and PIN.",
-      ORDER_NOT_READY: "Order is not marked ready yet.",
-      ALREADY_COLLECTED: "Order has already been collected.",
-      SECRET_NOT_FOUND: "No security credentials found for this order.",
-      CODE_OR_PIN_REQUIRED: "Please enter a valid 6-digit code or 4-digit PIN.",
-    };
+    const code = res?.error || "VERIFY_FAILED";
     return {
       success: false,
-      code: res?.error || "VERIFY_FAILED",
-      error: (res?.error && errorMap[res.error]) || res?.error || "Verification failed.",
+      code,
+      error: (res?.error && COLLECTION_ERROR_MESSAGES[res.error]) || res?.error || "Verification failed.",
     };
   }
 
@@ -280,6 +293,7 @@ export async function previewCollectionAction(input: {
       college_id_last4: res.college_id_last4 as string,
       pickup_for_name: (res.pickup_for_name as string) || null,
       total_paise: Number(res.total_paise || 0),
+      total_items: Number(res.total_items || 0),
       is_amber: Boolean(res.is_amber),
       items: (res.items as CollectionCard["items"]) || [],
     },
@@ -333,27 +347,17 @@ export async function collectOrderAction(input: {
     return {
       success: false,
       code,
-      error: rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Collection failed.",
+      error: (code && COLLECTION_ERROR_MESSAGES[code]) || rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Collection failed.",
     };
   }
 
   const res = data as { ok: boolean; error?: string; [key: string]: unknown };
   if (!res || !res.ok) {
-    const errorMap: Record<string, string> = {
-      RATE_LIMITED: "Too many failed attempts. Please wait before trying again.",
-      PIN_LOCKED: "Too many failed PIN attempts. Order PIN is locked.",
-      INVALID_CODE: "Invalid or expired pickup code.",
-      INVALID_PIN: "Incorrect 4-digit PIN.",
-      PIN_REQUIRED: "PIN verification required for this high-value or bulk order.",
-      AMBER_REQUIRES_CODE_AND_PIN: "Orders over 5 items or ₹500 require both the rotating QR code and PIN.",
-      MANUAL_LIMIT: "Manual collection limit reached (maximum 10 per 24 hours per staff).",
-      ORDER_NOT_READY: "Order is not marked ready yet.",
-      ALREADY_COLLECTED: "Order has already been collected.",
-    };
+    const code = res?.error || "COLLECT_FAILED";
     return {
       success: false,
-      code: res?.error || "COLLECT_FAILED",
-      error: (res?.error && errorMap[res.error]) || res?.error || "Collection failed.",
+      code,
+      error: (res?.error && COLLECTION_ERROR_MESSAGES[res.error]) || res?.error || "Collection failed.",
     };
   }
 
@@ -366,13 +370,15 @@ export async function collectOrderAction(input: {
     data: {
       order_id: res.order_id as string,
       order_code: res.order_code as string,
-      first_name: res.first_name as string,
-      college_id_last4: res.college_id_last4 as string,
-      pickup_for_name: (res.pickup_for_name as string) || null,
-      total_paise: Number(res.total_paise || 0),
-      collected_with: res.collected_with as string,
-      collection_method: res.collection_method as string,
-      items: (res.items as CollectOrderResult["data"] extends { items: infer T } ? T : never) || [],
+      status: (res.status as string) || "COLLECTED",
+      collected_at: (res.collected_at as string) || new Date().toISOString(),
+      ...(res.first_name ? { first_name: res.first_name as string } : {}),
+      ...(res.college_id_last4 ? { college_id_last4: res.college_id_last4 as string } : {}),
+      ...(res.pickup_for_name !== undefined ? { pickup_for_name: res.pickup_for_name as string | null } : {}),
+      ...(res.total_paise !== undefined ? { total_paise: Number(res.total_paise) } : {}),
+      ...(res.collected_with ? { collected_with: res.collected_with as string } : {}),
+      ...(res.collection_method ? { collection_method: res.collection_method as string } : {}),
+      ...(Array.isArray(res.items) ? { items: res.items as CollectionCard["items"] } : {}),
     },
   };
 }

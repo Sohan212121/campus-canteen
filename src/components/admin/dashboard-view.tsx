@@ -219,7 +219,7 @@ export function DashboardView({ initialStats, initialPreset }: DashboardViewProp
             <div className="divide-y divide-border/40">
               {stats.top_items.map((item, idx) => (
                 <div
-                  key={idx}
+                  key={`${item.name}-${idx}`}
                   className="flex items-center justify-between py-2.5 text-sm"
                 >
                   <div className="flex items-center gap-3">

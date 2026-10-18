@@ -126,7 +126,35 @@ describe("Staff Operations & Collection Core", () => {
       expect(result.error).toContain("Too many failed attempts");
     });
 
-    it("returns formatted scan card on preview match", async () => {
+    it("maps SQL collection error codes cleanly", async () => {
+      const errorCases = [
+        { code: "RATE_LIMITED_STAFF", expected: "Staff collection rate limit reached" },
+        { code: "RATE_LIMITED_ORDER", expected: "Order collection rate limit reached" },
+        { code: "AMBER_REQUIRES_BOTH", expected: "require both the rotating QR code and PIN" },
+        { code: "PIN_LOCKED", expected: "Order PIN is locked" },
+        { code: "NO_PICKUP_SECRET", expected: "No security credentials found" },
+        { code: "ORDER_NOT_READY", expected: "Order is not marked ready yet" },
+        { code: "INVALID_CODE", expected: "Invalid or expired pickup code" },
+      ];
+
+      for (const { code, expected } of errorCases) {
+        mockRpc.mockResolvedValueOnce({
+          data: { ok: false, error: code },
+          error: null,
+        });
+
+        const res = await previewCollectionAction({
+          orderRef: "CN10001",
+          code: "123456",
+        });
+
+        expect(res.success).toBe(false);
+        expect(res.code).toBe(code);
+        expect(res.error).toContain(expected);
+      }
+    });
+
+    it("returns formatted scan card on preview match with items without id", async () => {
       mockRpc.mockResolvedValue({
         data: {
           ok: true,
@@ -136,9 +164,10 @@ describe("Staff Operations & Collection Core", () => {
           college_id_last4: "8899",
           pickup_for_name: "Anita",
           total_paise: 12000,
+          total_items: 2,
           is_amber: false,
           items: [
-            { id: "i1", name: "Dosa", quantity: 2, unit_price_paise: 6000 },
+            { name: "Dosa", quantity: 2, unit_price_paise: 6000 },
           ],
         },
         error: null,
@@ -153,6 +182,9 @@ describe("Staff Operations & Collection Core", () => {
       expect(result.data?.first_name).toBe("Rahul");
       expect(result.data?.college_id_last4).toBe("8899");
       expect(result.data?.is_amber).toBe(false);
+      expect(result.data?.total_items).toBe(2);
+      expect(result.data?.items[0].name).toBe("Dosa");
+      expect(result.data?.items[0]).not.toHaveProperty("id");
     });
   });
 
@@ -181,35 +213,81 @@ describe("Staff Operations & Collection Core", () => {
       expect(result.error).toContain("at least 5 characters");
     });
 
-    it("maps ok:false AMBER_REQUIRES_CODE_AND_PIN", async () => {
-      mockRpc.mockResolvedValue({
-        data: { ok: false, error: "AMBER_REQUIRES_CODE_AND_PIN" },
+    it("maps ok:false AMBER_REQUIRES_BOTH and WRONG_PIN from SQL", async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { ok: false, error: "AMBER_REQUIRES_BOTH" },
         error: null,
       });
 
-      const result = await collectOrderAction({
+      const resAmber = await collectOrderAction({
         orderId: validOrderId,
         collectedWith: "CASH",
         method: "PIN",
         pin: "1234",
       });
 
-      expect(result.success).toBe(false);
-      expect(result.code).toBe("AMBER_REQUIRES_CODE_AND_PIN");
+      expect(resAmber.success).toBe(false);
+      expect(resAmber.code).toBe("AMBER_REQUIRES_BOTH");
+      expect(resAmber.error).toContain("require both the rotating QR code and PIN");
+
+      mockRpc.mockResolvedValueOnce({
+        data: { ok: false, error: "WRONG_PIN" },
+        error: null,
+      });
+
+      const resPin = await collectOrderAction({
+        orderId: validOrderId,
+        collectedWith: "CASH",
+        method: "PIN",
+        pin: "9999",
+      });
+
+      expect(resPin.success).toBe(false);
+      expect(resPin.code).toBe("WRONG_PIN");
+      expect(resPin.error).toContain("Incorrect 4-digit PIN");
     });
 
-    it("successfully collects order and revalidates paths", async () => {
+    it("maps manual limits and already collected error codes cleanly", async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { ok: false, error: "ALREADY_COLLECTED" },
+        error: null,
+      });
+
+      const resAlready = await collectOrderAction({
+        orderId: validOrderId,
+        collectedWith: "CASH",
+        method: "SCAN",
+        code: "123456",
+      });
+      expect(resAlready.success).toBe(false);
+      expect(resAlready.code).toBe("ALREADY_COLLECTED");
+      expect(resAlready.error).toContain("already been collected");
+
+      mockRpc.mockResolvedValueOnce({
+        data: { ok: false, error: "MANUAL_LIMIT" },
+        error: null,
+      });
+
+      const resManual = await collectOrderAction({
+        orderId: validOrderId,
+        collectedWith: "CASH",
+        method: "MANUAL",
+        reason: "Valid override reason",
+      });
+      expect(resManual.success).toBe(false);
+      expect(resManual.code).toBe("MANUAL_LIMIT");
+      expect(resManual.error).toContain("Manual collection limit reached");
+    });
+
+    it("successfully collects order and returns SQL shape (status and collected_at)", async () => {
+      const nowIso = new Date().toISOString();
       mockRpc.mockResolvedValue({
         data: {
           ok: true,
           order_id: validOrderId,
           order_code: "CN10001",
-          first_name: "Rahul",
-          college_id_last4: "8899",
-          total_paise: 12000,
-          collected_with: "CASH",
-          collection_method: "SCAN",
-          items: [],
+          status: "COLLECTED",
+          collected_at: nowIso,
         },
         error: null,
       });
@@ -222,7 +300,10 @@ describe("Staff Operations & Collection Core", () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data?.collected_with).toBe("CASH");
+      expect(result.data?.order_id).toBe(validOrderId);
+      expect(result.data?.order_code).toBe("CN10001");
+      expect(result.data?.status).toBe("COLLECTED");
+      expect(result.data?.collected_at).toBe(nowIso);
     });
   });
 
