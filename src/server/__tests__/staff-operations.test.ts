@@ -133,7 +133,7 @@ describe("Staff Operations & Collection Core", () => {
         { code: "AMBER_REQUIRES_BOTH", expected: "require both the rotating QR code and PIN" },
         { code: "PIN_LOCKED", expected: "Order PIN is locked" },
         { code: "NO_PICKUP_SECRET", expected: "No security credentials found" },
-        { code: "ORDER_NOT_READY", expected: "Order is not marked ready yet" },
+        { code: "ORDER_NOT_READY", expected: "This order can't be collected right now" },
         { code: "INVALID_CODE", expected: "Invalid or expired pickup code" },
       ];
 
@@ -151,6 +151,68 @@ describe("Staff Operations & Collection Core", () => {
         expect(res.success).toBe(false);
         expect(res.code).toBe(code);
         expect(res.error).toContain(expected);
+      }
+    });
+
+    it("maps ORDER_NOT_READY and ALREADY_COLLECTED based on status cleanly", async () => {
+      const statusCases = [
+        {
+          error: "ORDER_NOT_READY",
+          status: "COLLECTED",
+          expected: "Already collected. This order was handed over.",
+        },
+        {
+          error: "ORDER_NOT_READY",
+          status: "CANCELLED",
+          expected: "This order was cancelled. Do not hand it over.",
+        },
+        {
+          error: "ORDER_NOT_READY",
+          status: "REJECTED",
+          expected: "This order was rejected. Do not hand it over.",
+        },
+        {
+          error: "ORDER_NOT_READY",
+          status: "PLACED",
+          expected: "Not ready yet. Mark it ready on the kitchen board first.",
+        },
+        {
+          error: "ORDER_NOT_READY",
+          status: "ACCEPTED",
+          expected: "Not ready yet. Mark it ready on the kitchen board first.",
+        },
+        {
+          error: "ORDER_NOT_READY",
+          status: "PREPARING",
+          expected: "Not ready yet. Mark it ready on the kitchen board first.",
+        },
+        {
+          error: "ORDER_NOT_READY",
+          status: "CUSTOM_UNKNOWN",
+          expected: "This order can't be collected right now.",
+        },
+        {
+          error: "ALREADY_COLLECTED",
+          status: undefined,
+          expected: "Already collected. This order was handed over.",
+        },
+      ];
+
+      for (const { error, status, expected } of statusCases) {
+        mockRpc.mockResolvedValueOnce({
+          data: { ok: false, error, status },
+          error: null,
+        });
+
+        const res = await previewCollectionAction({
+          orderRef: "CN10001",
+          code: "123456",
+        });
+
+        expect(res.success).toBe(false);
+        expect(res.code).toBe(error);
+        expect(res.error).toBe(expected);
+        expect(res.status).toBe(status || (error === "ALREADY_COLLECTED" ? "COLLECTED" : undefined));
       }
     });
 
@@ -261,7 +323,40 @@ describe("Staff Operations & Collection Core", () => {
       });
       expect(resAlready.success).toBe(false);
       expect(resAlready.code).toBe("ALREADY_COLLECTED");
-      expect(resAlready.error).toContain("already been collected");
+      expect(resAlready.error).toBe("Already collected. This order was handed over.");
+      expect(resAlready.status).toBe("COLLECTED");
+
+      mockRpc.mockResolvedValueOnce({
+        data: { ok: false, error: "ORDER_NOT_READY", status: "CANCELLED" },
+        error: null,
+      });
+
+      const resCancelled = await collectOrderAction({
+        orderId: validOrderId,
+        collectedWith: "CASH",
+        method: "SCAN",
+        code: "123456",
+      });
+      expect(resCancelled.success).toBe(false);
+      expect(resCancelled.code).toBe("ORDER_NOT_READY");
+      expect(resCancelled.error).toBe("This order was cancelled. Do not hand it over.");
+      expect(resCancelled.status).toBe("CANCELLED");
+
+      mockRpc.mockResolvedValueOnce({
+        data: { ok: false, error: "ORDER_NOT_READY", status: "PREPARING" },
+        error: null,
+      });
+
+      const resPreparing = await collectOrderAction({
+        orderId: validOrderId,
+        collectedWith: "CASH",
+        method: "SCAN",
+        code: "123456",
+      });
+      expect(resPreparing.success).toBe(false);
+      expect(resPreparing.code).toBe("ORDER_NOT_READY");
+      expect(resPreparing.error).toBe("Not ready yet. Mark it ready on the kitchen board first.");
+      expect(resPreparing.status).toBe("PREPARING");
 
       mockRpc.mockResolvedValueOnce({
         data: { ok: false, error: "MANUAL_LIMIT" },

@@ -169,11 +169,31 @@ export async function transitionOrderAction(
 }
 
 /**
+ * Status-based friendly error messages for uncollected or not-ready orders.
+ */
+function getOrderNotReadyMessage(status?: string | null): string {
+  switch (status) {
+    case "COLLECTED":
+      return "Already collected. This order was handed over.";
+    case "CANCELLED":
+      return "This order was cancelled. Do not hand it over.";
+    case "REJECTED":
+      return "This order was rejected. Do not hand it over.";
+    case "PLACED":
+    case "ACCEPTED":
+    case "PREPARING":
+      return "Not ready yet. Mark it ready on the kitchen board first.";
+    default:
+      return "This order can't be collected right now.";
+  }
+}
+
+/**
  * Error messages mapped directly from preview_collection and collect_order database functions.
  */
 const COLLECTION_ERROR_MESSAGES: Record<string, string> = {
-  ORDER_NOT_READY: "Order is not marked ready yet.",
-  ALREADY_COLLECTED: "Order has already been collected.",
+  ORDER_NOT_READY: "This order can't be collected right now.",
+  ALREADY_COLLECTED: "Already collected. This order was handed over.",
   INVALID_CODE: "Invalid or expired pickup code.",
   WRONG_PIN: "Incorrect 4-digit PIN.",
   PIN_LOCKED: "Too many failed PIN attempts. Order PIN is locked.",
@@ -214,6 +234,7 @@ export type PreviewCollectionResult = {
   success: boolean;
   code?: string;
   error?: string;
+  status?: string;
   data?: CollectionCard;
 };
 
@@ -221,6 +242,7 @@ export type CollectOrderResult = {
   success: boolean;
   code?: string;
   error?: string;
+  status?: string;
   data?: {
     order_id: string;
     order_code: string;
@@ -267,20 +289,32 @@ export async function previewCollectionAction(input: {
   if (error) {
     const rawMsg = error.message || "";
     const code = rawMsg.split(":")[0]?.trim() || "ERROR";
+    const status = code === "ALREADY_COLLECTED" ? "COLLECTED" : undefined;
+    const errorMsg =
+      code === "ORDER_NOT_READY" || code === "ALREADY_COLLECTED"
+        ? getOrderNotReadyMessage(status)
+        : (code && COLLECTION_ERROR_MESSAGES[code]) || rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Verification failed.";
     return {
       success: false,
       code,
-      error: (code && COLLECTION_ERROR_MESSAGES[code]) || rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Verification failed.",
+      status,
+      error: errorMsg,
     };
   }
 
-  const res = data as { ok: boolean; error?: string; [key: string]: unknown };
+  const res = data as { ok: boolean; error?: string; status?: string; [key: string]: unknown };
   if (!res || !res.ok) {
     const code = res?.error || "VERIFY_FAILED";
+    const status = typeof res?.status === "string" ? res.status : code === "ALREADY_COLLECTED" ? "COLLECTED" : undefined;
+    const errorMsg =
+      code === "ORDER_NOT_READY" || code === "ALREADY_COLLECTED"
+        ? getOrderNotReadyMessage(status)
+        : (res?.error && COLLECTION_ERROR_MESSAGES[res.error]) || res?.error || "Verification failed.";
     return {
       success: false,
       code,
-      error: (res?.error && COLLECTION_ERROR_MESSAGES[res.error]) || res?.error || "Verification failed.",
+      status,
+      error: errorMsg,
     };
   }
 
@@ -344,20 +378,32 @@ export async function collectOrderAction(input: {
   if (error) {
     const rawMsg = error.message || "";
     const code = rawMsg.split(":")[0]?.trim() || "ERROR";
+    const status = code === "ALREADY_COLLECTED" ? "COLLECTED" : undefined;
+    const errorMsg =
+      code === "ORDER_NOT_READY" || code === "ALREADY_COLLECTED"
+        ? getOrderNotReadyMessage(status)
+        : (code && COLLECTION_ERROR_MESSAGES[code]) || rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Collection failed.";
     return {
       success: false,
       code,
-      error: (code && COLLECTION_ERROR_MESSAGES[code]) || rawMsg.replace(/^[A-Z_]+:\s*/, "") || "Collection failed.",
+      status,
+      error: errorMsg,
     };
   }
 
-  const res = data as { ok: boolean; error?: string; [key: string]: unknown };
+  const res = data as { ok: boolean; error?: string; status?: string; [key: string]: unknown };
   if (!res || !res.ok) {
     const code = res?.error || "COLLECT_FAILED";
+    const status = typeof res?.status === "string" ? res.status : code === "ALREADY_COLLECTED" ? "COLLECTED" : undefined;
+    const errorMsg =
+      code === "ORDER_NOT_READY" || code === "ALREADY_COLLECTED"
+        ? getOrderNotReadyMessage(status)
+        : (res?.error && COLLECTION_ERROR_MESSAGES[res.error]) || res?.error || "Collection failed.";
     return {
       success: false,
       code,
-      error: (res?.error && COLLECTION_ERROR_MESSAGES[res.error]) || res?.error || "Collection failed.",
+      status,
+      error: errorMsg,
     };
   }
 

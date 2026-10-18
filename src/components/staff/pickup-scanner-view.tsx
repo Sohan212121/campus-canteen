@@ -44,6 +44,7 @@ export function PickupScannerView() {
   const [lastScannedCode, setLastScannedCode] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -66,6 +67,7 @@ export function PickupScannerView() {
   const handlePreview = async (orderRef: string, code?: string, pin?: string) => {
     setErrorMessage(null);
     setErrorCode(null);
+    setErrorStatus(null);
     setIsVerifying(true);
     try {
       const res = await previewCollectionAction({
@@ -77,6 +79,7 @@ export function PickupScannerView() {
       if (!res.success || !res.data) {
         const err = res.error || "Verification failed";
         setErrorCode(res.code || null);
+        setErrorStatus(res.status || null);
         setErrorMessage(err);
         toast.error(err);
         setVerifiedCard(null);
@@ -89,6 +92,7 @@ export function PickupScannerView() {
       } else {
         setVerifiedCard(res.data);
         setErrorCode(null);
+        setErrorStatus(null);
         if (code) setLastScannedCode(code);
         toast.success(`Order #${res.data.order_code} verified!`);
       }
@@ -164,7 +168,12 @@ export function PickupScannerView() {
       } else {
         const err = res.error || "Collection failed";
         setErrorMessage(err);
+        setErrorCode(res.code || null);
+        setErrorStatus(res.status || (res.code === "ALREADY_COLLECTED" ? "COLLECTED" : null));
         toast.error(err);
+        if (res.code === "ALREADY_COLLECTED" || res.code === "ORDER_NOT_READY") {
+          setVerifiedCard(null);
+        }
       }
     } catch {
       toast.error("Network error during collection");
@@ -177,6 +186,7 @@ export function PickupScannerView() {
     setVerifiedCard(null);
     setErrorMessage(null);
     setErrorCode(null);
+    setErrorStatus(null);
     setOrderCodeInput("");
     setCodeInput("");
     setPinInput("");
@@ -441,37 +451,85 @@ export function PickupScannerView() {
       ) : (
         <>
           {/* Error Banner */}
-          {errorMessage && (
-            <div className="p-4 rounded-xl border border-destructive/40 bg-destructive/10 text-destructive flex items-start justify-between gap-3 animate-in fade-in">
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="font-semibold">Verification Failed</p>
-                  <p className="text-xs text-destructive/90 mt-0.5">
-                    {errorMessage}
-                  </p>
-                  {errorCode === "AMBER_REQUIRES_BOTH" && mode === "camera" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setMode("manual")}
-                      className="mt-2 text-xs font-bold bg-background text-foreground hover:bg-muted"
-                    >
-                      Enter Student PIN
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={resetState}
-                className="min-h-[40px] px-3 text-xs font-bold text-destructive hover:bg-destructive/10"
+          {errorMessage && (() => {
+            const isStopStatus =
+              errorStatus === "COLLECTED" ||
+              errorStatus === "CANCELLED" ||
+              errorStatus === "REJECTED" ||
+              errorCode === "ALREADY_COLLECTED";
+
+            const isNotReadyStatus =
+              !isStopStatus &&
+              (errorCode === "ORDER_NOT_READY" ||
+                errorStatus === "PLACED" ||
+                errorStatus === "ACCEPTED" ||
+                errorStatus === "PREPARING");
+
+            let bannerTitle = "Verification Failed";
+            if (errorStatus === "COLLECTED" || errorCode === "ALREADY_COLLECTED") {
+              bannerTitle = "Already Collected";
+            } else if (errorStatus === "CANCELLED") {
+              bannerTitle = "Order Cancelled";
+            } else if (errorStatus === "REJECTED") {
+              bannerTitle = "Order Rejected";
+            } else if (isNotReadyStatus) {
+              bannerTitle = "Order Not Ready";
+            }
+
+            return (
+              <div
+                className={`p-4 rounded-xl border flex items-start justify-between gap-3 animate-in fade-in ${
+                  isNotReadyStatus
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200"
+                    : "border-destructive/40 bg-destructive/10 text-destructive"
+                }`}
               >
-                Try Again
-              </Button>
-            </div>
-          )}
+                <div className="flex items-start gap-2.5">
+                  {isStopStatus ? (
+                    <ShieldAlert className="h-5 w-5 shrink-0 mt-0.5 text-destructive" />
+                  ) : isNotReadyStatus ? (
+                    <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-destructive" />
+                  )}
+                  <div className="text-sm">
+                    <p className="font-semibold">{bannerTitle}</p>
+                    <p
+                      className={`text-xs mt-0.5 ${
+                        isNotReadyStatus
+                          ? "text-amber-800 dark:text-amber-300"
+                          : "text-destructive/90 font-medium"
+                      }`}
+                    >
+                      {errorMessage}
+                    </p>
+                    {errorCode === "AMBER_REQUIRES_BOTH" && mode === "camera" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setMode("manual")}
+                        className="mt-2 text-xs font-bold bg-background text-foreground hover:bg-muted"
+                      >
+                        Enter Student PIN
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={resetState}
+                  className={`min-h-[40px] px-3 text-xs font-bold ${
+                    isNotReadyStatus
+                      ? "border-amber-500/40 text-amber-800 dark:text-amber-200 hover:bg-amber-500/20"
+                      : "text-destructive hover:bg-destructive/10"
+                  }`}
+                >
+                  Try Again
+                </Button>
+              </div>
+            );
+          })()}
 
           {/* Camera Scanner View */}
           {mode === "camera" && (
