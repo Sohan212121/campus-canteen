@@ -136,7 +136,7 @@ Master order record implementing the dynamic pickup model (ASAP or Scheduled).
 | `payment_method` | `payment_method` | NOT NULL, `DEFAULT 'PAY_AT_PICKUP'` | Chosen payment mode |
 | `payment_status` | `payment_status` | NOT NULL, `DEFAULT 'PENDING'` | Payment settlement status |
 | `total_paise` | `integer` | NOT NULL, `CHECK (total_paise >= 0)` | Total payable amount in paise |
-| `pickup_token` | `text` | NOT NULL, UNIQUE | 4-6 digit numeric or QR code token |
+| `pickup_token` | `text` | NULL (0014) | DEPRECATED: Always NULL since 0014 cutover; to be dropped in a later migration. |
 | `idempotency_key` | `text` | NULL | Client-submitted deduplication token |
 | `requested_pickup_at`| `timestamptz` | NULL | Desired ready/pickup time (NULL = ASAP mode) |
 | `estimated_ready_at` | `timestamptz` | NOT NULL | Calculated timestamp when order will be ready |
@@ -149,6 +149,12 @@ Master order record implementing the dynamic pickup model (ASAP or Scheduled).
 | `collected_at` | `timestamptz` | NULL | Handed over to student |
 | `cancelled_at` | `timestamptz` | NULL | Order cancelled |
 | `rejected_at` | `timestamptz` | NULL | Order rejected by canteen |
+| `collection_method`| `collection_method_enum` | NULL (0013) | Handover method: `SCAN`, `PIN`, or `MANUAL` |
+| `collected_with` | `collected_with_enum` | NULL (0013) | Settlement mode: `CASH` or `UPI` |
+| `pickup_for_name` | `text` | NULL (0013) | Sanitized delegate name if ordered for a peer |
+| `is_manual_override`| `boolean` | NOT NULL, `DEFAULT false` (0013) | Flag indicating manual staff bypass |
+| `manual_override_reason` | `text` | NULL (0013) | Mandatory staff reason for manual collection |
+| `collected_by` | `uuid` | NULL, REFERENCES `profiles(id)` (0013) | Staff member who fulfilled the order |
 
 *Constraints*: `UNIQUE (user_id, idempotency_key)`
 
@@ -718,6 +724,7 @@ Added in migrations `0013_collection_core.sql` (additive), `0014_collection_cuto
 - **Deprecation of Static `pickup_token`**:
   - Previously, `pickup_token` was a static 6-digit number on `public.orders`, viewable across the canteen by staff under table-level SELECT RLS.
   - In `0014_collection_cutover.sql`, `pickup_token` is made nullable and set to `NULL` for all orders. New orders no longer generate static tokens.
+  - `pickup_token` is completely deprecated (always `NULL` since 0014 cutover) and will be formally dropped from `public.orders` in a later migration.
 - **Separate Secrets Table (`public.order_pickup_secrets`)**:
   - `order_id uuid PRIMARY KEY REFERENCES public.orders(id) ON DELETE CASCADE`
   - `secret text NOT NULL`: 64-character cryptographic hex string derived from `replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')` (zero external extension dependencies).
