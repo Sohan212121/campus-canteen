@@ -19,6 +19,10 @@
 --  13. place_order: p_pickup_for_name sanitization, truncation to 40, empty -> NULL, NULL pickup_token, secret generation.
 --  14. Missing secret handling: NO_PICKUP_SECRET for SCAN & PIN, PICKUP_UNAVAILABLE for get_pickup_code.
 --  15. Payment status becomes PAID upon collection; admin_audit_log row written for ORDER_COLLECTED.
+--  16. TOTP 10-second grace window: previous window code (-1) accepted during seconds 0..9, rejected thereafter.
+--      Current window code is always accepted. Two-windows-ago code (-2) is strictly rejected.
+--      NULL and invalid window offsets return NULL. PIN is stable across repeated calls.
+--      (Running this script at another second of the minute exercises the other grace window branch without long pg_sleep).
 -- ==============================================================================
 
 BEGIN;
@@ -134,6 +138,21 @@ DECLARE
   v_admin_list jsonb;
   v_audit_count integer;
   v_i integer;
+
+  v_test_secret text;
+  v_epoch_before bigint;
+  v_epoch_after bigint;
+  v_win_before bigint;
+  v_target_sec integer;
+  v_code_curr text;
+  v_code_prev text;
+  v_code_two_ago text;
+  v_test_formula_code text;
+  v_raw_hash bytea;
+  v_num bigint;
+  v_pin1 text;
+  v_pin2 text;
+  v_order_grace_id uuid;
 BEGIN
   SELECT val_uuid INTO v_canteen_a FROM _test_env WHERE key = 'canteen_a';
   SELECT val_uuid INTO v_canteen_b FROM _test_env WHERE key = 'canteen_b';
@@ -1043,6 +1062,223 @@ BEGIN
     INSERT INTO _test_results VALUES (34, 'Missing secret error handling tests', false, 'Unexpected error: ' || SQLERRM);
   END;
 
+  -- ----------------------------------------------------------------------------
+  -- TEST 15: TOTP 10s Grace Window, Derivation Sanity, Offset Safety & PIN Stability
+  -- ----------------------------------------------------------------------------
+  -- NOTE ON TOTP GRACE WINDOW TIMING:
+  -- The previous-window code is valid strictly during the 10-second grace window (seconds 0..9).
+  -- Outside this grace window (seconds 10..59), the previous code is strictly rejected with INVALID_CODE.
+  -- To prevent query timeouts in SQL editors, long pg_sleep calls are NOT used.
+  -- The test takes ONE epoch reading before computing codes and ONE after the call.
+  -- If boundary crossed (crossing the 10-second line or rolling the 60-second window), it re-runs once.
+  -- Running this script at a different second of the minute will cover the alternative branch.
+  -- ----------------------------------------------------------------------------
+  BEGIN
+    RESET ROLE;
+
+    -- 15.1 Sanity test: test-side TOTP formula matches internal_get_pickup_code(order, 0)
+    SELECT secret INTO v_test_secret FROM public.order_pickup_secrets WHERE order_id = v_order_norm_id;
+    v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+    v_win_before := v_epoch_before / 60;
+    v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || v_win_before::text);
+    v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+    v_test_formula_code := lpad((v_num % 1000000)::text, 6, '0');
+    v_code_curr := public.internal_get_pickup_code(v_order_norm_id, 0);
+
+    -- If window changed between calculation and helper call, re-run once
+    v_epoch_after := floor(extract(epoch from clock_timestamp()))::bigint;
+    IF (v_epoch_before / 60 <> v_epoch_after / 60) THEN
+      v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+      v_win_before := v_epoch_before / 60;
+      v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || v_win_before::text);
+      v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+      v_test_formula_code := lpad((v_num % 1000000)::text, 6, '0');
+      v_code_curr := public.internal_get_pickup_code(v_order_norm_id, 0);
+    END IF;
+
+    IF v_test_formula_code = v_code_curr THEN
+      INSERT INTO _test_results VALUES (36, 'test-side TOTP formula matches internal_get_pickup_code', true, 'Formula code ' || v_test_formula_code || ' exactly matches internal helper output');
+    ELSE
+      INSERT INTO _test_results VALUES (36, 'test-side TOTP formula matches internal_get_pickup_code', false, 'Formula (' || v_test_formula_code || ') != helper (' || COALESCE(v_code_curr, 'NULL') || ')');
+    END IF;
+
+    -- 15.2 NULL-safe offset check: NULL, -2, and 1 all return NULL
+    IF public.internal_get_pickup_code(v_order_norm_id, NULL) IS NULL
+       AND public.internal_get_pickup_code(v_order_norm_id, -2) IS NULL
+       AND public.internal_get_pickup_code(v_order_norm_id, 1) IS NULL THEN
+      INSERT INTO _test_results VALUES (37, 'internal_get_pickup_code NULL and invalid offsets return NULL', true, 'NULL, -2, and 1 all safely returned NULL');
+    ELSE
+      INSERT INTO _test_results VALUES (37, 'internal_get_pickup_code NULL and invalid offsets return NULL', false, 'Expected NULL for invalid offsets, but received non-null string');
+    END IF;
+
+    -- 15.3 PIN stability: internal_get_pickup_pin is deterministic and stable across repeated calls
+    v_pin1 := public.internal_get_pickup_pin(v_order_norm_id);
+    v_pin2 := public.internal_get_pickup_pin(v_order_norm_id);
+    IF v_pin1 IS NOT NULL AND length(v_pin1) = 4 AND v_pin1 = v_pin2 THEN
+      INSERT INTO _test_results VALUES (38, 'internal_get_pickup_pin is stable across repeated calls', true, 'PIN is deterministic and stable: ' || v_pin1);
+    ELSE
+      INSERT INTO _test_results VALUES (38, 'internal_get_pickup_pin is stable across repeated calls', false, 'PIN mismatch or invalid length: pin1=' || COALESCE(v_pin1, 'NULL') || ', pin2=' || COALESCE(v_pin2, 'NULL'));
+    END IF;
+
+    -- 15.4 Current-window code is always accepted by preview_collection
+    v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+    v_win_before := v_epoch_before / 60;
+    v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || v_win_before::text);
+    v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+    v_code_curr := lpad((v_num % 1000000)::text, 6, '0');
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    v_res := public.preview_collection(v_canteen_a, v_order_norm_id::text, v_code_curr, NULL);
+    v_epoch_after := floor(extract(epoch from clock_timestamp()))::bigint;
+
+    IF (v_epoch_before / 60 <> v_epoch_after / 60) THEN
+      RESET ROLE;
+      v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+      v_win_before := v_epoch_before / 60;
+      v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || v_win_before::text);
+      v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+      v_code_curr := lpad((v_num % 1000000)::text, 6, '0');
+
+      SET LOCAL ROLE authenticated;
+      PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+      v_res := public.preview_collection(v_canteen_a, v_order_norm_id::text, v_code_curr, NULL);
+    END IF;
+
+    IF (v_res->>'ok')::boolean = true THEN
+      INSERT INTO _test_results VALUES (39, 'current-window code is always accepted by preview_collection', true, 'preview_collection succeeded with current window code');
+    ELSE
+      INSERT INTO _test_results VALUES (39, 'current-window code is always accepted by preview_collection', false, 'Failed with: ' || v_res::text);
+    END IF;
+
+    -- 15.5 Previous-window code through preview_collection follows 10s grace rule
+    RESET ROLE;
+    v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+    v_win_before := v_epoch_before / 60;
+    v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || (v_win_before - 1)::text);
+    v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+    v_code_prev := lpad((v_num % 1000000)::text, 6, '0');
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    v_res := public.preview_collection(v_canteen_a, v_order_norm_id::text, v_code_prev, NULL);
+    v_epoch_after := floor(extract(epoch from clock_timestamp()))::bigint;
+
+    IF ( (v_epoch_before % 60 < 10 AND v_epoch_after % 60 >= 10) OR (v_epoch_before / 60 <> v_epoch_after / 60) ) THEN
+      RESET ROLE;
+      v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+      v_win_before := v_epoch_before / 60;
+      v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || (v_win_before - 1)::text);
+      v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+      v_code_prev := lpad((v_num % 1000000)::text, 6, '0');
+
+      SET LOCAL ROLE authenticated;
+      PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+      v_res := public.preview_collection(v_canteen_a, v_order_norm_id::text, v_code_prev, NULL);
+      v_epoch_after := floor(extract(epoch from clock_timestamp()))::bigint;
+    END IF;
+
+    v_target_sec := (v_epoch_after % 60)::integer;
+    IF v_target_sec < 10 THEN
+      IF (v_res->>'ok')::boolean = true THEN
+        INSERT INTO _test_results VALUES (40, 'preview_collection previous code follows 10s grace rule', true, 'inside grace window (' || v_target_sec || 's): previous code accepted');
+      ELSE
+        INSERT INTO _test_results VALUES (40, 'preview_collection previous code follows 10s grace rule', false, 'inside grace window (' || v_target_sec || 's): expected ok:true but got: ' || v_res::text);
+      END IF;
+    ELSE
+      IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'INVALID_CODE' THEN
+        INSERT INTO _test_results VALUES (40, 'preview_collection previous code follows 10s grace rule', true, 'outside grace window (' || v_target_sec || 's): previous code rejected with INVALID_CODE');
+      ELSE
+        INSERT INTO _test_results VALUES (40, 'preview_collection previous code follows 10s grace rule', false, 'outside grace window (' || v_target_sec || 's): expected INVALID_CODE but got: ' || v_res::text);
+      END IF;
+    END IF;
+
+    -- 15.6 Previous-window code through collect_order follows 10s grace rule
+    RESET ROLE;
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_a, 'READY', 2000, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_grace_id;
+
+    INSERT INTO public.order_pickup_secrets (order_id, secret)
+    VALUES (v_order_grace_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
+
+    SELECT secret INTO v_test_secret FROM public.order_pickup_secrets WHERE order_id = v_order_grace_id;
+
+    v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+    v_win_before := v_epoch_before / 60;
+    v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || (v_win_before - 1)::text);
+    v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+    v_code_prev := lpad((v_num % 1000000)::text, 6, '0');
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    v_res := public.collect_order(v_canteen_a, v_order_grace_id, 'CASH', 'SCAN', v_code_prev, NULL, NULL);
+    v_epoch_after := floor(extract(epoch from clock_timestamp()))::bigint;
+
+    IF ( (v_epoch_before % 60 < 10 AND v_epoch_after % 60 >= 10) OR (v_epoch_before / 60 <> v_epoch_after / 60) ) THEN
+      RESET ROLE;
+      UPDATE public.orders SET status = 'READY', collected_at = NULL, collected_by = NULL, collected_with = NULL, collection_method = NULL WHERE id = v_order_grace_id;
+      v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+      v_win_before := v_epoch_before / 60;
+      v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || (v_win_before - 1)::text);
+      v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+      v_code_prev := lpad((v_num % 1000000)::text, 6, '0');
+
+      SET LOCAL ROLE authenticated;
+      PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+      v_res := public.collect_order(v_canteen_a, v_order_grace_id, 'CASH', 'SCAN', v_code_prev, NULL, NULL);
+      v_epoch_after := floor(extract(epoch from clock_timestamp()))::bigint;
+    END IF;
+
+    v_target_sec := (v_epoch_after % 60)::integer;
+    IF v_target_sec < 10 THEN
+      RESET ROLE;
+      IF (v_res->>'ok')::boolean = true AND EXISTS (SELECT 1 FROM public.orders WHERE id = v_order_grace_id AND status = 'COLLECTED') THEN
+        INSERT INTO _test_results VALUES (41, 'collect_order previous code follows 10s grace rule', true, 'inside grace window (' || v_target_sec || 's): previous code successfully collected order');
+      ELSE
+        INSERT INTO _test_results VALUES (41, 'collect_order previous code follows 10s grace rule', false, 'inside grace window (' || v_target_sec || 's): collection failed: ' || v_res::text);
+      END IF;
+    ELSE
+      RESET ROLE;
+      IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'INVALID_CODE' AND EXISTS (SELECT 1 FROM public.orders WHERE id = v_order_grace_id AND status = 'READY') THEN
+        INSERT INTO _test_results VALUES (41, 'collect_order previous code follows 10s grace rule', true, 'outside grace window (' || v_target_sec || 's): previous code rejected with INVALID_CODE');
+      ELSE
+        INSERT INTO _test_results VALUES (41, 'collect_order previous code follows 10s grace rule', false, 'outside grace window (' || v_target_sec || 's): expected INVALID_CODE and READY, got: ' || v_res::text);
+      END IF;
+    END IF;
+
+    -- 15.7 Two-windows-ago code is strictly rejected
+    RESET ROLE;
+    SELECT secret INTO v_test_secret FROM public.order_pickup_secrets WHERE order_id = v_order_norm_id;
+    v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+    v_win_before := v_epoch_before / 60;
+    v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || (v_win_before - 2)::text);
+    v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+    v_code_two_ago := lpad((v_num % 1000000)::text, 6, '0');
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    v_res := public.preview_collection(v_canteen_a, v_order_norm_id::text, v_code_two_ago, NULL);
+    IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'INVALID_CODE' THEN
+      INSERT INTO _test_results VALUES (42, 'two-windows-ago code is strictly rejected', true, 'preview_collection correctly rejected two-windows-ago code with INVALID_CODE');
+    ELSE
+      INSERT INTO _test_results VALUES (42, 'two-windows-ago code is strictly rejected', false, 'Expected INVALID_CODE but got: ' || v_res::text);
+    END IF;
+
+    RESET ROLE;
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE;
+    INSERT INTO _test_results VALUES (36, 'TOTP grace window tests', false, 'Unexpected error: ' || SQLERRM);
+  END;
+
 END;
 $$;
 
@@ -1077,8 +1313,8 @@ BEGIN
 
   IF v_fail_count > 0 THEN
     RAISE EXCEPTION 'TEST SUITE FAILED: % out of % tests failed.%', v_fail_count, v_total, v_fail_summary;
-  ELSIF v_total < 35 THEN
-    RAISE EXCEPTION 'TEST SUITE INCOMPLETE: Expected 35 tests, but only % ran.', v_total;
+  ELSIF v_total < 42 THEN
+    RAISE EXCEPTION 'TEST SUITE INCOMPLETE: Expected 42 tests, but only % ran.', v_total;
   ELSE
     RAISE NOTICE 'SUCCESS: All % Collection test cases passed successfully.', v_pass_count;
   END IF;

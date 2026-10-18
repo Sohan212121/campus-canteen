@@ -705,13 +705,14 @@ The database migrations must strictly be applied in sequential order:
 13. `0011_cleanup_unconfirmed_users.sql` — Scheduled/admin cleanup routine for unconfirmed stale signups with dry-run support, staff/invited exclusion, and 200 batch deletion limit.
 14. `0013_collection_core.sql` — Collection Core v2 (Additive): New orders columns, `pickup_collect_attempts`, `order_pickup_secrets` (RLS on, 0 policies, revoked from PUBLIC, anon, authenticated, service_role), `pickup_hmac` wrapper (`extensions.hmac` with empty search_path, revoked from service_role too), internal TOTP/PIN helpers (revoked from service_role too), `get_pickup_code`, `preview_collection`, `collect_order`, dispute reporting (`order_collection_reports`, `report_unauthorized_collection`), and in-flight secrets backfill.
 15. `0014_collection_cutover.sql` — Collection Cutover v2: Replaces `transition_order` (strictly refuses `COLLECTED`), replaces `place_order` based on 0007 definition (exact 5-arg DROP, adds `p_pickup_for_name`, generates secret row, inserts NULL token), drops `verify_pickup`, nullifies existing `pickup_token`s, updates `handle_order_status_notification` trigger function (revoked from PUBLIC, anon, authenticated), and appends idempotent secrets backfill to the end.
-16. Deploy updated web application.
+16. `0015_pickup_code_grace.sql` — Pickup Code 10s Grace Window: Enforces NULL-safe offset validation (`IF p_window_offset IS NULL OR p_window_offset NOT IN (0, -1) THEN RETURN NULL`), computes `v_epoch` once from `clock_timestamp()` to derive both window number and second-in-window, restricts previous-window code (`offset -1`) to a 10-second grace window (`second_in_window < 10`), and revokes execution from `PUBLIC`, `anon`, `authenticated`, and `service_role`.
+17. Deploy updated web application.
 
 ---
 
 ## 16. Collection Core & Smart Counter Pickup
 
-Added in migrations `0013_collection_core.sql` (additive) and `0014_collection_cutover.sql` (cutover):
+Added in migrations `0013_collection_core.sql` (additive), `0014_collection_cutover.sql` (cutover), and `0015_pickup_code_grace.sql`:
 
 ### 16.1 Architecture & Token Invariant Resolution
 - **Deprecation of Static `pickup_token`**:
@@ -724,6 +725,9 @@ Added in migrations `0013_collection_core.sql` (additive) and `0014_collection_c
   - `is_pin_locked boolean NOT NULL DEFAULT false`
   - `created_at timestamptz NOT NULL DEFAULT now()`
   - **RLS & Security**: RLS enabled with 0 policies. All privileges revoked from `PUBLIC`, `anon`, `authenticated`, and `service_role`. Accessible strictly via `SECURITY DEFINER` routines. Neither students nor staff can ever select rows from this table.
+- **Secret Lifecycle Invariant**:
+  - The pickup secret is created when the order is **`PLACED`** (`place_order` inserts the secret row into `public.order_pickup_secrets` upon initial placement) and was backfilled for in-flight orders (`PLACED`, `ACCEPTED`, `PREPARING`, `READY`) in migrations `0013_collection_core.sql` and `0014_collection_cutover.sql`.
+  - The pickup secret is **not** created at `READY`.
 
 ### 16.2 Internal Cryptographic Wrapper (`public.pickup_hmac`) & Helpers
 - `public.pickup_hmac(p_key text, p_msg text) RETURNS bytea`:
@@ -732,23 +736,32 @@ Added in migrations `0013_collection_core.sql` (additive) and `0014_collection_c
   - Revoked from `PUBLIC`, `anon`, `authenticated`, and `service_role`.
 - `public.internal_get_pickup_pin(p_order_id uuid) RETURNS text` & `public.internal_get_pickup_code(p_order_id uuid, p_window_offset integer) RETURNS text`:
   - `SECURITY DEFINER`, `SET search_path = ''`.
+  - Enforces NULL-safe offset validation (`IF p_window_offset IS NULL OR p_window_offset NOT IN (0, -1) THEN RETURN NULL`).
+  - Evaluates `v_epoch` once from `clock_timestamp()` and derives both the window number (`v_epoch / 60`) and the second-in-window (`v_epoch % 60`) from that single reading.
+  - Implements the 10-second grace window: offset `-1` returns `NULL` whenever `v_second_in_window >= 10`.
   - Revoked from `PUBLIC`, `anon`, `authenticated`, and `service_role`.
 
 ### 16.3 Dynamic QR Payload & Rotating TOTP Codes
 - **QR Payload Format**: `'CC1:<order_id>:<code>'` (e.g. `CC1:123e4567-e89b-12d3-a456-426614174000:482910`).
 - **60-Second Window**: Evaluated as `floor(extract(epoch from clock_timestamp()) / 60)::bigint`.
-- **Tolerance**: Staff preview and collection procedures accept both the current window and the immediately preceding window (`window - 1`) to absorb network delays and clock skew.
+- **Tolerance & 10-Second Grace Rule**:
+  - Staff preview and collection procedures accept the current window code (`window`) at all times throughout the 60-second window.
+  - In addition, the immediately preceding window (`window - 1`) is accepted **strictly and exclusively** during the first 10 seconds of the new window (`epoch % 60 < 10`) to absorb network transit delays and scan timing skew.
+  - Once 10 seconds have elapsed in the current window (`epoch % 60 >= 10`), the previous window code is strictly rejected (the internal helper returns `NULL`).
+  - Codes from two or more windows ago (`window - 2` or earlier) or future windows are always rejected.
 - **PIN Derivation**: A 4-digit numeric fallback PIN is deterministically derived from `public.pickup_hmac(secret, 'pin:' || order_id)`. The PIN is never stored in plaintext or hashed format in the database.
 
 ### 16.4 Stored Procedures
 - **`public.get_pickup_code(p_order_id uuid) RETURNS jsonb`**:
   - Accessible to authenticated student owning the order.
   - Allowed **strictly and exclusively** when `order.status = 'READY'`. Returns `{ ok: false, error: 'ORDER_NOT_READY' }` otherwise.
+  - Returns `{ ok: false, error: 'PICKUP_UNAVAILABLE' }` if the order is in `READY` status but no cryptographic secret exists in `order_pickup_secrets`.
   - Returns `{ ok: true, order_id, order_code, code, seconds_remaining, pin, pickup_for_name }`. Never returns the secret.
 - **`public.preview_collection(p_canteen_id, p_order_ref, p_code, p_pin) RETURNS jsonb`**:
   - Staff / Admin only. Does not alter database order state.
   - Locates order by UUID or `order_code` (e.g. `CN10001`). Enforces canteen isolation for staff: returns `NOT_FOUND` (not `FORBIDDEN`) on cross-canteen queries.
   - Rate limiting: $\ge 10$ failed attempts in 5 minutes per staff returns `RATE_LIMITED_STAFF`; $\ge 10$ failed attempts in 10 minutes per order returns `RATE_LIMITED_ORDER`.
+  - Missing secret: Returns `{ ok: false, error: 'NO_PICKUP_SECRET' }` if secret row is absent.
   - **Amber Threshold**: Evaluated if total item quantity $> 5$ or `total_paise > 50000` (> ₹500). Amber orders require **both** the rotating code and the 4-digit PIN. PIN-only collection is refused. If PIN is locked, returns `PIN_LOCKED`.
   - **Incomplete Credentials Protection**: Scenarios where a valid rotating code was scanned but PIN has not yet been submitted are NOT logged as failures in `pickup_collect_attempts`.
   - Non-amber orders allow rotating code or PIN-only verification. If PIN is locked, valid rotating code SCAN still succeeds.
@@ -757,6 +770,7 @@ Added in migrations `0013_collection_core.sql` (additive) and `0014_collection_c
   - Staff / Admin only. Locks order `FOR UPDATE`.
   - Rejects `NULL` `p_collected_with` and `p_method` strictly with `INVALID_INPUT`. Accepts `p_collected_with IN ('CASH', 'UPI')` and `p_method IN ('SCAN', 'PIN', 'MANUAL')`.
   - Cross-canteen lookups return `NOT_FOUND` (not `FORBIDDEN`).
+  - Missing secret: Returns `{ ok: false, error: 'NO_PICKUP_SECRET' }` for SCAN or PIN verification if secret row is absent, without modifying order status or marking the order collected.
   - Re-verifies credentials and amber requirements atomically. Incomplete amber credentials are not logged as failures.
   - 3 wrong PIN attempts lock the order PIN counter (`is_pin_locked = true`), returning `PIN_LOCKED`. A valid QR scan on a non-amber PIN-locked order continues to succeed.
   - **Manual Collection**: Allowed for students with depleted phone batteries or broken screens. Requires `p_reason` with length $\ge 5$ characters. Capped at 10 manual collections per staff member per rolling 24 hours (returns `{ ok: false, error: 'MANUAL_LIMIT' }`). Dispatches an alert notification to the student and logs to `public.admin_audit_log`.
