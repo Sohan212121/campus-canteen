@@ -8,15 +8,21 @@
 -- 2. Index: idx_orders_status_ready_at (Performance index for sweep routine)
 -- 3. Helper: public.is_order_expired(p_order_id uuid)
 -- 4. Lazy Expiry in Student RPC: public.get_pickup_code(p_order_id uuid)
+--    Replaces definition from 0013_collection_core.sql
 -- 5. Lazy Expiry in Staff Preview: public.preview_collection(...)
+--    Replaces definition from 0015_pickup_code_grace.sql
 -- 6. Lazy Expiry & Late Handover in Staff Collection: public.collect_order(...)
+--    Replaces definition from 0015_pickup_code_grace.sql
 -- 7. Canteen Sweep Routine: public.mark_no_shows(p_canteen_id uuid)
 -- 8. Student Account Status RPC: public.get_my_account_status()
--- 9. Strike Enforcement in Pre-Order: public.place_order(...)
+-- 9. Strike Enforcement & Limit in Pre-Order: public.place_order(...)
+--    Replaces definition from 0014_collection_cutover.sql
 -- 10. Admin Strikes Management: public.admin_list_student_strikes() & admin_clear_student_strikes(...)
 -- 11. Admin Daily Reconciliation: public.get_daily_reconciliation(...)
 -- 12. Canteen Settings Validation Update: public.admin_update_canteen_settings(...)
+--     Replaces definition from 0006_admin_operations.sql
 -- 13. Order Notification Trigger Update: public.handle_order_status_notification()
+--     Replaces definition from 0014_collection_cutover.sql
 -- =============================================================================
 
 BEGIN;
@@ -81,6 +87,7 @@ GRANT EXECUTE ON FUNCTION public.is_order_expired(uuid) TO authenticated, servic
 
 -- =============================================================================
 -- 4. STUDENT RPC: public.get_pickup_code (with Row Locking & Lazy Expiry)
+-- Base Definition: 0013_collection_core.sql (lines 152-232)
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.get_pickup_code(p_order_id uuid)
 RETURNS jsonb
@@ -130,19 +137,17 @@ BEGIN
     RAISE EXCEPTION 'FORBIDDEN: You can only view pickup codes for your own orders';
   END IF;
 
-  -- If status is already NO_SHOW, return PICKUP_EXPIRED immediately
+  -- Check non-READY states first
+  IF v_order.status = 'COLLECTED'::public.order_status THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'ALREADY_COLLECTED');
+  END IF;
+
   IF v_order.status = 'NO_SHOW'::public.order_status THEN
-    RETURN jsonb_build_object(
-      'ok', false,
-      'error', 'PICKUP_EXPIRED'
-    );
+    RETURN jsonb_build_object('ok', false, 'error', 'PICKUP_EXPIRED');
   END IF;
 
   IF v_order.status != 'READY'::public.order_status THEN
-    RETURN jsonb_build_object(
-      'ok', false,
-      'error', 'ORDER_NOT_READY'
-    );
+    RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY');
   END IF;
 
   -- Check if READY order is expired based on actual ready_at + canteen hold_minutes
@@ -219,6 +224,7 @@ GRANT EXECUTE ON FUNCTION public.get_pickup_code(uuid) TO authenticated;
 
 -- =============================================================================
 -- 5. STAFF PREVIEW RPC: public.preview_collection (with Locking & Lazy Expiry)
+-- Base Definition: 0015_pickup_code_grace.sql (lines 81-286)
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.preview_collection(
   p_canteen_id uuid DEFAULT NULL,
@@ -291,17 +297,30 @@ BEGIN
     END IF;
   END IF;
 
-  -- If status is already NO_SHOW, return PICKUP_EXPIRED
+  -- Check terminal and in-flight non-READY statuses first
+  IF v_order.status = 'COLLECTED'::public.order_status THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'ALREADY_COLLECTED', 'status', 'COLLECTED');
+  END IF;
+
+  IF v_order.status IN (
+    'CANCELLED'::public.order_status,
+    'REJECTED'::public.order_status,
+    'PLACED'::public.order_status,
+    'ACCEPTED'::public.order_status,
+    'PREPARING'::public.order_status
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
+  END IF;
+
   IF v_order.status = 'NO_SHOW'::public.order_status THEN
     RETURN jsonb_build_object('ok', false, 'error', 'PICKUP_EXPIRED', 'status', 'NO_SHOW');
   END IF;
 
-  -- Check if order is READY
   IF v_order.status != 'READY'::public.order_status THEN
     RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
   END IF;
 
-  -- Check actual hold window expiration
+  -- Check actual hold window expiration for READY orders
   SELECT c.hold_minutes INTO v_hold_minutes
   FROM public.canteens c
   WHERE c.id = v_order.canteen_id;
@@ -368,13 +387,14 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'RATE_LIMITED_ORDER');
   END IF;
 
+  -- Amber order calculation
   SELECT coalesce(sum(quantity), 0) INTO v_total_items
   FROM public.order_items
   WHERE order_id = v_order.id;
 
-  -- Amber rules: > 5 total items or > 50000 paise (500 INR)
   v_is_amber := (v_total_items > 5 OR v_order.total_paise > 50000);
 
+  -- Evaluate rotating code with 10s grace
   IF p_code IS NOT NULL AND btrim(p_code) != '' THEN
     v_expected_code_curr := public.internal_get_pickup_code(v_order.id, 0);
     v_expected_code_prev := public.internal_get_pickup_code(v_order.id, -1);
@@ -383,6 +403,7 @@ BEGIN
     END IF;
   END IF;
 
+  -- Evaluate backup PIN
   IF p_pin IS NOT NULL AND btrim(p_pin) != '' THEN
     v_expected_pin := public.internal_get_pickup_pin(v_order.id);
     IF p_pin = v_expected_pin THEN
@@ -390,6 +411,7 @@ BEGIN
     END IF;
   END IF;
 
+  -- Handle amber order verification logic
   IF v_is_amber THEN
     IF v_is_pin_locked THEN
       RETURN jsonb_build_object('ok', false, 'error', 'PIN_LOCKED');
@@ -412,43 +434,54 @@ BEGIN
       RETURN jsonb_build_object('ok', false, 'error', 'AMBER_REQUIRES_BOTH');
     END IF;
   ELSE
-    IF NOT v_code_valid AND NOT v_pin_valid THEN
-      INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
-      VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW', 'INVALID_CREDENTIALS');
+    -- Non-amber orders
+    IF p_code IS NOT NULL AND btrim(p_code) != '' THEN
+      IF NOT v_code_valid THEN
+        INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
+        VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW_SCAN', 'INVALID_CODE');
+        RETURN jsonb_build_object('ok', false, 'error', 'INVALID_CODE');
+      END IF;
+    ELSIF p_pin IS NOT NULL AND btrim(p_pin) != '' THEN
+      IF v_is_pin_locked THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'PIN_LOCKED');
+      END IF;
 
-      IF p_pin IS NOT NULL AND btrim(p_pin) != '' AND NOT v_pin_valid THEN
+      IF NOT v_pin_valid THEN
         UPDATE public.order_pickup_secrets
         SET failed_pin_attempts = failed_pin_attempts + 1,
             is_pin_locked = CASE WHEN failed_pin_attempts + 1 >= 3 THEN true ELSE false END
         WHERE order_id = v_order.id;
+
+        INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
+        VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW_PIN', 'WRONG_PIN');
+        RETURN jsonb_build_object('ok', false, 'error', 'WRONG_PIN');
       END IF;
-
-      RETURN jsonb_build_object('ok', false, 'error', 'INVALID_CODE');
-    END IF;
-
-    IF NOT v_code_valid AND v_pin_valid AND v_is_pin_locked THEN
-      RETURN jsonb_build_object('ok', false, 'error', 'PIN_LOCKED');
+    ELSE
+      RETURN jsonb_build_object('ok', false, 'error', 'CODE_OR_PIN_REQUIRED');
     END IF;
   END IF;
 
-  SELECT p.full_name, p.college_id INTO v_student
-  FROM public.profiles p
-  WHERE p.id = v_order.user_id;
-
-  SELECT jsonb_agg(
-    jsonb_build_object(
-      'name', oi.name_snapshot,
-      'quantity', oi.quantity,
-      'unit_price_paise', oi.unit_price_paise
-    )
-  ) INTO v_items
-  FROM public.order_items oi
-  WHERE oi.order_id = v_order.id;
-
+  -- Write preview verification marker ONLY when rotating code was valid
   IF v_code_valid THEN
     INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
     VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW', 'SUCCESS');
   END IF;
+
+  -- Load student details
+  SELECT full_name, college_id INTO v_student
+  FROM public.profiles
+  WHERE id = v_order.user_id;
+
+  -- Load item breakdown
+  SELECT jsonb_agg(
+    jsonb_build_object(
+      'name', name_snapshot,
+      'quantity', quantity,
+      'unit_price_paise', unit_price_paise
+    ) ORDER BY name_snapshot ASC
+  ) INTO v_items
+  FROM public.order_items
+  WHERE order_id = v_order.id;
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -469,7 +502,9 @@ REVOKE ALL ON FUNCTION public.preview_collection(uuid, text, text, text) FROM PU
 GRANT EXECUTE ON FUNCTION public.preview_collection(uuid, text, text, text) TO authenticated;
 
 -- =============================================================================
--- 6. STAFF COLLECTION RPC: public.collect_order (with Late Handover & Expiry)
+-- 6. STAFF COLLECTION EXECUTION RPC: public.collect_order (with Lazy Expiry & Late Handover)
+-- Base Definition: 0015_pickup_code_grace.sql (lines 292-571)
+-- Exact Types: collect_order(p_canteen_id uuid, p_order_id uuid, p_collected_with text, p_method text, p_code text, p_pin text, p_reason text)
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.collect_order(
   p_canteen_id uuid DEFAULT NULL,
@@ -505,8 +540,9 @@ DECLARE
   v_order_failures integer;
   v_collected_at timestamptz;
   v_hold_minutes integer;
-  v_is_expired boolean := false;
+  v_is_late_handover boolean := false;
   v_expiry_time timestamptz;
+  v_late_cutoff timestamptz;
 BEGIN
   v_staff_id := auth.uid();
   IF v_staff_id IS NULL THEN
@@ -525,6 +561,7 @@ BEGIN
     RAISE EXCEPTION 'FORBIDDEN: Staff or admin role required';
   END IF;
 
+  -- Strict text validation matching 0015
   IF p_collected_with IS NULL OR p_collected_with NOT IN ('CASH', 'UPI') THEN
     RAISE EXCEPTION 'INVALID_INPUT: collected_with must be CASH or UPI';
   END IF;
@@ -543,31 +580,60 @@ BEGIN
     RAISE EXCEPTION 'NOT_FOUND: Order not found';
   END IF;
 
-  -- For staff compare order's canteen to caller's OWN profile canteen_id with IS DISTINCT FROM.
+  -- Canteen isolation check for staff
   IF v_staff_role = 'staff'::public.user_role THEN
     IF v_staff_canteen IS NULL OR v_staff_canteen IS DISTINCT FROM v_order.canteen_id THEN
       RAISE EXCEPTION 'NOT_FOUND: Order not found';
     END IF;
   END IF;
 
+  -- Check terminal and in-flight non-READY statuses first
   IF v_order.status = 'COLLECTED'::public.order_status THEN
     RETURN jsonb_build_object('ok', false, 'error', 'ALREADY_COLLECTED');
   END IF;
 
-  -- Determine hold window expiry
+  IF v_order.status IN (
+    'CANCELLED'::public.order_status,
+    'REJECTED'::public.order_status,
+    'PLACED'::public.order_status,
+    'ACCEPTED'::public.order_status,
+    'PREPARING'::public.order_status
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
+  END IF;
+
+  -- Only READY and NO_SHOW orders can proceed to collection
+  IF v_order.status NOT IN ('READY'::public.order_status, 'NO_SHOW'::public.order_status) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
+  END IF;
+
+  -- Hold window and expiry evaluation
   SELECT c.hold_minutes INTO v_hold_minutes
   FROM public.canteens c
   WHERE c.id = v_order.canteen_id;
 
   v_hold_minutes := coalesce(v_hold_minutes, 15);
   v_expiry_time := v_order.ready_at + (v_hold_minutes * interval '1 minute');
-  v_is_expired := (v_order.ready_at IS NOT NULL AND clock_timestamp() > v_expiry_time);
+  v_late_cutoff := v_expiry_time + interval '6 hours';
 
-  -- Handle expired order or existing NO_SHOW status
-  IF v_is_expired OR v_order.status = 'NO_SHOW'::public.order_status THEN
-    IF p_method IN ('SCAN', 'PIN') THEN
-      -- If order is still marked READY, transition lazily to NO_SHOW with guarded lock
-      IF v_order.status = 'READY'::public.order_status THEN
+  IF v_order.status = 'NO_SHOW'::public.order_status THEN
+    -- A NO_SHOW order may ONLY be collected via MANUAL method within the 6-hour late window
+    IF p_method <> 'MANUAL' THEN
+      RETURN jsonb_build_object('ok', false, 'error', 'PICKUP_EXPIRED');
+    END IF;
+
+    IF clock_timestamp() > v_late_cutoff THEN
+      RETURN jsonb_build_object('ok', false, 'error', 'PICKUP_EXPIRED');
+    END IF;
+
+    v_is_late_handover := true;
+  ELSIF v_order.status = 'READY'::public.order_status THEN
+    IF v_order.ready_at IS NOT NULL AND clock_timestamp() > v_expiry_time THEN
+      -- READY order is expired
+      IF p_method = 'MANUAL' AND clock_timestamp() <= v_late_cutoff THEN
+        v_is_late_handover := true;
+      ELSE
+        -- Move lazily to NO_SHOW
         UPDATE public.orders
         SET status = 'NO_SHOW'::public.order_status
         WHERE id = v_order.id
@@ -582,91 +648,17 @@ BEGIN
             v_order.id::text,
             jsonb_build_object(
               'order_code', v_order.order_code,
+              'canteen_id', v_order.canteen_id,
               'caller_rpc', 'collect_order',
-              'attempted_method', p_method
+              'ready_at', v_order.ready_at,
+              'hold_minutes', v_hold_minutes
             )
           );
         END IF;
-      END IF;
 
-      RETURN jsonb_build_object('ok', false, 'error', 'PICKUP_EXPIRED');
-
-    ELSIF p_method = 'MANUAL' THEN
-      -- Late Handover Policy: Allowed while order is READY-but-expired or NO_SHOW for up to 6 hours after expiry
-      IF v_expiry_time IS NULL OR clock_timestamp() > (v_expiry_time + interval '6 hours') THEN
         RETURN jsonb_build_object('ok', false, 'error', 'PICKUP_EXPIRED');
       END IF;
-
-      IF p_reason IS NULL OR length(btrim(p_reason)) < 5 THEN
-        RETURN jsonb_build_object('ok', false, 'error', 'MANUAL_REASON_REQUIRED');
-      END IF;
-
-      -- Staff manual limit check: 10 per staff per 24 hours
-      SELECT count(*) INTO v_manual_count
-      FROM public.orders
-      WHERE collected_by = v_staff_id
-        AND is_manual_override = true
-        AND collected_at > now() - interval '24 hours';
-
-      IF v_manual_count >= 10 THEN
-        RETURN jsonb_build_object('ok', false, 'error', 'MANUAL_LIMIT');
-      END IF;
-
-      v_collected_at := clock_timestamp();
-
-      -- Guarded transition: only from READY or NO_SHOW
-      UPDATE public.orders
-      SET status = 'COLLECTED'::public.order_status,
-          collection_method = 'MANUAL'::public.collection_method_enum,
-          collected_with = p_collected_with::public.collected_with_enum,
-          collected_by = v_staff_id,
-          collected_at = v_collected_at,
-          payment_status = 'PAID'::public.payment_status,
-          is_manual_override = true,
-          manual_override_reason = btrim(p_reason)
-      WHERE id = v_order.id
-        AND status IN ('READY'::public.order_status, 'NO_SHOW'::public.order_status);
-
-      IF NOT FOUND THEN
-        RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
-      END IF;
-
-      INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
-      VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'MANUAL', 'SUCCESS');
-
-      -- Flagged audit log for late handover
-      INSERT INTO public.admin_audit_log (actor_id, action, target_type, target_id, details)
-      VALUES (
-        v_staff_id,
-        'ORDER_COLLECTED_LATE',
-        'order',
-        v_order.id::text,
-        jsonb_build_object(
-          'order_code', v_order.order_code,
-          'collection_method', 'MANUAL',
-          'collected_with', p_collected_with,
-          'total_paise', v_order.total_paise,
-          'is_late_handover', true,
-          'previous_status', v_order.status,
-          'manual_override_reason', btrim(p_reason),
-          'expiry_time', v_expiry_time
-        )
-      );
-
-      RETURN jsonb_build_object(
-        'ok', true,
-        'order_id', v_order.id,
-        'order_code', v_order.order_code,
-        'status', 'COLLECTED',
-        'collected_at', v_collected_at,
-        'is_late_handover', true
-      );
     END IF;
-  END IF;
-
-  -- For non-expired orders, status must strictly be READY
-  IF v_order.status != 'READY'::public.order_status THEN
-    RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
   END IF;
 
   -- Lock and read secrets row
@@ -713,6 +705,7 @@ BEGIN
       RETURN jsonb_build_object('ok', false, 'error', 'MANUAL_REASON_REQUIRED');
     END IF;
 
+    -- Staff manual override cap: 10 per staff per 24 hours
     SELECT count(*) INTO v_manual_count
     FROM public.orders
     WHERE collected_by = v_staff_id
@@ -757,6 +750,8 @@ BEGIN
       END IF;
     END IF;
 
+    -- Preview binding rule:
+    -- If rotating code refreshed during payment, accept if same staff verified via preview in last 90 seconds
     IF NOT v_code_valid THEN
       IF EXISTS (
         SELECT 1
@@ -810,6 +805,7 @@ BEGIN
 
   v_collected_at := clock_timestamp();
 
+  -- Update order row with row count verification
   UPDATE public.orders
   SET status = 'COLLECTED'::public.order_status,
       collection_method = p_method::public.collection_method_enum,
@@ -820,12 +816,14 @@ BEGIN
       is_manual_override = (p_method = 'MANUAL'),
       manual_override_reason = CASE WHEN p_method = 'MANUAL' THEN btrim(p_reason) ELSE NULL END
   WHERE id = v_order.id
-    AND status = 'READY'::public.order_status;
+    AND status IN ('READY'::public.order_status, 'NO_SHOW'::public.order_status);
 
+  -- Verify UPDATE affected a row; if not, return error before logging success
   IF NOT FOUND THEN
-    RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
+    RETURN jsonb_build_object('ok', false, 'error', 'COLLECT_FAILED');
   END IF;
 
+  -- Success bookkeeping
   INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
   VALUES (v_staff_id, v_order.id, v_order.canteen_id, p_method, 'SUCCESS');
 
@@ -842,11 +840,14 @@ BEGIN
     v_order.id::text,
     jsonb_build_object(
       'order_code', v_order.order_code,
+      'canteen_id', v_order.canteen_id,
       'collection_method', p_method,
       'collected_with', p_collected_with,
       'total_paise', v_order.total_paise,
       'is_manual_override', (p_method = 'MANUAL'),
-      'manual_override_reason', CASE WHEN p_method = 'MANUAL' THEN btrim(p_reason) ELSE NULL END
+      'manual_override_reason', CASE WHEN p_method = 'MANUAL' THEN btrim(p_reason) ELSE NULL END,
+      'is_late_handover', v_is_late_handover,
+      'prior_status', v_order.status
     )
   );
 
@@ -982,7 +983,7 @@ DECLARE
   v_strike_count integer := 0;
   v_active_count integer := 0;
   v_is_limited boolean := false;
-  v_active_limit integer := 3;
+  v_active_limit integer := 2; -- Active-order limit is 2
 BEGIN
   v_user_id := auth.uid();
   IF v_user_id IS NULL THEN
@@ -1014,8 +1015,8 @@ BEGIN
       WHERE n.order_id = o.id AND n.title = 'Order Ready'
     );
 
+  -- Strike limit is 3 everywhere
   v_is_limited := (v_strike_count >= 3);
-  v_active_limit := CASE WHEN v_is_limited THEN 2 ELSE 3 END;
 
   SELECT count(*) INTO v_active_count
   FROM public.orders
@@ -1028,11 +1029,16 @@ BEGIN
     );
 
   RETURN jsonb_build_object(
-    'is_limited', v_is_limited,
+    'strikes', v_strike_count,
     'strike_count', v_strike_count,
-    'active_order_limit', v_active_limit,
+    'is_limited', v_is_limited,
+    'active_orders_count', v_active_count,
     'current_active_orders', v_active_count,
+    'active_order_limit', v_active_limit,
+    'can_order', (v_active_count < v_active_limit),
+    'max_items_allowed', CASE WHEN v_is_limited THEN 2 ELSE NULL END,
     'max_items_per_order', CASE WHEN v_is_limited THEN 2 ELSE NULL END,
+    'max_order_paise', CASE WHEN v_is_limited THEN 20000 ELSE NULL END,
     'max_paise_per_order', CASE WHEN v_is_limited THEN 20000 ELSE NULL END
   );
 END;
@@ -1043,10 +1049,12 @@ GRANT EXECUTE ON FUNCTION public.get_my_account_status() TO authenticated;
 
 -- =============================================================================
 -- 9. PRE-ORDER RPC: public.place_order (with Strike Limits & Total Checks)
+-- Base Definition: 0014_collection_cutover.sql (lines 151-522)
+-- Active order limit is 2, checked AFTER canteen lock.
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.place_order(
   p_canteen_id uuid,
-  p_items jsonb,
+  p_items jsonb, -- array of {"menu_item_id": uuid, "quantity": integer}
   p_payment_method public.payment_method,
   p_idempotency_key text,
   p_requested_at timestamptz DEFAULT NULL,
@@ -1057,6 +1065,7 @@ SECURITY DEFINER
 SET search_path = ''
 LANGUAGE plpgsql AS $$
 DECLARE
+  MAX_ACTIVE_ORDERS CONSTANT integer := 2;
   MAX_DISTINCT_ITEMS CONSTANT integer := 20;
   MAX_ITEM_QTY CONSTANT integer := 10;
 
@@ -1070,7 +1079,6 @@ DECLARE
 
   v_strike_count integer := 0;
   v_is_limited boolean := false;
-  v_max_active_orders integer := 3;
 
   v_agg_items jsonb := '[]'::jsonb;
   v_item record;
@@ -1118,7 +1126,7 @@ BEGIN
     RAISE EXCEPTION 'INVALID_IDEMPOTENCY_KEY: Valid idempotency key is required';
   END IF;
 
-  -- 3.1 Sanitization of pickup designee name
+  -- 3.1 Sanitization of pickup designee name (never raise on length)
   IF p_pickup_for_name IS NOT NULL THEN
     v_pickup_for_name := p_pickup_for_name;
     v_pickup_for_name := regexp_replace(v_pickup_for_name, '[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]', '', 'g');
@@ -1134,7 +1142,7 @@ BEGIN
     v_pickup_for_name := NULL;
   END IF;
 
-  -- 4. Preliminary Idempotency Check
+  -- 4. Preliminary Idempotency Check (fast return if already placed)
   SELECT 
     o.id, o.order_code, o.status, o.total_paise, 
     o.estimated_ready_at, o.pickup_window_end, o.requested_pickup_at
@@ -1160,6 +1168,7 @@ BEGIN
     RAISE EXCEPTION 'INVALID_INPUT: Order items payload cannot be empty';
   END IF;
 
+  -- Aggregate duplicate menu_item_id entries by summing quantities
   WITH raw_items AS (
     SELECT 
       (elem->>'menu_item_id')::uuid AS item_id,
@@ -1187,6 +1196,7 @@ BEGIN
     RAISE EXCEPTION 'INVALID_INPUT: Order must contain between 1 and % distinct items', MAX_DISTINCT_ITEMS;
   END IF;
 
+  -- Verify each aggregated quantity is between 1 and MAX_ITEM_QTY (10)
   FOR v_item IN SELECT * FROM jsonb_array_elements(v_agg_items) LOOP
     v_qty := (v_item.value->>'quantity')::integer;
     IF v_qty IS NULL OR v_qty < 1 OR v_qty > MAX_ITEM_QTY THEN
@@ -1230,7 +1240,22 @@ BEGIN
     );
   END IF;
 
-  -- 8. Strike Counting & Account Limitation Check
+  -- 8. Active Orders Limit Check (checked AFTER canteen lock)
+  SELECT count(*) INTO v_active_count
+  FROM public.orders o
+  WHERE o.user_id = v_user_id
+  AND o.status IN (
+    'PLACED'::public.order_status, 
+    'ACCEPTED'::public.order_status, 
+    'PREPARING'::public.order_status, 
+    'READY'::public.order_status
+  );
+
+  IF v_active_count >= MAX_ACTIVE_ORDERS THEN
+    RAISE EXCEPTION 'TOO_MANY_ACTIVE_ORDERS: You have reached the maximum limit of % active orders', MAX_ACTIVE_ORDERS;
+  END IF;
+
+  -- 8.1 Strike Enforcement (checked AFTER canteen lock; limit is 3 strikes)
   SELECT count(*) INTO v_strike_count
   FROM public.orders o
   LEFT JOIN public.student_strike_resets ssr ON ssr.student_id = v_user_id
@@ -1244,28 +1269,10 @@ BEGIN
     );
 
   v_is_limited := (v_strike_count >= 3);
-  v_max_active_orders := CASE WHEN v_is_limited THEN 2 ELSE 3 END;
 
-  -- If limited, enforce maximum 2 total units across all order items
+  -- If limited by 3 strikes, enforce maximum 2 total units across all order items
   IF v_is_limited AND v_total_units > 2 THEN
-    RAISE EXCEPTION 'ACCOUNT_LIMITED: Account limited due to 3 or more no-shows. Maximum 2 items total allowed per order (got %)', v_total_units;
-  END IF;
-
-  -- Active Orders Limit Check
-  SELECT count(*) INTO v_active_count
-  FROM public.orders o
-  WHERE o.user_id = v_user_id
-  AND o.status IN (
-    'PLACED'::public.order_status, 
-    'ACCEPTED'::public.order_status, 
-    'PREPARING'::public.order_status, 
-    'READY'::public.order_status
-  );
-
-  IF v_active_count >= v_max_active_orders THEN
-    RAISE EXCEPTION 'TOO_MANY_ACTIVE_ORDERS: You have reached the maximum limit of % active orders%',
-      v_max_active_orders,
-      CASE WHEN v_is_limited THEN ' (account restricted due to 3 or more no-shows)' ELSE '' END;
+    RAISE EXCEPTION 'ACCOUNT_LIMITED: Account limited due to repeated uncollected orders. Maximum 2 items per order allowed (got %)', v_total_units;
   END IF;
 
   -- 9. Lock Menu Items FOR UPDATE ordered by id (deadlock prevention)
@@ -1296,12 +1303,12 @@ BEGIN
     v_total_paise := v_total_paise + (v_menu_item.price_paise * v_qty);
   END LOOP;
 
-  -- If limited, enforce maximum 20000 paise (₹200) total order amount
+  -- If limited by 3 strikes, enforce maximum 20000 paise (₹200) total order amount
   IF v_is_limited AND v_total_paise > 20000 THEN
-    RAISE EXCEPTION 'ACCOUNT_LIMITED: Account limited due to 3 or more no-shows. Maximum order amount is ₹200 (got % paise)', v_total_paise;
+    RAISE EXCEPTION 'ACCOUNT_LIMITED: Account limited due to repeated uncollected orders. Maximum order value is ₹200 (got % paise)', v_total_paise;
   END IF;
 
-  -- 10. Call Dynamic Pickup Estimation
+  -- 10. Call Dynamic Pickup Estimation (preserves HINT and error codes)
   BEGIN
     SELECT * INTO v_est_record
     FROM public.estimate_ready_time(p_canteen_id, v_agg_items, p_requested_at);
@@ -1311,6 +1318,7 @@ BEGIN
         v_err_msg = MESSAGE_TEXT,
         v_err_hint = PG_EXCEPTION_HINT;
 
+      -- Re-raise with the same message and hint preserved
       IF v_err_hint IS NOT NULL AND length(v_err_hint) > 0 THEN
         RAISE EXCEPTION '%', v_err_msg USING HINT = v_err_hint;
       ELSE
@@ -1318,8 +1326,9 @@ BEGIN
       END IF;
   END;
 
-  -- 11. Atomic Sub-Block: Decrement stock, insert order & items
+  -- 11. Atomic Sub-Block: Decrement stock, insert order & items, handle unique_violation
   BEGIN
+    -- 11.1 Decrement stock for tracked items
     FOR v_item IN SELECT * FROM jsonb_array_elements(v_agg_items) LOOP
       v_item_id := (v_item.value->>'menu_item_id')::uuid;
       v_qty := (v_item.value->>'quantity')::integer;
@@ -1329,6 +1338,7 @@ BEGIN
       WHERE id = v_item_id AND stock IS NOT NULL;
     END LOOP;
 
+    -- 11.2 Insert Order (with NULL pickup_token and pickup_for_name)
     INSERT INTO public.orders (
       user_id,
       canteen_id,
@@ -1362,17 +1372,19 @@ BEGIN
     )
     RETURNING id, order_code INTO v_order_id, v_order_code;
 
+    -- 11.3 Insert Order Pickup Secret (using two gen_random_uuid hex strings)
     v_secret := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
     INSERT INTO public.order_pickup_secrets (order_id, secret)
     VALUES (v_order_id, v_secret);
 
+    -- 11.4 Insert Order Items with name_snapshot and unit_price_paise
     FOR v_item IN SELECT * FROM jsonb_array_elements(v_agg_items) LOOP
       v_item_id := (v_item.value->>'menu_item_id')::uuid;
       v_qty := (v_item.value->>'quantity')::integer;
 
-      SELECT name, price_paise INTO v_menu_item
-      FROM public.menu_items
-      WHERE id = v_item_id;
+      SELECT m.name, m.price_paise INTO v_menu_item
+      FROM public.menu_items m
+      WHERE m.id = v_item_id;
 
       INSERT INTO public.order_items (
         order_id,
@@ -1389,8 +1401,24 @@ BEGIN
       );
     END LOOP;
 
+    -- 11.5 Insert Notification
+    INSERT INTO public.notifications (
+      user_id,
+      order_id,
+      title,
+      body
+    ) VALUES (
+      v_user_id,
+      v_order_id,
+      'Order Placed',
+      'Your order has been successfully placed.'
+    );
+
   EXCEPTION
     WHEN unique_violation THEN
+      -- In the event of a simultaneous race condition on (user_id, idempotency_key),
+      -- this sub-block automatically rolls back the stock decrement.
+      -- Fetch and return the previously committed order.
       SELECT 
         o.id, o.order_code, o.status, o.total_paise, 
         o.estimated_ready_at, o.pickup_window_end, o.requested_pickup_at
@@ -1409,15 +1437,16 @@ BEGIN
           'requested_pickup_at', v_existing_order.requested_pickup_at,
           'was_duplicate', true
         );
-      ELSE
-        RAISE EXCEPTION 'CONFLICT: A concurrent conflict occurred while processing order';
       END IF;
+
+      RAISE; -- Re-raise if not idempotency violation
   END;
 
+  -- 12. Return Success Payload
   RETURN jsonb_build_object(
     'order_id', v_order_id,
     'order_code', v_order_code,
-    'status', 'PLACED'::public.order_status,
+    'status', 'PLACED',
     'total_paise', v_total_paise,
     'estimated_ready_at', v_est_record.estimated_ready_at,
     'pickup_window_end', v_est_record.pickup_window_end,
@@ -1428,10 +1457,10 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.place_order(uuid, jsonb, public.payment_method, text, timestamptz, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.place_order(uuid, jsonb, public.payment_method, text, timestamptz, text) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.place_order(uuid, jsonb, public.payment_method, text, timestamptz, text) TO authenticated;
 
 -- =============================================================================
--- 10. ADMIN STRIKES PROCEDURES
+-- 10. ADMIN STRIKES MANAGEMENT
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.admin_list_student_strikes()
 RETURNS jsonb
@@ -1454,16 +1483,23 @@ BEGIN
   FROM public.profiles
   WHERE id = v_admin_id;
 
-  IF NOT FOUND OR NOT v_active OR v_role <> 'admin'::public.user_role THEN
+  IF NOT FOUND OR NOT v_active THEN
+    RAISE EXCEPTION 'USER_INACTIVE: Account is inactive or does not exist';
+  END IF;
+
+  IF v_role <> 'admin'::public.user_role THEN
     RAISE EXCEPTION 'FORBIDDEN: Admin role required';
   END IF;
 
+  -- Name, last 4 of college id, count, last no-show only; NO email
   SELECT coalesce(jsonb_agg(item), '[]'::jsonb) INTO v_result
   FROM (
     SELECT jsonb_build_object(
       'student_id', p.id,
+      'name', coalesce(p.full_name, 'Student'),
       'student_name', coalesce(p.full_name, 'Student'),
       'college_id_last4', right(coalesce(p.college_id, '0000'), 4),
+      'count', count(o.id)::integer,
       'strike_count', count(o.id)::integer,
       'last_no_show_at', max(o.ready_at),
       'is_limited', (count(o.id) >= 3)
@@ -1516,16 +1552,29 @@ BEGIN
   FROM public.profiles
   WHERE id = v_admin_id;
 
-  IF NOT FOUND OR NOT v_active OR v_role <> 'admin'::public.user_role THEN
+  IF NOT FOUND OR NOT v_active THEN
+    RAISE EXCEPTION 'USER_INACTIVE: Caller account is inactive or does not exist';
+  END IF;
+
+  IF v_role <> 'admin'::public.user_role THEN
     RAISE EXCEPTION 'FORBIDDEN: Admin role required';
   END IF;
 
-  SELECT id, full_name, college_id INTO v_student
+  -- Verify target user is an existing student
+  SELECT id, role, is_active INTO v_student
   FROM public.profiles
   WHERE id = p_student_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'NOT_FOUND: Student profile not found';
+  END IF;
+
+  IF v_student.role <> 'student'::public.user_role THEN
+    RAISE EXCEPTION 'INVALID_INPUT: Target user is not a student';
+  END IF;
+
+  IF NOT v_student.is_active THEN
+    RAISE EXCEPTION 'USER_INACTIVE: Target student account is inactive';
   END IF;
 
   INSERT INTO public.student_strike_resets (
@@ -1586,9 +1635,10 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
-  v_admin_id uuid;
+  v_caller_id uuid;
   v_role public.user_role;
   v_active boolean;
+  v_staff_canteen uuid;
   v_target_date date;
   v_current_ist_date date;
   v_day_start timestamptz;
@@ -1596,21 +1646,37 @@ DECLARE
   v_canteen_breakdown jsonb;
   v_staff_breakdown jsonb;
   v_grand_totals jsonb;
+  v_recent_orders jsonb;
 BEGIN
-  v_admin_id := auth.uid();
-  IF v_admin_id IS NULL THEN
+  v_caller_id := auth.uid();
+  IF v_caller_id IS NULL THEN
     RAISE EXCEPTION 'UNAUTHENTICATED: Authentication required';
   END IF;
 
-  SELECT role, is_active INTO v_role, v_active
+  SELECT role, is_active, canteen_id INTO v_role, v_active, v_staff_canteen
   FROM public.profiles
-  WHERE id = v_admin_id;
+  WHERE id = v_caller_id;
 
-  IF NOT FOUND OR NOT v_active OR v_role <> 'admin'::public.user_role THEN
-    RAISE EXCEPTION 'FORBIDDEN: Admin role required';
+  IF NOT FOUND OR NOT v_active THEN
+    RAISE EXCEPTION 'USER_INACTIVE: Account is inactive or does not exist';
   END IF;
 
-  v_current_ist_date := (clock_timestamp() AT TIME ZONE 'Asia/Kolkata')::date;
+  IF v_role NOT IN ('admin'::public.user_role, 'staff'::public.user_role) THEN
+    RAISE EXCEPTION 'FORBIDDEN: Admin or staff role required';
+  END IF;
+
+  -- Restrict staff to their own canteen
+  IF v_role = 'staff'::public.user_role THEN
+    IF v_staff_canteen IS NULL THEN
+      RAISE EXCEPTION 'FORBIDDEN: Staff has no assigned canteen';
+    END IF;
+    IF p_canteen_id IS NOT NULL AND p_canteen_id IS DISTINCT FROM v_staff_canteen THEN
+      RAISE EXCEPTION 'FORBIDDEN: Staff can only reconcile their assigned canteen';
+    END IF;
+    p_canteen_id := v_staff_canteen;
+  END IF;
+
+  v_current_ist_date := (timezone('Asia/Kolkata', clock_timestamp()))::date;
   v_target_date := coalesce(p_date, v_current_ist_date);
 
   IF v_target_date > v_current_ist_date THEN
@@ -1621,96 +1687,137 @@ BEGIN
     RAISE EXCEPTION 'INVALID_INPUT: Date cannot be older than 365 days';
   END IF;
 
-  -- IST day boundaries
-  v_day_start := (v_target_date::text || ' 00:00:00')::timestamp AT TIME ZONE 'Asia/Kolkata';
-  v_day_end   := (v_target_date::text || ' 23:59:59.999999')::timestamp AT TIME ZONE 'Asia/Kolkata';
+  -- Exact IST day boundaries
+  v_day_start := timezone('Asia/Kolkata', v_target_date::timestamp);
+  v_day_end   := v_day_start + interval '1 day';
 
-  -- Canteen breakdown
-  SELECT coalesce(jsonb_agg(c_item), '[]'::jsonb) INTO v_canteen_breakdown
+  -- 1. Canteen breakdown (grouped by canteen)
+  SELECT coalesce(jsonb_agg(c_item ORDER BY c_name ASC), '[]'::jsonb) INTO v_canteen_breakdown
   FROM (
-    SELECT jsonb_build_object(
-      'canteen_id', c.id,
-      'canteen_name', c.name,
-      'collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status)::integer,
-      'total_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status), 0)::bigint,
-      'cash_collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum)::integer,
-      'cash_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum), 0)::bigint,
-      'upi_collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum)::integer,
-      'upi_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum), 0)::bigint,
-      'manual_override_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true)::integer,
-      'late_handover_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true AND o.collected_at > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')))::integer,
-      'no_show_count', (
-        SELECT count(*)::integer
-        FROM public.orders ns
-        WHERE ns.canteen_id = c.id
-          AND ns.status = 'NO_SHOW'::public.order_status
-          AND ns.ready_at >= v_day_start AND ns.ready_at <= v_day_end
-      )
-    ) AS c_item
+    SELECT 
+      c.name AS c_name,
+      jsonb_build_object(
+        'canteen_id', c.id,
+        'canteen_name', c.name,
+        'collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status)::integer,
+        'total_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status), 0)::bigint,
+        'cash_collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum)::integer,
+        'cash_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum), 0)::bigint,
+        'upi_collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum)::integer,
+        'upi_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum), 0)::bigint,
+        'manual_override_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true)::integer,
+        'manual_override_rate', CASE WHEN count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status) > 0 THEN round((count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true)::numeric / count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status)::numeric), 4) ELSE 0.0 END,
+        'late_handover_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true AND o.collected_at > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')))::integer,
+        'no_show_count', (
+          SELECT count(*)::integer
+          FROM public.orders ns
+          WHERE ns.canteen_id = c.id
+            AND ns.status = 'NO_SHOW'::public.order_status
+            AND ns.ready_at >= v_day_start AND ns.ready_at < v_day_end
+        )
+      ) AS c_item
     FROM public.canteens c
     LEFT JOIN public.orders o ON o.canteen_id = c.id
-      AND o.collected_at >= v_day_start AND o.collected_at <= v_day_end
+      AND o.collected_at >= v_day_start AND o.collected_at < v_day_end
     WHERE (p_canteen_id IS NULL OR c.id = p_canteen_id)
     GROUP BY c.id, c.name, c.hold_minutes
-    ORDER BY c.name ASC
   ) c_sub;
 
-  -- Staff breakdown (per canteen and staff member)
-  SELECT coalesce(jsonb_agg(s_item), '[]'::jsonb) INTO v_staff_breakdown
+  -- 2. Staff breakdown (grouped per canteen and per staff member)
+  SELECT coalesce(jsonb_agg(s_item ORDER BY c_name ASC, s_name ASC), '[]'::jsonb) INTO v_staff_breakdown
   FROM (
-    SELECT jsonb_build_object(
-      'canteen_id', o.canteen_id,
-      'canteen_name', c.name,
-      'staff_id', p.id,
-      'staff_name', coalesce(p.full_name, 'Staff Member'),
-      'collected_count', count(o.id)::integer,
-      'total_collected_paise', coalesce(sum(o.total_paise), 0)::bigint,
-      'cash_count', count(o.id) FILTER (WHERE o.collected_with = 'CASH'::public.collected_with_enum)::integer,
-      'cash_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.collected_with = 'CASH'::public.collected_with_enum), 0)::bigint,
-      'upi_count', count(o.id) FILTER (WHERE o.collected_with = 'UPI'::public.collected_with_enum)::integer,
-      'upi_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.collected_with = 'UPI'::public.collected_with_enum), 0)::bigint,
-      'manual_count', count(o.id) FILTER (WHERE o.is_manual_override = true)::integer,
-      'manual_rate_pct', CASE WHEN count(o.id) > 0 THEN round((count(o.id) FILTER (WHERE o.is_manual_override = true)::numeric / count(o.id)::numeric) * 100, 1) ELSE 0.0 END,
-      'late_handover_count', count(o.id) FILTER (WHERE o.is_manual_override = true AND o.collected_at > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')))::integer
-    ) AS s_item
+    SELECT 
+      c.name AS c_name,
+      coalesce(p.full_name, 'Staff Member') AS s_name,
+      jsonb_build_object(
+        'canteen_id', o.canteen_id,
+        'canteen_name', c.name,
+        'staff_id', p.id,
+        'staff_name', coalesce(p.full_name, 'Staff Member'),
+        'collected_count', count(o.id)::integer,
+        'total_collected_paise', coalesce(sum(o.total_paise), 0)::bigint,
+        'cash_count', count(o.id) FILTER (WHERE o.collected_with = 'CASH'::public.collected_with_enum)::integer,
+        'cash_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.collected_with = 'CASH'::public.collected_with_enum), 0)::bigint,
+        'upi_count', count(o.id) FILTER (WHERE o.collected_with = 'UPI'::public.collected_with_enum)::integer,
+        'upi_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.collected_with = 'UPI'::public.collected_with_enum), 0)::bigint,
+        'manual_count', count(o.id) FILTER (WHERE o.is_manual_override = true)::integer,
+        'manual_override_rate', CASE WHEN count(o.id) > 0 THEN round((count(o.id) FILTER (WHERE o.is_manual_override = true)::numeric / count(o.id)::numeric), 4) ELSE 0.0 END,
+        'manual_rate_pct', CASE WHEN count(o.id) > 0 THEN round((count(o.id) FILTER (WHERE o.is_manual_override = true)::numeric / count(o.id)::numeric) * 100, 1) ELSE 0.0 END,
+        'late_handover_count', count(o.id) FILTER (WHERE o.is_manual_override = true AND o.collected_at > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')))::integer
+      ) AS s_item
     FROM public.orders o
     JOIN public.profiles p ON p.id = o.collected_by
     JOIN public.canteens c ON c.id = o.canteen_id
     WHERE o.status = 'COLLECTED'::public.order_status
-      AND o.collected_at >= v_day_start AND o.collected_at <= v_day_end
+      AND o.collected_at >= v_day_start AND o.collected_at < v_day_end
       AND (p_canteen_id IS NULL OR o.canteen_id = p_canteen_id)
     GROUP BY o.canteen_id, c.name, c.hold_minutes, p.id, p.full_name
-    ORDER BY c.name ASC, p.full_name ASC
   ) s_sub;
 
-  -- Grand Totals
+  -- 3. Grand Totals (bare aggregate without invalid ORDER BY)
   SELECT jsonb_build_object(
     'target_date', v_target_date,
     'total_collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status)::integer,
     'total_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status), 0)::bigint,
+    'grand_total_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status), 0)::bigint,
+    'total_cash_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum)::integer,
     'total_cash_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum), 0)::bigint,
+    'cash_revenue_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum), 0)::bigint,
+    'total_upi_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum)::integer,
     'total_upi_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum), 0)::bigint,
+    'upi_revenue_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum), 0)::bigint,
     'total_manual_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true)::integer,
+    'total_manual_rate', CASE WHEN count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status) > 0 THEN round((count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true)::numeric / count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status)::numeric), 4) ELSE 0.0 END,
     'total_late_handover_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true AND o.collected_at > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')))::integer,
     'total_no_show_count', (
       SELECT count(*)::integer
       FROM public.orders ns
       WHERE (p_canteen_id IS NULL OR ns.canteen_id = p_canteen_id)
         AND ns.status = 'NO_SHOW'::public.order_status
-        AND ns.ready_at >= v_day_start AND ns.ready_at <= v_day_end
+        AND ns.ready_at >= v_day_start AND ns.ready_at < v_day_end
     )
   ) INTO v_grand_totals
   FROM public.orders o
   JOIN public.canteens c ON c.id = o.canteen_id
   WHERE (p_canteen_id IS NULL OR o.canteen_id = p_canteen_id)
-    AND o.collected_at >= v_day_start AND o.collected_at <= v_day_end;
+    AND o.collected_at >= v_day_start AND o.collected_at < v_day_end;
+
+  -- 4. Limited Order List (max 200 orders)
+  SELECT coalesce(jsonb_agg(o_item), '[]'::jsonb) INTO v_recent_orders
+  FROM (
+    SELECT jsonb_build_object(
+      'order_id', o.id,
+      'order_code', o.order_code,
+      'canteen_id', o.canteen_id,
+      'canteen_name', c.name,
+      'status', o.status,
+      'total_paise', o.total_paise,
+      'collected_with', o.collected_with,
+      'collection_method', o.collection_method,
+      'is_manual_override', o.is_manual_override,
+      'collected_by', o.collected_by,
+      'collected_at', o.collected_at,
+      'ready_at', o.ready_at
+    ) AS o_item
+    FROM public.orders o
+    JOIN public.canteens c ON c.id = o.canteen_id
+    WHERE (p_canteen_id IS NULL OR o.canteen_id = p_canteen_id)
+      AND (
+        (o.status = 'COLLECTED'::public.order_status AND o.collected_at >= v_day_start AND o.collected_at < v_day_end)
+        OR (o.status = 'NO_SHOW'::public.order_status AND o.ready_at >= v_day_start AND o.ready_at < v_day_end)
+      )
+    ORDER BY coalesce(o.collected_at, o.ready_at) DESC
+    LIMIT 200
+  ) ord_sub;
 
   RETURN jsonb_build_object(
+    'ok', true,
     'date', v_target_date,
     'canteen_id', p_canteen_id,
     'canteens', v_canteen_breakdown,
     'staff', v_staff_breakdown,
-    'summary', v_grand_totals
+    'summary', v_grand_totals,
+    'orders', v_recent_orders
   );
 END;
 $$;
@@ -1719,7 +1826,10 @@ REVOKE ALL ON FUNCTION public.get_daily_reconciliation(date, uuid) FROM PUBLIC, 
 GRANT EXECUTE ON FUNCTION public.get_daily_reconciliation(date, uuid) TO authenticated;
 
 -- =============================================================================
--- 12. CANTEEN SETTINGS: public.admin_update_canteen_settings (5-120 Validation)
+-- 12. CANTEEN SETTINGS: public.admin_update_canteen_settings
+-- Base Definition: 0006_admin_operations.sql (lines 310-419)
+-- Preserves jsonb return and ALL validations (capacity 1-50, lead 0-120, NULL checks);
+-- Changes ONLY hold window from 0-120 to 5-120.
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.admin_update_canteen_settings(
   p_canteen_id uuid,
@@ -1734,9 +1844,9 @@ SECURITY DEFINER
 SET search_path = ''
 LANGUAGE plpgsql AS $$
 DECLARE
-  v_caller_id uuid;
-  v_caller    public.profiles%ROWTYPE;
-  v_canteen   public.canteens%ROWTYPE;
+  v_caller_id    uuid;
+  v_caller       public.profiles%ROWTYPE;
+  v_canteen      public.canteens%ROWTYPE;
 BEGIN
   -- 1. Verify caller
   v_caller_id := auth.uid();
@@ -1753,12 +1863,17 @@ BEGIN
   END IF;
 
   IF v_caller.role != 'admin'::public.user_role THEN
-    RAISE EXCEPTION 'FORBIDDEN: Only administrators may update canteen configuration';
+    RAISE EXCEPTION 'FORBIDDEN: Only administrators may update canteen settings';
   END IF;
 
-  -- 2. Validate inputs (Hold window must be between 5 and 120 minutes)
-  IF p_kitchen_capacity <= 0 THEN
-    RAISE EXCEPTION 'INVALID_INPUT: Kitchen capacity must be greater than zero';
+  -- 2. Range & Time Validations (Preserving all from 0006, hold window updated to 5-120)
+  IF p_kitchen_capacity IS NULL OR p_min_lead_minutes IS NULL OR p_hold_minutes IS NULL OR
+     p_opens_at IS NULL OR p_closes_at IS NULL OR p_last_order_time IS NULL THEN
+    RAISE EXCEPTION 'INVALID_INPUT: All settings parameters are required';
+  END IF;
+
+  IF p_kitchen_capacity < 1 OR p_kitchen_capacity > 50 THEN
+    RAISE EXCEPTION 'INVALID_INPUT: Kitchen capacity must be between 1 and 50 units';
   END IF;
 
   IF p_min_lead_minutes < 0 OR p_min_lead_minutes > 120 THEN
@@ -1797,7 +1912,7 @@ BEGIN
       hold_minutes = p_hold_minutes
   WHERE id = p_canteen_id;
 
-  -- 5. Audit log
+  -- 5. Audit log (Preserving exact 0006 columns and action name)
   INSERT INTO public.admin_audit_log (
     actor_id,
     action,
@@ -1806,7 +1921,7 @@ BEGIN
     details
   ) VALUES (
     v_caller_id,
-    'CANTEEN_SETTINGS_UPDATED',
+    'UPDATE_CANTEEN_SETTINGS',
     'canteen',
     p_canteen_id::text,
     jsonb_build_object(
@@ -1820,6 +1935,7 @@ BEGIN
   );
 
   RETURN jsonb_build_object(
+    'success', true,
     'canteen_id', p_canteen_id,
     'opens_at', p_opens_at,
     'closes_at', p_closes_at,
@@ -1836,6 +1952,8 @@ GRANT EXECUTE ON FUNCTION public.admin_update_canteen_settings(uuid, time, time,
 
 -- =============================================================================
 -- 13. NOTIFICATION TRIGGER: public.handle_order_status_notification
+-- Base Definition: 0014_collection_cutover.sql (lines 535-595)
+-- Preserves ALL existing titles and text; adds NO_SHOW case and late-handover wording.
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.handle_order_status_notification()
 RETURNS TRIGGER
@@ -1851,6 +1969,7 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- Map new status to PRD Section 13 notification copy
   CASE NEW.status
     WHEN 'ACCEPTED'::public.order_status THEN
       v_title := 'Order Accepted';
@@ -1867,8 +1986,8 @@ BEGIN
     WHEN 'COLLECTED'::public.order_status THEN
       v_title := 'Order Collected';
       IF NEW.is_manual_override THEN
-        IF OLD.status = 'NO_SHOW'::public.order_status OR (NEW.manual_override_reason IS NOT NULL AND NEW.manual_override_reason ILIKE '%late%') THEN
-          v_body := 'Your order ' || NEW.order_code || ' was handed over late by canteen staff. Thank you for collecting!';
+        IF OLD.status = 'NO_SHOW'::public.order_status THEN
+          v_body := 'Your order ' || NEW.order_code || ' was collected via late handover by canteen staff.';
         ELSE
           v_body := 'Your order ' || NEW.order_code || ' was marked collected manually by canteen staff. If this was not you or your designated representative, please report it immediately.';
         END IF;
@@ -1878,7 +1997,7 @@ BEGIN
 
     WHEN 'NO_SHOW'::public.order_status THEN
       v_title := 'Order Expired';
-      v_body  := 'Your order ' || NEW.order_code || ' was not collected within the pickup window and has expired.';
+      v_body  := 'Order #' || NEW.order_code || ' was marked as uncollected because it exceeded the counter pickup window. Prepared items cannot be refunded.';
 
     WHEN 'REJECTED'::public.order_status THEN
       v_title := 'Order Rejected';
@@ -1889,6 +2008,7 @@ BEGIN
       RETURN NEW;
   END CASE;
 
+  -- Insert notification for the ordering student
   INSERT INTO public.notifications (
     user_id,
     order_id,

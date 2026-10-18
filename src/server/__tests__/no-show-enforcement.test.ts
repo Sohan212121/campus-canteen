@@ -20,10 +20,16 @@ vi.mock("next/cache", () => ({
 }));
 
 import { TERMINAL_STATUSES, getStatusBadgeConfig } from "@/lib/order-status";
-import { adminUpdateCanteenSettingsAction } from "@/server/actions/admin";
+import {
+  adminUpdateCanteenSettingsAction,
+  adminListStudentStrikesAction,
+  adminClearStudentStrikesAction,
+} from "@/server/actions/admin";
+import { getMyAccountStatusAction } from "@/server/actions/order";
 
 describe("NO_SHOW Status & Hold Window Enforcement", () => {
   const validCanteenId = "123e4567-e89b-12d3-a456-426614174000";
+  const validStudentId = "123e4567-e89b-12d3-a456-426614174001";
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,5 +101,74 @@ describe("NO_SHOW Status & Hold Window Enforcement", () => {
     expect(mockRpc).toHaveBeenCalledWith("admin_update_canteen_settings", expect.objectContaining({
       p_hold_minutes: 120,
     }));
+  });
+
+  it("fetches student account status with strike limit 3 and active order limit 2", async () => {
+    mockRequireRole.mockResolvedValue({ id: validStudentId, role: "student" });
+    mockRpc.mockResolvedValue({
+      data: {
+        strikes: 2,
+        is_limited: false,
+        active_orders_count: 1,
+        active_order_limit: 2,
+        can_order: true,
+        max_items_allowed: null,
+        max_order_paise: null,
+      },
+      error: null,
+    });
+
+    const res = await getMyAccountStatusAction();
+    expect(res.success).toBe(true);
+    expect(res.data?.strikes).toBe(2);
+    expect(res.data?.is_limited).toBe(false);
+    expect(res.data?.active_order_limit).toBe(2);
+    expect(res.data?.can_order).toBe(true);
+  });
+
+  it("adminListStudentStrikesAction returns rows without email", async () => {
+    mockRequireRole.mockResolvedValue({ id: "admin-id", role: "admin" });
+    mockRpc.mockResolvedValue({
+      data: [
+        {
+          student_id: validStudentId,
+          student_name: "Test Student",
+          college_id_last4: "1234",
+          strike_count: 3,
+          last_no_show_at: "2026-10-18T10:00:00Z",
+          is_limited: true,
+        },
+      ],
+      error: null,
+    });
+
+    const res = await adminListStudentStrikesAction();
+    expect(res.success).toBe(true);
+    if (res.success) {
+      expect(res.data[0]).toEqual({
+        student_id: validStudentId,
+        student_name: "Test Student",
+        college_id_last4: "1234",
+        strike_count: 3,
+        last_no_show_at: "2026-10-18T10:00:00Z",
+        is_limited: true,
+      });
+      expect(res.data[0]).not.toHaveProperty("email");
+    }
+  });
+
+  it("adminClearStudentStrikesAction invokes RPC with studentId and reason", async () => {
+    mockRequireRole.mockResolvedValue({ id: "admin-id", role: "admin" });
+    mockRpc.mockResolvedValue({
+      data: { ok: true, student_id: validStudentId },
+      error: null,
+    });
+
+    const res = await adminClearStudentStrikesAction(validStudentId, "Medical waiver");
+    expect(res.success).toBe(true);
+    expect(mockRpc).toHaveBeenCalledWith("admin_clear_student_strikes", {
+      p_student_id: validStudentId,
+      p_reason: "Medical waiver",
+    });
   });
 });
