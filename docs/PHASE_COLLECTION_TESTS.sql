@@ -157,10 +157,13 @@ DECLARE
   v_order_grace_id uuid;
   v_order_marker_id uuid;
   v_order_amber_marker_id uuid;
+  v_order_cross_id uuid;
+  v_order_pin_preview_id uuid;
   v_pin_res1 jsonb;
   v_pin_res2 jsonb;
   v_staff_fail_count integer;
   v_order_fail_count integer;
+  v_staff_failures integer;
 BEGIN
   SELECT val_uuid INTO v_canteen_a FROM _test_env WHERE key = 'canteen_a';
   SELECT val_uuid INTO v_canteen_b FROM _test_env WHERE key = 'canteen_b';
@@ -1297,6 +1300,10 @@ BEGIN
       INSERT INTO _test_results VALUES (43, 'get_pickup_code returns stable PIN on repeated calls', false, 'PIN unstable or failed: r1=' || v_pin_res1::text || ', r2=' || v_pin_res2::text);
     END IF;
 
+    -- Clear staff failure rows before marker tests so earlier failure rows cannot trigger RATE_LIMITED_STAFF
+    RESET ROLE;
+    DELETE FROM public.pickup_collect_attempts WHERE staff_id IN (v_staff_a_id, v_staff_b_id);
+
     -- 15.9 Stale code (offset -2) without preview marker is rejected at collect_order
     RESET ROLE;
     INSERT INTO public.orders (
@@ -1329,21 +1336,48 @@ BEGIN
       INSERT INTO _test_results VALUES (44, 'stale code without marker is rejected at collect_order', false, 'Expected INVALID_CODE but got: ' || v_res::text);
     END IF;
 
-    -- 15.10 Fresh PREVIEW marker from same staff & order allows collect_order to succeed with rotated code
+    -- 15.10 End-to-end preview_collection with valid code allows collect_order with stale code
     RESET ROLE;
-    INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome, attempted_at)
-    VALUES (v_staff_a_id, v_order_marker_id, v_canteen_a, 'PREVIEW', 'SUCCESS', now());
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_a, 'READY', 2600, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_marker_id;
+
+    INSERT INTO public.order_pickup_secrets (order_id, secret)
+    VALUES (v_order_marker_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
+
+    SELECT secret INTO v_test_secret FROM public.order_pickup_secrets WHERE order_id = v_order_marker_id;
+    v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+    v_win_before := v_epoch_before / 60;
+    v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || v_win_before::text);
+    v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+    v_code_curr := lpad((v_num % 1000000)::text, 6, '0');
+
+    v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || (v_win_before - 2)::text);
+    v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+    v_code_two_ago := lpad((v_num % 1000000)::text, 6, '0');
 
     SET LOCAL ROLE authenticated;
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
 
-    v_res := public.collect_order(v_canteen_a, v_order_marker_id, 'CASH', 'SCAN', v_code_two_ago, NULL, NULL);
-    RESET ROLE;
+    -- 1) Call preview_collection with current valid code -> inserts PREVIEW/SUCCESS marker
+    v_res := public.preview_collection(v_canteen_a, v_order_marker_id::text, v_code_curr, NULL);
+    IF (v_res->>'ok')::boolean = true THEN
+      -- 2) Call collect_order with stale code (offset -2) -> accepted via 90s preview marker
+      v_res := public.collect_order(v_canteen_a, v_order_marker_id, 'CASH', 'SCAN', v_code_two_ago, NULL, NULL);
+      RESET ROLE;
 
-    IF (v_res->>'ok')::boolean = true AND EXISTS (SELECT 1 FROM public.orders WHERE id = v_order_marker_id AND status = 'COLLECTED') THEN
-      INSERT INTO _test_results VALUES (45, 'fresh PREVIEW marker from same staff and order accepted at collect', true, 'Order collected successfully via 90s preview binding marker');
+      IF (v_res->>'ok')::boolean = true AND EXISTS (SELECT 1 FROM public.orders WHERE id = v_order_marker_id AND status = 'COLLECTED') THEN
+        INSERT INTO _test_results VALUES (45, 'end-to-end preview with valid code allows collect with stale code', true, 'preview created marker; collect with stale code succeeded and collected order');
+      ELSE
+        INSERT INTO _test_results VALUES (45, 'end-to-end preview with valid code allows collect with stale code', false, 'collect_order failed: ' || v_res::text);
+      END IF;
     ELSE
-      INSERT INTO _test_results VALUES (45, 'fresh PREVIEW marker from same staff and order accepted at collect', false, 'Expected success but got: ' || v_res::text);
+      RESET ROLE;
+      INSERT INTO _test_results VALUES (45, 'end-to-end preview with valid code allows collect with stale code', false, 'preview_collection failed with valid code: ' || v_res::text);
     END IF;
 
     -- 15.11 Backdated PREVIEW marker (120s old) is rejected by collect_order
@@ -1382,7 +1416,7 @@ BEGIN
       INSERT INTO _test_results VALUES (46, 'backdated PREVIEW marker (>90s) is rejected at collect_order', false, 'Expected INVALID_CODE but got: ' || v_res::text);
     END IF;
 
-    -- 15.12 Marker from another staff member or different order is rejected
+    -- 15.12 Marker from another staff member is rejected
     RESET ROLE;
     -- Fresh marker belongs to staff B (not staff A)
     INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome, attempted_at)
@@ -1400,7 +1434,91 @@ BEGIN
       INSERT INTO _test_results VALUES (47, 'marker from different staff member is rejected', false, 'Expected INVALID_CODE but got: ' || v_res::text);
     END IF;
 
-    -- 15.13 Amber order with fresh PREVIEW marker STILL strictly requires student PIN
+    -- 15.13 Marker made for one order does not allow collecting another order
+    RESET ROLE;
+    -- Create Order 1 and Order 2
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_a, 'READY', 2000, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_marker_id;
+
+    INSERT INTO public.order_pickup_secrets (order_id, secret)
+    VALUES (v_order_marker_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
+
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_a, 'READY', 2500, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_cross_id;
+
+    INSERT INTO public.order_pickup_secrets (order_id, secret)
+    VALUES (v_order_cross_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
+
+    -- Fresh marker for Order 1 for Staff A
+    INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome, attempted_at)
+    VALUES (v_staff_a_id, v_order_marker_id, v_canteen_a, 'PREVIEW', 'SUCCESS', now());
+
+    -- Staff A attempts to collect Order 2 using stale/garbage code
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    v_res := public.collect_order(v_canteen_a, v_order_cross_id, 'CASH', 'SCAN', '999999', NULL, NULL);
+    RESET ROLE;
+
+    IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'INVALID_CODE' AND EXISTS (SELECT 1 FROM public.orders WHERE id = v_order_cross_id AND status = 'READY') THEN
+      INSERT INTO _test_results VALUES (48, 'marker for one order does not allow collecting another order', true, 'Order 1 marker did not permit collecting Order 2 with invalid code');
+    ELSE
+      INSERT INTO _test_results VALUES (48, 'marker for one order does not allow collecting another order', false, 'Expected INVALID_CODE but got: ' || v_res::text);
+    END IF;
+
+    -- 15.14 PIN-only preview does NOT enable a SCAN collection with a garbage code
+    RESET ROLE;
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_a, 'READY', 1500, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_pin_preview_id;
+
+    INSERT INTO public.order_pickup_secrets (order_id, secret)
+    VALUES (v_order_pin_preview_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
+
+    v_pin1 := public.internal_get_pickup_pin(v_order_pin_preview_id);
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    -- Preview with valid PIN only (no code)
+    v_res := public.preview_collection(v_canteen_a, v_order_pin_preview_id::text, NULL, v_pin1);
+    RESET ROLE;
+
+    -- Verify that preview succeeded but did NOT insert a PREVIEW/SUCCESS marker
+    SELECT count(*) INTO v_attempts_after
+    FROM public.pickup_collect_attempts
+    WHERE order_id = v_order_pin_preview_id
+      AND method = 'PREVIEW'
+      AND outcome = 'SUCCESS';
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    -- Now try SCAN collection with garbage code
+    v_res := public.collect_order(v_canteen_a, v_order_pin_preview_id, 'CASH', 'SCAN', '999999', NULL, NULL);
+    RESET ROLE;
+
+    IF v_attempts_after = 0 AND (v_res->>'ok')::boolean = false AND v_res->>'error' = 'INVALID_CODE' AND EXISTS (SELECT 1 FROM public.orders WHERE id = v_order_pin_preview_id AND status = 'READY') THEN
+      INSERT INTO _test_results VALUES (49, 'PIN-only preview does not create marker or enable SCAN with garbage code', true, '0 marker rows created; SCAN with garbage code correctly rejected with INVALID_CODE');
+    ELSE
+      INSERT INTO _test_results VALUES (49, 'PIN-only preview does not create marker or enable SCAN with garbage code', false, 'Marker count=' || v_attempts_after || ', collect result: ' || v_res::text);
+    END IF;
+
+    -- 15.15 Amber order with fresh PREVIEW marker STILL strictly requires student PIN
     RESET ROLE;
     INSERT INTO public.orders (
       user_id, canteen_id, status, total_paise, payment_method, payment_status,
@@ -1434,33 +1552,84 @@ BEGIN
       v_res := public.collect_order(v_canteen_a, v_order_amber_marker_id, 'CASH', 'SCAN', v_code_two_ago, v_pin1, NULL);
       RESET ROLE;
       IF (v_res->>'ok')::boolean = true AND EXISTS (SELECT 1 FROM public.orders WHERE id = v_order_amber_marker_id AND status = 'COLLECTED') THEN
-        INSERT INTO _test_results VALUES (48, 'amber order with marker still strictly requires student PIN', true, 'Without PIN rejected with AMBER_REQUIRES_BOTH; with PIN succeeded');
+        INSERT INTO _test_results VALUES (50, 'amber order with marker still strictly requires student PIN', true, 'Without PIN rejected with AMBER_REQUIRES_BOTH; with PIN succeeded');
       ELSE
-        INSERT INTO _test_results VALUES (48, 'amber order with marker still strictly requires student PIN', false, 'With PIN collection failed: ' || v_res::text);
+        INSERT INTO _test_results VALUES (50, 'amber order with marker still strictly requires student PIN', false, 'With PIN collection failed: ' || v_res::text);
       END IF;
     ELSE
       RESET ROLE;
-      INSERT INTO _test_results VALUES (48, 'amber order with marker still strictly requires student PIN', false, 'Expected AMBER_REQUIRES_BOTH without PIN but got: ' || v_res::text);
+      INSERT INTO _test_results VALUES (50, 'amber order with marker still strictly requires student PIN', false, 'Expected AMBER_REQUIRES_BOTH without PIN but got: ' || v_res::text);
     END IF;
 
-    -- 15.14 PREVIEW/SUCCESS marker does NOT count towards staff or order failure rate limits
+    -- 15.16 Successful preview does not count towards staff failure limit; staff with 9 prior failures can still preview and collect
     RESET ROLE;
+    -- Create fresh order
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_a, 'READY', 1800, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_marker_id;
+
+    INSERT INTO public.order_pickup_secrets (order_id, secret)
+    VALUES (v_order_marker_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
+
+    SELECT secret INTO v_test_secret FROM public.order_pickup_secrets WHERE order_id = v_order_marker_id;
+    v_code_curr := public.internal_get_pickup_code(v_order_marker_id, 0);
+
+    -- Clear staff A failure history and seed exactly 9 prior failures within last 5 minutes
+    DELETE FROM public.pickup_collect_attempts WHERE staff_id = v_staff_a_id;
+
+    INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome, attempted_at)
+    SELECT v_staff_a_id, v_order_marker_id, v_canteen_a, 'SCAN', 'INVALID_CODE', now() - interval '1 minute'
+    FROM generate_series(1, 9);
+
+    -- Check staff currently has 9 failures
+    SELECT count(*) INTO v_staff_failures
+    FROM public.pickup_collect_attempts
+    WHERE staff_id = v_staff_a_id
+      AND outcome != 'SUCCESS'
+      AND attempted_at > now() - interval '5 minutes';
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    -- 1) Call preview with valid code: staff has 9 prior failures, so preview must NOT be rate limited
+    v_res := public.preview_collection(v_canteen_a, v_order_marker_id::text, v_code_curr, NULL);
+    RESET ROLE;
+
+    -- Count outcome != 'SUCCESS' for THAT preview (order_id = v_order_marker_id and method = 'PREVIEW')
     SELECT count(*) INTO v_staff_fail_count
     FROM public.pickup_collect_attempts
     WHERE staff_id = v_staff_a_id
+      AND order_id = v_order_marker_id
       AND method = 'PREVIEW'
       AND outcome != 'SUCCESS';
 
+    -- Count total failure rows for staff: must STILL be exactly 9 (preview didn't add a failure)
     SELECT count(*) INTO v_order_fail_count
     FROM public.pickup_collect_attempts
-    WHERE order_id = v_order_marker_id
-      AND method = 'PREVIEW'
-      AND outcome != 'SUCCESS';
+    WHERE staff_id = v_staff_a_id
+      AND outcome != 'SUCCESS'
+      AND attempted_at > now() - interval '5 minutes';
 
-    IF v_staff_fail_count = 0 AND v_order_fail_count = 0 THEN
-      INSERT INTO _test_results VALUES (49, 'PREVIEW success marker does not count towards rate limits', true, 'outcome!=SUCCESS count is 0 for both staff and order markers');
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    -- 2) Call collect_order: staff still at 9 failures (under 10 limit), so collection must succeed
+    v_pin_res1 := public.collect_order(v_canteen_a, v_order_marker_id, 'CASH', 'SCAN', v_code_curr, NULL, NULL);
+    RESET ROLE;
+
+    IF (v_res->>'ok')::boolean = true
+       AND v_staff_failures = 9
+       AND v_staff_fail_count = 0
+       AND v_order_fail_count = 9
+       AND (v_pin_res1->>'ok')::boolean = true
+       AND EXISTS (SELECT 1 FROM public.orders WHERE id = v_order_marker_id AND status = 'COLLECTED') THEN
+      INSERT INTO _test_results VALUES (51, 'successful preview does not count towards failure limit; 9-failure staff can preview and collect', true, 'Staff with 9 failures successfully previewed and collected; 0 preview failures recorded');
     ELSE
-      INSERT INTO _test_results VALUES (49, 'PREVIEW success marker does not count towards rate limits', false, 'Marker was counted as failure: staff_fails=' || v_staff_fail_count || ', order_fails=' || v_order_fail_count);
+      INSERT INTO _test_results VALUES (51, 'successful preview does not count towards failure limit; 9-failure staff can preview and collect', false, 'Failed: preview_res=' || v_res::text || ', preview_fails=' || v_staff_fail_count || ', total_staff_fails=' || v_order_fail_count || ', collect_res=' || v_pin_res1::text);
     END IF;
 
     RESET ROLE;
@@ -1503,8 +1672,8 @@ BEGIN
 
   IF v_fail_count > 0 THEN
     RAISE EXCEPTION 'TEST SUITE FAILED: % out of % tests failed.%', v_fail_count, v_total, v_fail_summary;
-  ELSIF v_total < 49 THEN
-    RAISE EXCEPTION 'TEST SUITE INCOMPLETE: Expected 49 tests, but only % ran.', v_total;
+  ELSIF v_total < 51 THEN
+    RAISE EXCEPTION 'TEST SUITE INCOMPLETE: Expected 51 tests, but only % ran.', v_total;
   ELSE
     RAISE NOTICE 'SUCCESS: All % Collection test cases passed successfully.', v_pass_count;
   END IF;

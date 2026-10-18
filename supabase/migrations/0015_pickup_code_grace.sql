@@ -263,11 +263,12 @@ BEGIN
   FROM public.order_items oi
   WHERE oi.order_id = v_order.id;
 
-  -- Insert preview binding marker with outcome = 'SUCCESS'
-  -- This bridges the physical handover time gap (up to 90 seconds) for collect_order
-  -- and does not count towards staff or order failure rate limits
-  INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
-  VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW', 'SUCCESS');
+  -- Insert preview binding marker ONLY when rotating code was verified (v_code_valid = true).
+  -- A PIN-only preview (non-amber) does not create a marker; that collection must use method PIN.
+  IF v_code_valid THEN
+    INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
+    VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW', 'SUCCESS');
+  END IF;
 
   RETURN jsonb_build_object(
     'ok', true,
