@@ -60,11 +60,14 @@ export default async function OrderDetailPage({
     .maybeSingle();
 
   if (error) {
+    if (error.code === "PGRST116") {
+      notFound();
+    }
     console.error("[OrderDetailPage] Failed to fetch order:", {
       code: error.code,
       message: error.message,
     });
-    throw new Error("We couldn't load this order. Please try again.");
+    throw new Error("We couldn't load this order. Try again.");
   }
 
   if (!order) {

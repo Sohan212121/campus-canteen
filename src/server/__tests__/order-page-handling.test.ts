@@ -68,7 +68,7 @@ describe("OrderDetailPage Error & Not Found Handling", () => {
 
     await expect(
       OrderDetailPage({ params: Promise.resolve({ orderId: validOrderId }) })
-    ).rejects.toThrow("We couldn't load this order. Please try again.");
+    ).rejects.toThrow("We couldn't load this order. Try again.");
 
     expect(consoleSpy).toHaveBeenCalledWith("[OrderDetailPage] Failed to fetch order:", {
       code: "PGRST204",
@@ -90,6 +90,22 @@ describe("OrderDetailPage Error & Not Found Handling", () => {
     mockMaybeSingle.mockResolvedValue({
       data: null,
       error: null,
+    });
+
+    await expect(
+      OrderDetailPage({ params: Promise.resolve({ orderId: validOrderId }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+
+    expect(mockNotFound).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls notFound() when query returns PGRST116 (0 rows / genuinely missing order)", async () => {
+    mockMaybeSingle.mockResolvedValue({
+      data: null,
+      error: {
+        code: "PGRST116",
+        message: "The result contains 0 rows",
+      },
     });
 
     await expect(

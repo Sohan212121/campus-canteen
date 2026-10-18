@@ -66,7 +66,6 @@ export interface OrderDetailData {
   payment_method: string;
   payment_status: string;
   total_paise: number;
-  pickup_token?: string | null;
   pickup_for_name?: string | null;
   placed_at: string;
   collected_at?: string | null;
