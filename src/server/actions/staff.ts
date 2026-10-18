@@ -221,7 +221,7 @@ export type CollectionCard = {
   college_id_last4: string;
   pickup_for_name?: string | null;
   total_paise: number;
-  total_items?: number;
+  total_items: number;
   is_amber: boolean;
   items: Array<{
     name: string;
@@ -248,17 +248,6 @@ export type CollectOrderResult = {
     order_code: string;
     status: string;
     collected_at: string;
-    first_name?: string;
-    college_id_last4?: string;
-    pickup_for_name?: string | null;
-    total_paise?: number;
-    collected_with?: string;
-    collection_method?: string;
-    items?: Array<{
-      name: string;
-      quantity: number;
-      unit_price_paise: number;
-    }>;
   };
 };
 
@@ -418,13 +407,6 @@ export async function collectOrderAction(input: {
       order_code: res.order_code as string,
       status: (res.status as string) || "COLLECTED",
       collected_at: (res.collected_at as string) || new Date().toISOString(),
-      ...(res.first_name ? { first_name: res.first_name as string } : {}),
-      ...(res.college_id_last4 ? { college_id_last4: res.college_id_last4 as string } : {}),
-      ...(res.pickup_for_name !== undefined ? { pickup_for_name: res.pickup_for_name as string | null } : {}),
-      ...(res.total_paise !== undefined ? { total_paise: Number(res.total_paise) } : {}),
-      ...(res.collected_with ? { collected_with: res.collected_with as string } : {}),
-      ...(res.collection_method ? { collection_method: res.collection_method as string } : {}),
-      ...(Array.isArray(res.items) ? { items: res.items as CollectionCard["items"] } : {}),
     },
   };
 }

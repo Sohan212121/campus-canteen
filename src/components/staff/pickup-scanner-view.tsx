@@ -474,6 +474,20 @@ export function PickupScannerView() {
               bannerTitle = "Order Rejected";
             } else if (isNotReadyStatus) {
               bannerTitle = "Order Not Ready";
+            } else if (errorCode === "PIN_LOCKED") {
+              bannerTitle = "PIN Locked";
+            } else if (errorCode === "AMBER_REQUIRES_BOTH") {
+              bannerTitle = "PIN Required (Amber Order)";
+            } else if (errorCode === "RATE_LIMITED_STAFF" || errorCode === "RATE_LIMITED_ORDER") {
+              bannerTitle = "Rate Limit Reached";
+            } else if (errorCode === "MANUAL_LIMIT") {
+              bannerTitle = "Manual Limit Reached";
+            } else if (errorCode === "MANUAL_REASON_REQUIRED") {
+              bannerTitle = "Reason Required";
+            } else if (errorCode === "NO_PICKUP_SECRET") {
+              bannerTitle = "Security Error";
+            } else if (errorCode === "INVALID_CODE" || errorCode === "WRONG_PIN") {
+              bannerTitle = "Invalid Credentials";
             }
 
             return (
