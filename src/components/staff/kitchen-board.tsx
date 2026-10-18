@@ -85,6 +85,7 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [transitioningId, setTransitioningId] = useState<string | null>(null);
+  const [realtimeStatus, setRealtimeStatus] = useState<"SUBSCRIBED" | "CONNECTING" | "DISCONNECTED">("CONNECTING");
 
   // Tracking refs to detect new orders without alerting on initial load
   const isInitialLoad = useRef(true);
@@ -167,7 +168,23 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
           triggerDebouncedRefresh();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          setRealtimeStatus("SUBSCRIBED");
+        } else if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setRealtimeStatus("DISCONNECTED");
+        } else {
+          setRealtimeStatus("CONNECTING");
+        }
+      });
+
+    // Remove subscription on sign-out
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        supabase.removeChannel(channel);
+        setRealtimeStatus("DISCONNECTED");
+      }
+    });
 
     const intervalId = window.setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
@@ -177,6 +194,7 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       window.clearInterval(intervalId);
+      authListener?.subscription?.unsubscribe();
       supabase.removeChannel(channel);
     };
   }, [board.canteenId, refreshBoard]);
@@ -226,7 +244,54 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Live connection badge */}
+          <div
+            className={cn(
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors shadow-2xs",
+              realtimeStatus === "SUBSCRIBED"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                : realtimeStatus === "CONNECTING"
+                ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                : "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+            )}
+          >
+            {realtimeStatus === "SUBSCRIBED" ? (
+              <>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                <span>Live</span>
+              </>
+            ) : realtimeStatus === "CONNECTING" ? (
+              <>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500 animate-pulse" />
+                <span>Connecting...</span>
+              </>
+            ) : (
+              <>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
+                <span>Offline</span>
+              </>
+            )}
+          </div>
+
+          {/* Manual Refresh now button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              refreshBoard();
+              toast.info("Kitchen board refreshed");
+            }}
+            disabled={isRefreshing}
+            className="min-h-[44px] px-3.5 rounded-xl text-xs sm:text-sm font-bold gap-2"
+          >
+            <RotateCcw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+            <span>Refresh now</span>
+          </Button>
+
           {/* Audio toggle */}
           <Button
             variant={audioEnabled ? "default" : "outline"}
@@ -247,18 +312,6 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
             <span className="hidden sm:inline">
               {audioEnabled ? "Audio On" : "Enable Sound"}
             </span>
-          </Button>
-
-          {/* Refresh button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={refreshBoard}
-            disabled={isRefreshing}
-            className="min-h-[44px] px-3.5 rounded-xl text-xs sm:text-sm font-bold gap-2"
-          >
-            <RotateCcw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-            <span className="hidden sm:inline">Refresh</span>
           </Button>
         </div>
       </div>

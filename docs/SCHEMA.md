@@ -136,7 +136,7 @@ Master order record implementing the dynamic pickup model (ASAP or Scheduled).
 | `payment_method` | `payment_method` | NOT NULL, `DEFAULT 'PAY_AT_PICKUP'` | Chosen payment mode |
 | `payment_status` | `payment_status` | NOT NULL, `DEFAULT 'PENDING'` | Payment settlement status |
 | `total_paise` | `integer` | NOT NULL, `CHECK (total_paise >= 0)` | Total payable amount in paise |
-| `pickup_token` | `text` | NOT NULL, UNIQUE | 4-6 digit numeric or QR code token |
+| `pickup_token` | `text` | NULL (0014), SELECT REVOKED (0016) | Deprecated legacy token. Cleared in 0014. SELECT privilege revoked from `authenticated` & `anon` in 0016. |
 | `idempotency_key` | `text` | NULL | Client-submitted deduplication token |
 | `requested_pickup_at`| `timestamptz` | NULL | Desired ready/pickup time (NULL = ASAP mode) |
 | `estimated_ready_at` | `timestamptz` | NOT NULL | Calculated timestamp when order will be ready |
@@ -149,6 +149,12 @@ Master order record implementing the dynamic pickup model (ASAP or Scheduled).
 | `collected_at` | `timestamptz` | NULL | Handed over to student |
 | `cancelled_at` | `timestamptz` | NULL | Order cancelled |
 | `rejected_at` | `timestamptz` | NULL | Order rejected by canteen |
+| `collection_method`| `collection_method_enum` | NULL (0013) | Method of collection: `SCAN`, `PIN`, or `MANUAL` |
+| `collected_with` | `collected_with_enum` | NULL (0013) | Payment settlement mode: `CASH` or `UPI` |
+| `pickup_for_name` | `text` | NULL (0013) | Sanitized delegate name if ordered for a peer |
+| `is_manual_override`| `boolean` | NOT NULL, `DEFAULT false` (0013) | Flag indicating manual staff bypass |
+| `manual_override_reason` | `text` | NULL (0013) | Mandatory staff reason for manual collection |
+| `collected_by` | `uuid` | NULL, REFERENCES `profiles(id)` (0013) | Staff member who fulfilled the order |
 
 *Constraints*: `UNIQUE (user_id, idempotency_key)`
 
@@ -706,7 +712,8 @@ The database migrations must strictly be applied in sequential order:
 14. `0013_collection_core.sql` — Collection Core v2 (Additive): New orders columns, `pickup_collect_attempts`, `order_pickup_secrets` (RLS on, 0 policies, revoked from PUBLIC, anon, authenticated, service_role), `pickup_hmac` wrapper (`extensions.hmac` with empty search_path, revoked from service_role too), internal TOTP/PIN helpers (revoked from service_role too), `get_pickup_code`, `preview_collection`, `collect_order`, dispute reporting (`order_collection_reports`, `report_unauthorized_collection`), and in-flight secrets backfill.
 15. `0014_collection_cutover.sql` — Collection Cutover v2: Replaces `transition_order` (strictly refuses `COLLECTED`), replaces `place_order` based on 0007 definition (exact 5-arg DROP, adds `p_pickup_for_name`, generates secret row, inserts NULL token), drops `verify_pickup`, nullifies existing `pickup_token`s, updates `handle_order_status_notification` trigger function (revoked from PUBLIC, anon, authenticated), and appends idempotent secrets backfill to the end.
 16. `0015_pickup_code_grace.sql` — Pickup Code 10s Grace Window: Enforces NULL-safe offset validation (`IF p_window_offset IS NULL OR p_window_offset NOT IN (0, -1) THEN RETURN NULL`), computes `v_epoch` once from `clock_timestamp()` to derive both window number and second-in-window, restricts previous-window code (`offset -1`) to a 10-second grace window (`second_in_window < 10`), and revokes execution from `PUBLIC`, `anon`, `authenticated`, and `service_role`.
-17. Deploy updated web application.
+17. `0016_protect_pickup_token.sql` — Column-Level Security Hardening for Orders: Revokes table-level SELECT on `public.orders` from `authenticated` and `anon`. Dynamically grants SELECT on all 26 non-token columns to `authenticated`. Explicitly withholds `pickup_token` from `authenticated` and `anon`.
+18. Deploy updated web application.
 
 ---
 
@@ -808,6 +815,49 @@ Added in migrations `0013_collection_core.sql` (additive), `0014_collection_cuto
 > - In-flight orders in `PLACED`, `ACCEPTED`, `PREPARING`, or `READY` status are automatically backfilled with a cryptographic secret during migration execution.
 > - **Student Screen Change**: A student whose order is currently in `READY` status will immediately see the new Dynamic Smart Pickup screen upon refresh: an animated 60-second countdown ring, rotating QR code, rotating 6-digit code, and 4-digit counter fallback PIN.
 > - Staff counter scanners running the updated application will scan `CC1:<order_id>:<code>`, render the green/amber preview card, and record cash or UPI collection with a single tap.
+
+---
+
+## 17. Orders Column-Level Privilege Hardening (`0016_protect_pickup_token.sql`)
+
+### 17.1 Problem & Vulnerability Remediated
+Under standard table-level grants (`GRANT SELECT ON public.orders TO authenticated`), `has_column_privilege('authenticated', 'public.orders', 'pickup_token', 'select')` evaluates to `true`. Consequently:
+1. Any authenticated user (including staff members or students inspecting network traffic) could theoretically request the `pickup_token` column via the PostgREST API if not constrained by row policies.
+2. Wildcard projections (`SELECT * FROM public.orders`) would return the `pickup_token` column.
+
+### 17.2 Architecture & Privilege Model
+Migration `0016_protect_pickup_token.sql` eliminates this surface:
+1. **Revocation**:
+   `REVOKE SELECT ON TABLE public.orders FROM authenticated, anon;`
+2. **Column-Level Grants**:
+   Dynamically enumerates all columns from `information_schema.columns` where `table_schema = 'public'`, `table_name = 'orders'`, and `column_name != 'pickup_token'`. Grants `SELECT` exclusively on those 26 columns to `authenticated`:
+   - `id`, `order_code`, `user_id`, `canteen_id`, `status`, `payment_method`, `payment_status`, `total_paise`
+   - `idempotency_key`, `requested_pickup_at`, `estimated_ready_at`, `pickup_window_end`, `prep_minutes_total`
+   - `placed_at`, `accepted_at`, `preparing_at`, `ready_at`, `collected_at`, `cancelled_at`, `rejected_at`
+   - `collection_method`, `collected_with`, `pickup_for_name`, `is_manual_override`, `manual_override_reason`, `collected_by`
+3. **Withheld Column**:
+   `pickup_token` is explicitly omitted from the grant list. `has_column_privilege('authenticated', 'public.orders', 'pickup_token', 'select')` is `false`.
+4. **Service Role Untouched**:
+   `service_role` retains full table privileges for background migrations and system jobs.
+5. **SECURITY DEFINER Functions**:
+   Procedures such as `place_order`, `get_pickup_code`, `preview_collection`, and `collect_order` execute under the privileges of their owner (`postgres`) and are completely unaffected by `authenticated` column revocations.
+6. **Future Columns Rule**:
+   Because table-level `SELECT` is revoked, any column added to `public.orders` in future migrations will NOT be readable by default. Future migrations must include an explicit:
+   `GRANT SELECT (<new_column>) ON TABLE public.orders TO authenticated;`
+
+### 17.3 Secret Column Audit Across Other Tables
+All sensitive authentication credentials and rate-limit ledgers across the database are confirmed inaccessible to `authenticated` and `anon`:
+- `public.order_pickup_secrets`: `REVOKE ALL` from `PUBLIC`, `anon`, `authenticated`, and `service_role`. Zero RLS policies. Column `secret` is completely unreadable via API.
+- `public.pickup_collect_attempts`: `REVOKE ALL` from `PUBLIC`, `anon`, `authenticated`, and `service_role`. Audit ledger only accessible via SECURITY DEFINER routines.
+- `public.pickup_verify_attempts`: `REVOKE ALL` from `PUBLIC`, `anon`, and `authenticated`.
+
+### 17.4 Realtime Behavior & Refetch Invariant
+- **Postgres Realtime Subscription**:
+  PostgreSQL logical replication evaluates publication changes at the row level against RLS policies. In our frontend architecture:
+  - Realtime channels (`orders-list-${userId}`, `staff-board-${canteenId}`) are strictly used as **cache-invalidation signals** (refetch triggers).
+  - The frontend never consumes or renders payload fields directly (`payload.new` is ignored).
+  - On receiving a change notification, the client invokes explicit Server Actions or explicit PostgREST queries with non-token projections (`id, order_code, status...`), ensuring PostgREST column permissions are consistently enforced.
+
 
 
 
