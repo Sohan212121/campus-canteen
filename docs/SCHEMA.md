@@ -738,7 +738,7 @@ Added in migrations `0013_collection_core.sql` (additive), `0014_collection_cuto
   - `SECURITY DEFINER`, `SET search_path = ''`.
   - Enforces NULL-safe offset validation (`IF p_window_offset IS NULL OR p_window_offset NOT IN (0, -1) THEN RETURN NULL`).
   - Evaluates `v_epoch` once from `clock_timestamp()` and derives both the window number (`v_epoch / 60`) and the second-in-window (`v_epoch % 60`) from that single reading.
-  - Implements the 10-second grace window: offset `-1` returns `NULL` whenever `v_second_in_window >= 10`.
+  - Implements the 10-second grace window: offset `-1` returns `NULL` whenever `v_second_in_window > 10` (using top-level constant `c_grace_seconds = 10`).
   - Revoked from `PUBLIC`, `anon`, `authenticated`, and `service_role`.
 
 ### 16.3 Dynamic QR Payload & Rotating TOTP Codes
@@ -746,17 +746,23 @@ Added in migrations `0013_collection_core.sql` (additive), `0014_collection_cuto
 - **60-Second Window**: Evaluated as `floor(extract(epoch from clock_timestamp()) / 60)::bigint`.
 - **Tolerance & 10-Second Grace Rule**:
   - Staff preview and collection procedures accept the current window code (`window`) at all times throughout the 60-second window.
-  - In addition, the immediately preceding window (`window - 1`) is accepted **strictly and exclusively** during the first 10 seconds of the new window (`epoch % 60 < 10`) to absorb network transit delays and scan timing skew.
-  - Once 10 seconds have elapsed in the current window (`epoch % 60 >= 10`), the previous window code is strictly rejected (the internal helper returns `NULL`).
+  - In addition, the immediately preceding window (`window - 1`) is accepted **strictly and exclusively** during the first 10 seconds of the new window (`epoch % 60 <= 10`) to absorb network transit delays and scan timing skew.
+  - Once 10 seconds have elapsed in the current window (`epoch % 60 > 10`), the previous window code is strictly rejected (the internal helper returns `NULL`).
   - Codes from two or more windows ago (`window - 2` or earlier) or future windows are always rejected.
-- **PIN Derivation**: A 4-digit numeric fallback PIN is deterministically derived from `public.pickup_hmac(secret, 'pin:' || order_id)`. The PIN is never stored in plaintext or hashed format in the database.
+- **Preview-to-Collect 90-Second Binding Rule**:
+  - When staff verifies an order at the counter via `preview_collection`, a marker row is inserted into `public.pickup_collect_attempts` with `method = 'PREVIEW'` and `outcome = 'SUCCESS'`.
+  - Because `outcome = 'SUCCESS'`, this marker row is strictly excluded from staff failure (`outcome != 'SUCCESS'`) and order failure rate limit checks.
+  - When staff subsequently confirms payment and triggers `collect_order` (method `SCAN`), the code is accepted if currently valid OR if the caller has a valid `PREVIEW`/`SUCCESS` marker for the same order within the last 90 seconds (`attempted_at >= now() - interval '90 seconds'`).
+  - A marker from another staff member (`staff_id != auth.uid()`), for another order (`order_id != p_order_id`), or older than 90 seconds cannot be used.
+  - Amber orders still strictly require the student's 4-digit PIN even with a fresh preview marker.
+- **PIN Derivation**: A 4-digit numeric fallback PIN is deterministically derived from `public.pickup_hmac(secret, 'pin:' || order_id)`. The PIN is never stored in plaintext or hashed format in the database and is stable across repeated calls.
 
 ### 16.4 Stored Procedures
 - **`public.get_pickup_code(p_order_id uuid) RETURNS jsonb`**:
   - Accessible to authenticated student owning the order.
   - Allowed **strictly and exclusively** when `order.status = 'READY'`. Returns `{ ok: false, error: 'ORDER_NOT_READY' }` otherwise.
   - Returns `{ ok: false, error: 'PICKUP_UNAVAILABLE' }` if the order is in `READY` status but no cryptographic secret exists in `order_pickup_secrets`.
-  - Returns `{ ok: true, order_id, order_code, code, seconds_remaining, pin, pickup_for_name }`. Never returns the secret.
+  - Returns `{ ok: true, order_id, order_code, code, seconds_remaining, pin, pickup_for_name }`. The PIN returned is stable and identical across repeated invocations for the same order. Never returns the secret.
 - **`public.preview_collection(p_canteen_id, p_order_ref, p_code, p_pin) RETURNS jsonb`**:
   - Staff / Admin only. Does not alter database order state.
   - Locates order by UUID or `order_code` (e.g. `CN10001`). Enforces canteen isolation for staff: returns `NOT_FOUND` (not `FORBIDDEN`) on cross-canteen queries.
@@ -765,13 +771,14 @@ Added in migrations `0013_collection_core.sql` (additive), `0014_collection_cuto
   - **Amber Threshold**: Evaluated if total item quantity $> 5$ or `total_paise > 50000` (> ₹500). Amber orders require **both** the rotating code and the 4-digit PIN. PIN-only collection is refused. If PIN is locked, returns `PIN_LOCKED`.
   - **Incomplete Credentials Protection**: Scenarios where a valid rotating code was scanned but PIN has not yet been submitted are NOT logged as failures in `pickup_collect_attempts`.
   - Non-amber orders allow rotating code or PIN-only verification. If PIN is locked, valid rotating code SCAN still succeeds.
+  - On verification success, writes `method = 'PREVIEW'`, `outcome = 'SUCCESS'` marker into `pickup_collect_attempts` to bind verification to collection for 90 seconds.
   - Returns scan card data: `{ ok: true, order_id, order_code, first_name, college_id_last4, pickup_for_name, total_paise, total_items, is_amber, items }`. Never returns email or full name.
 - **`public.collect_order(p_canteen_id, p_order_id, p_collected_with, p_method, p_code, p_pin, p_reason) RETURNS jsonb`**:
   - Staff / Admin only. Locks order `FOR UPDATE`.
   - Rejects `NULL` `p_collected_with` and `p_method` strictly with `INVALID_INPUT`. Accepts `p_collected_with IN ('CASH', 'UPI')` and `p_method IN ('SCAN', 'PIN', 'MANUAL')`.
   - Cross-canteen lookups return `NOT_FOUND` (not `FORBIDDEN`).
   - Missing secret: Returns `{ ok: false, error: 'NO_PICKUP_SECRET' }` for SCAN or PIN verification if secret row is absent, without modifying order status or marking the order collected.
-  - Re-verifies credentials and amber requirements atomically. Incomplete amber credentials are not logged as failures.
+  - Re-verifies credentials and amber requirements atomically. In method SCAN, accepts if rotating code is valid or if a fresh (<= 90s) PREVIEW/SUCCESS marker exists from the same staff for this order. Incomplete amber credentials are not logged as failures.
   - 3 wrong PIN attempts lock the order PIN counter (`is_pin_locked = true`), returning `PIN_LOCKED`. A valid QR scan on a non-amber PIN-locked order continues to succeed.
   - **Manual Collection**: Allowed for students with depleted phone batteries or broken screens. Requires `p_reason` with length $\ge 5$ characters. Capped at 10 manual collections per staff member per rolling 24 hours (returns `{ ok: false, error: 'MANUAL_LIMIT' }`). Dispatches an alert notification to the student and logs to `public.admin_audit_log`.
   - Transitions order to `COLLECTED`, sets `payment_status = 'PAID'`, records `collected_at`, `collected_by`, `collected_with`, `collection_method`, and `manual_override_reason`.

@@ -19,10 +19,12 @@
 --  13. place_order: p_pickup_for_name sanitization, truncation to 40, empty -> NULL, NULL pickup_token, secret generation.
 --  14. Missing secret handling: NO_PICKUP_SECRET for SCAN & PIN, PICKUP_UNAVAILABLE for get_pickup_code.
 --  15. Payment status becomes PAID upon collection; admin_audit_log row written for ORDER_COLLECTED.
---  16. TOTP 10-second grace window: previous window code (-1) accepted during seconds 0..9, rejected thereafter.
+--  16. TOTP 10-second grace window: previous window code (-1) accepted during seconds 0..10, rejected thereafter.
 --      Current window code is always accepted. Two-windows-ago code (-2) is strictly rejected.
 --      NULL and invalid window offsets return NULL. PIN is stable across repeated calls.
---      (Running this script at another second of the minute exercises the other grace window branch without long pg_sleep).
+--  17. Preview-to-Collect binding marker: 90-second PREVIEW/SUCCESS attempt row bridges physical handover
+--      timing skew, rejected after 90s, rejected for different staff or order, amber strictly requires PIN,
+--      and marker row is excluded from rate-limit failure counts.
 -- ==============================================================================
 
 BEGIN;
@@ -153,6 +155,12 @@ DECLARE
   v_pin1 text;
   v_pin2 text;
   v_order_grace_id uuid;
+  v_order_marker_id uuid;
+  v_order_amber_marker_id uuid;
+  v_pin_res1 jsonb;
+  v_pin_res2 jsonb;
+  v_staff_fail_count integer;
+  v_order_fail_count integer;
 BEGIN
   SELECT val_uuid INTO v_canteen_a FROM _test_env WHERE key = 'canteen_a';
   SELECT val_uuid INTO v_canteen_b FROM _test_env WHERE key = 'canteen_b';
@@ -1273,6 +1281,188 @@ BEGIN
       INSERT INTO _test_results VALUES (42, 'two-windows-ago code is strictly rejected', false, 'Expected INVALID_CODE but got: ' || v_res::text);
     END IF;
 
+    -- 15.8 get_pickup_code returns stable PIN on repeated calls for same order
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_student_id)::text, true);
+    v_pin_res1 := public.get_pickup_code(v_order_norm_id);
+    v_pin_res2 := public.get_pickup_code(v_order_norm_id);
+    RESET ROLE;
+
+    IF (v_pin_res1->>'ok')::boolean = true
+       AND (v_pin_res2->>'ok')::boolean = true
+       AND v_pin_res1->>'pin' = v_pin_res2->>'pin'
+       AND length(v_pin_res1->>'pin') = 4 THEN
+      INSERT INTO _test_results VALUES (43, 'get_pickup_code returns stable PIN on repeated calls', true, 'PIN is identical across calls: ' || (v_pin_res1->>'pin'));
+    ELSE
+      INSERT INTO _test_results VALUES (43, 'get_pickup_code returns stable PIN on repeated calls', false, 'PIN unstable or failed: r1=' || v_pin_res1::text || ', r2=' || v_pin_res2::text);
+    END IF;
+
+    -- 15.9 Stale code (offset -2) without preview marker is rejected at collect_order
+    RESET ROLE;
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_a, 'READY', 2500, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_marker_id;
+
+    INSERT INTO public.order_pickup_secrets (order_id, secret)
+    VALUES (v_order_marker_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
+
+    SELECT secret INTO v_test_secret FROM public.order_pickup_secrets WHERE order_id = v_order_marker_id;
+    v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+    v_win_before := v_epoch_before / 60;
+    v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || (v_win_before - 2)::text);
+    v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+    v_code_two_ago := lpad((v_num % 1000000)::text, 6, '0');
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    v_res := public.collect_order(v_canteen_a, v_order_marker_id, 'CASH', 'SCAN', v_code_two_ago, NULL, NULL);
+    RESET ROLE;
+
+    IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'INVALID_CODE' THEN
+      INSERT INTO _test_results VALUES (44, 'stale code without marker is rejected at collect_order', true, 'collect_order rejected stale code with INVALID_CODE');
+    ELSE
+      INSERT INTO _test_results VALUES (44, 'stale code without marker is rejected at collect_order', false, 'Expected INVALID_CODE but got: ' || v_res::text);
+    END IF;
+
+    -- 15.10 Fresh PREVIEW marker from same staff & order allows collect_order to succeed with rotated code
+    RESET ROLE;
+    INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome, attempted_at)
+    VALUES (v_staff_a_id, v_order_marker_id, v_canteen_a, 'PREVIEW', 'SUCCESS', now());
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    v_res := public.collect_order(v_canteen_a, v_order_marker_id, 'CASH', 'SCAN', v_code_two_ago, NULL, NULL);
+    RESET ROLE;
+
+    IF (v_res->>'ok')::boolean = true AND EXISTS (SELECT 1 FROM public.orders WHERE id = v_order_marker_id AND status = 'COLLECTED') THEN
+      INSERT INTO _test_results VALUES (45, 'fresh PREVIEW marker from same staff and order accepted at collect', true, 'Order collected successfully via 90s preview binding marker');
+    ELSE
+      INSERT INTO _test_results VALUES (45, 'fresh PREVIEW marker from same staff and order accepted at collect', false, 'Expected success but got: ' || v_res::text);
+    END IF;
+
+    -- 15.11 Backdated PREVIEW marker (120s old) is rejected by collect_order
+    RESET ROLE;
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_a, 'READY', 3000, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_marker_id;
+
+    INSERT INTO public.order_pickup_secrets (order_id, secret)
+    VALUES (v_order_marker_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
+
+    SELECT secret INTO v_test_secret FROM public.order_pickup_secrets WHERE order_id = v_order_marker_id;
+    v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+    v_win_before := v_epoch_before / 60;
+    v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || (v_win_before - 2)::text);
+    v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+    v_code_two_ago := lpad((v_num % 1000000)::text, 6, '0');
+
+    -- Insert backdated marker (> 90 seconds, e.g. 120s old)
+    INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome, attempted_at)
+    VALUES (v_staff_a_id, v_order_marker_id, v_canteen_a, 'PREVIEW', 'SUCCESS', now() - interval '120 seconds');
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    v_res := public.collect_order(v_canteen_a, v_order_marker_id, 'CASH', 'SCAN', v_code_two_ago, NULL, NULL);
+    RESET ROLE;
+
+    IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'INVALID_CODE' THEN
+      INSERT INTO _test_results VALUES (46, 'backdated PREVIEW marker (>90s) is rejected at collect_order', true, '120s old marker correctly rejected with INVALID_CODE');
+    ELSE
+      INSERT INTO _test_results VALUES (46, 'backdated PREVIEW marker (>90s) is rejected at collect_order', false, 'Expected INVALID_CODE but got: ' || v_res::text);
+    END IF;
+
+    -- 15.12 Marker from another staff member or different order is rejected
+    RESET ROLE;
+    -- Fresh marker belongs to staff B (not staff A)
+    INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome, attempted_at)
+    VALUES (v_staff_b_id, v_order_marker_id, v_canteen_a, 'PREVIEW', 'SUCCESS', now());
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    v_res := public.collect_order(v_canteen_a, v_order_marker_id, 'CASH', 'SCAN', v_code_two_ago, NULL, NULL);
+    RESET ROLE;
+
+    IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'INVALID_CODE' THEN
+      INSERT INTO _test_results VALUES (47, 'marker from different staff member is rejected', true, 'Staff A could not collect using Staff B marker (INVALID_CODE)');
+    ELSE
+      INSERT INTO _test_results VALUES (47, 'marker from different staff member is rejected', false, 'Expected INVALID_CODE but got: ' || v_res::text);
+    END IF;
+
+    -- 15.13 Amber order with fresh PREVIEW marker STILL strictly requires student PIN
+    RESET ROLE;
+    INSERT INTO public.orders (
+      user_id, canteen_id, status, total_paise, payment_method, payment_status,
+      estimated_ready_at, pickup_window_end, prep_minutes_total, placed_at
+    ) VALUES (
+      v_student_id, v_canteen_a, 'READY', 60000, 'PAY_AT_PICKUP', 'PENDING',
+      now(), now() + interval '15 minutes', 5, now()
+    ) RETURNING id INTO v_order_amber_marker_id;
+
+    INSERT INTO public.order_pickup_secrets (order_id, secret)
+    VALUES (v_order_amber_marker_id, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''));
+
+    INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome, attempted_at)
+    VALUES (v_staff_a_id, v_order_amber_marker_id, v_canteen_a, 'PREVIEW', 'SUCCESS', now());
+
+    SELECT secret INTO v_test_secret FROM public.order_pickup_secrets WHERE order_id = v_order_amber_marker_id;
+    v_epoch_before := floor(extract(epoch from clock_timestamp()))::bigint;
+    v_win_before := v_epoch_before / 60;
+    v_raw_hash := public.pickup_hmac(v_test_secret, 'totp:' || (v_win_before - 2)::text);
+    v_num := (('x' || substr(encode(v_raw_hash, 'hex'), 1, 8))::bit(32)::bigint) & 2147483647;
+    v_code_two_ago := lpad((v_num % 1000000)::text, 6, '0');
+    v_pin1 := public.internal_get_pickup_pin(v_order_amber_marker_id);
+
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_staff_a_id)::text, true);
+
+    -- 1) Without PIN -> AMBER_REQUIRES_BOTH
+    v_res := public.collect_order(v_canteen_a, v_order_amber_marker_id, 'CASH', 'SCAN', v_code_two_ago, NULL, NULL);
+    IF (v_res->>'ok')::boolean = false AND v_res->>'error' = 'AMBER_REQUIRES_BOTH' THEN
+      -- 2) With correct PIN -> SUCCESS
+      v_res := public.collect_order(v_canteen_a, v_order_amber_marker_id, 'CASH', 'SCAN', v_code_two_ago, v_pin1, NULL);
+      RESET ROLE;
+      IF (v_res->>'ok')::boolean = true AND EXISTS (SELECT 1 FROM public.orders WHERE id = v_order_amber_marker_id AND status = 'COLLECTED') THEN
+        INSERT INTO _test_results VALUES (48, 'amber order with marker still strictly requires student PIN', true, 'Without PIN rejected with AMBER_REQUIRES_BOTH; with PIN succeeded');
+      ELSE
+        INSERT INTO _test_results VALUES (48, 'amber order with marker still strictly requires student PIN', false, 'With PIN collection failed: ' || v_res::text);
+      END IF;
+    ELSE
+      RESET ROLE;
+      INSERT INTO _test_results VALUES (48, 'amber order with marker still strictly requires student PIN', false, 'Expected AMBER_REQUIRES_BOTH without PIN but got: ' || v_res::text);
+    END IF;
+
+    -- 15.14 PREVIEW/SUCCESS marker does NOT count towards staff or order failure rate limits
+    RESET ROLE;
+    SELECT count(*) INTO v_staff_fail_count
+    FROM public.pickup_collect_attempts
+    WHERE staff_id = v_staff_a_id
+      AND method = 'PREVIEW'
+      AND outcome != 'SUCCESS';
+
+    SELECT count(*) INTO v_order_fail_count
+    FROM public.pickup_collect_attempts
+    WHERE order_id = v_order_marker_id
+      AND method = 'PREVIEW'
+      AND outcome != 'SUCCESS';
+
+    IF v_staff_fail_count = 0 AND v_order_fail_count = 0 THEN
+      INSERT INTO _test_results VALUES (49, 'PREVIEW success marker does not count towards rate limits', true, 'outcome!=SUCCESS count is 0 for both staff and order markers');
+    ELSE
+      INSERT INTO _test_results VALUES (49, 'PREVIEW success marker does not count towards rate limits', false, 'Marker was counted as failure: staff_fails=' || v_staff_fail_count || ', order_fails=' || v_order_fail_count);
+    END IF;
+
     RESET ROLE;
   EXCEPTION WHEN OTHERS THEN
     RESET ROLE;
@@ -1313,8 +1503,8 @@ BEGIN
 
   IF v_fail_count > 0 THEN
     RAISE EXCEPTION 'TEST SUITE FAILED: % out of % tests failed.%', v_fail_count, v_total, v_fail_summary;
-  ELSIF v_total < 42 THEN
-    RAISE EXCEPTION 'TEST SUITE INCOMPLETE: Expected 42 tests, but only % ran.', v_total;
+  ELSIF v_total < 49 THEN
+    RAISE EXCEPTION 'TEST SUITE INCOMPLETE: Expected 49 tests, but only % ran.', v_total;
   ELSE
     RAISE NOTICE 'SUCCESS: All % Collection test cases passed successfully.', v_pass_count;
   END IF;
