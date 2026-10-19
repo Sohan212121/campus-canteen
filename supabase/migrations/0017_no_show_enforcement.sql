@@ -1013,13 +1013,19 @@ BEGIN
   v_is_limited := (v_strike_count >= 3);
 
   SELECT count(*) INTO v_active_count
-  FROM public.orders
-  WHERE user_id = v_user_id
-    AND status IN (
-      'PLACED'::public.order_status,
-      'ACCEPTED'::public.order_status,
-      'PREPARING'::public.order_status,
-      'READY'::public.order_status
+  FROM public.orders o
+  JOIN public.canteens c ON c.id = o.canteen_id
+  WHERE o.user_id = v_user_id
+    AND (
+      o.status IN (
+        'PLACED'::public.order_status,
+        'ACCEPTED'::public.order_status,
+        'PREPARING'::public.order_status
+      )
+      OR (
+        o.status = 'READY'::public.order_status
+        AND (o.ready_at IS NULL OR clock_timestamp() <= (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')))
+      )
     );
 
   RETURN jsonb_build_object(
@@ -1233,6 +1239,16 @@ BEGIN
       'was_duplicate', true
     );
   END IF;
+
+  -- 7.1 Lazily transition caller's own expired READY orders to NO_SHOW so they never block new orders
+  UPDATE public.orders o
+  SET status = 'NO_SHOW'::public.order_status
+  FROM public.canteens c
+  WHERE o.canteen_id = c.id
+    AND o.user_id = v_user_id
+    AND o.status = 'READY'::public.order_status
+    AND o.ready_at IS NOT NULL
+    AND clock_timestamp() > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute'));
 
   -- 8. Active Orders Limit Check (checked AFTER canteen lock)
   SELECT count(*) INTO v_active_count

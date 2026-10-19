@@ -842,33 +842,50 @@ $$;
 
 
 -- ==============================================================================
--- TEST 14: mark_no_shows authorization: staff restricted to own canteen
+-- TEST 14: mark_no_shows authorization: staff restricted to own canteen, student forbidden
 -- ==============================================================================
 DO $$
 DECLARE
-  v_staff1_id   uuid;
-  v_canteen2_id uuid;
-  v_err         text;
+  v_staff1_id     uuid;
+  v_student_id    uuid;
+  v_canteen1_id   uuid;
+  v_canteen2_id   uuid;
+  v_err_other     text;
+  v_err_student   text;
+  v_res_null      jsonb;
 BEGIN
   SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
+  SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
+  SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_canteen2_id FROM _test_env WHERE key = 'canteen2_id';
 
-  -- Staff 1 belongs to Canteen 1; try to sweep Canteen 2
+  -- 1. Staff 1 belongs to Canteen 1; try to sweep Canteen 2 -> FORBIDDEN
   SET LOCAL ROLE authenticated;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
 
   BEGIN
     PERFORM public.mark_no_shows(v_canteen2_id);
   EXCEPTION WHEN OTHERS THEN
-    v_err := SQLERRM;
+    v_err_other := SQLERRM;
+  END;
+
+  -- 2. Staff 1 passes NULL -> replaced by their own canteen (Canteen 1)
+  v_res_null := public.mark_no_shows(NULL);
+
+  -- 3. Student tries to call mark_no_shows -> FORBIDDEN
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_student_id::text, 'role', 'authenticated')::text, true);
+  BEGIN
+    PERFORM public.mark_no_shows(v_canteen1_id);
+  EXCEPTION WHEN OTHERS THEN
+    v_err_student := SQLERRM;
   END;
 
   RESET ROLE;
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (14, 'Staff cannot sweep another canteen with mark_no_shows (FORBIDDEN)',
-          v_err LIKE '%FORBIDDEN%',
-          'Error: ' || coalesce(v_err, 'NONE'));
+  VALUES (14, 'mark_no_shows caller matrix: staff restricted to own, NULL replaced by own, student forbidden',
+          v_err_other LIKE '%FORBIDDEN%' AND (v_res_null->>'ok') = 'true' AND (v_res_null->>'canteen_id') = v_canteen1_id::text AND v_err_student LIKE '%FORBIDDEN%',
+          'Other canteen err: ' || coalesce(v_err_other, 'NONE') || ', Staff NULL res: ' || coalesce(v_res_null::text, 'NONE') || ', Student err: ' || coalesce(v_err_student, 'NONE'));
 END;
 $$;
 
@@ -1084,6 +1101,64 @@ BEGIN
           'Overload count found: ' || v_overload_count);
 END;
 $;
+
+-- ==============================================================================
+-- TEST 19: Expired unswept READY orders do NOT block student (place_order & account status)
+-- ==============================================================================
+DO $$
+DECLARE
+  v_student_id    uuid;
+  v_canteen1_id   uuid;
+  v_item1_id      uuid;
+  v_expired_order uuid := gen_random_uuid();
+  v_status_res    jsonb;
+  v_order_res     jsonb;
+  v_order_status  public.order_status;
+BEGIN
+  SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
+  SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
+  SELECT val_uuid INTO v_item1_id FROM _test_env WHERE key = 'item1_id';
+
+  -- Clear existing orders for student
+  UPDATE public.orders
+  SET status = 'CANCELLED'::public.order_status
+  WHERE user_id = v_student_id AND status IN ('PLACED', 'ACCEPTED', 'PREPARING', 'READY');
+
+  -- Create an order that is READY but expired (ready 30m ago, hold is 15m), not yet swept
+  INSERT INTO public.orders (
+    id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
+    prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
+  ) VALUES (
+    v_expired_order, v_student_id, v_canteen1_id, 'READY', 'PAY_AT_PICKUP', 'PENDING', 1500,
+    5, clock_timestamp() - interval '40 minutes', clock_timestamp() - interval '20 minutes',
+    clock_timestamp() - interval '40 minutes', clock_timestamp() - interval '30 minutes'
+  );
+
+  SET LOCAL ROLE authenticated;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_student_id::text, 'role', 'authenticated')::text, true);
+
+  -- 1. get_my_account_status must exclude expired READY orders from active_orders_count (must be 0, not 1)
+  v_status_res := public.get_my_account_status();
+
+  -- 2. place_order must lazily expire the unswept order and succeed
+  v_order_res := public.place_order(
+    v_canteen1_id,
+    jsonb_build_array(jsonb_build_object('menu_item_id', v_item1_id, 'quantity', 1)),
+    'PAY_AT_PICKUP'::public.payment_method,
+    'test-idemp-lazy-unswept-1'
+  );
+
+  RESET ROLE;
+
+  -- 3. Verify the old order was transitioned to NO_SHOW in DB
+  SELECT status INTO v_order_status FROM public.orders WHERE id = v_expired_order;
+
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (19, 'Expired unswept READY orders do not block student (lazily expired in place_order, excluded in get_my_account_status)',
+          (v_status_res->>'active_orders_count')::int = 0 AND (v_order_res->>'order_id') IS NOT NULL AND v_order_status = 'NO_SHOW',
+          'Account status active count: ' || (v_status_res->>'active_orders_count') || ', Place order id: ' || coalesce(v_order_res->>'order_id', 'FAIL') || ', Prior order status: ' || v_order_status);
+END;
+$$;
 
 
 -- ==============================================================================
