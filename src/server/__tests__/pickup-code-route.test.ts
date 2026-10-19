@@ -172,6 +172,46 @@ describe("GET /api/orders/[orderId]/pickup-code", () => {
     });
   });
 
+  it("returns 200 with friendly message when order is ALREADY_COLLECTED", async () => {
+    mockRpc.mockResolvedValue({
+      data: { ok: false, error: "ALREADY_COLLECTED" },
+      error: null,
+    });
+
+    const req = createMockRequest();
+    const res = await GET(req, {
+      params: Promise.resolve({ orderId: validOrderId }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({
+      ok: false,
+      code: "ALREADY_COLLECTED",
+      error: "This order has already been collected",
+    });
+  });
+
+  it("returns 200 with friendly message when order is PICKUP_EXPIRED", async () => {
+    mockRpc.mockResolvedValue({
+      data: { ok: false, error: "PICKUP_EXPIRED" },
+      error: null,
+    });
+
+    const req = createMockRequest();
+    const res = await GET(req, {
+      params: Promise.resolve({ orderId: validOrderId }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({
+      ok: false,
+      code: "PICKUP_EXPIRED",
+      error: "Pickup window expired. This order was marked as uncollected.",
+    });
+  });
+
   it("returns 200 with rotating TOTP code, seconds remaining, and PIN on success", async () => {
     mockRpc.mockResolvedValue({
       data: {

@@ -86,6 +86,43 @@ REVOKE ALL ON FUNCTION public.is_order_expired(uuid) FROM PUBLIC, anon, authenti
 GRANT EXECUTE ON FUNCTION public.is_order_expired(uuid) TO service_role;
 
 -- =============================================================================
+-- 3.1 HELPER FUNCTION: public.internal_count_strikes
+-- =============================================================================
+-- Counts active strikes for a student:
+-- Orders with status NO_SHOW, ready_at in the last 30 days, strictly after student's latest reset.
+-- Zero dependency on notifications table or titles.
+CREATE OR REPLACE FUNCTION public.internal_count_strikes(p_user_id uuid)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_count integer;
+  v_cleared_at timestamptz;
+BEGIN
+  IF p_user_id IS NULL THEN
+    RETURN 0;
+  END IF;
+
+  SELECT cleared_at INTO v_cleared_at
+  FROM public.student_strike_resets
+  WHERE student_id = p_user_id;
+
+  SELECT count(*)::integer INTO v_count
+  FROM public.orders o
+  WHERE o.user_id = p_user_id
+    AND o.status = 'NO_SHOW'::public.order_status
+    AND o.ready_at >= (clock_timestamp() - interval '30 days')
+    AND (v_cleared_at IS NULL OR o.ready_at > v_cleared_at);
+
+  RETURN coalesce(v_count, 0);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.internal_count_strikes(uuid) FROM PUBLIC, anon, authenticated, service_role;
+
+-- =============================================================================
 -- 4. STUDENT RPC: public.get_pickup_code (with Row Locking & Lazy Expiry)
 -- Base Definition: 0013_collection_core.sql (lines 152-232)
 -- =============================================================================
@@ -373,6 +410,8 @@ BEGIN
         'late_handover_available', true,
         'order_id', v_order.id,
         'order_code', v_order.order_code,
+        'ready_at', v_order.ready_at,
+        'hold_deadline', v_expiry_time,
         'first_name', split_part(v_student.full_name, ' ', 1),
         'college_id_last4', right(v_student.college_id, 4),
         'pickup_for_name', v_order.pickup_for_name,
@@ -385,7 +424,11 @@ BEGIN
         'ok', false,
         'error', 'PICKUP_EXPIRED',
         'status', 'NO_SHOW',
-        'late_handover_available', false
+        'late_handover_available', false,
+        'order_id', v_order.id,
+        'order_code', v_order.order_code,
+        'ready_at', v_order.ready_at,
+        'hold_deadline', v_expiry_time
       );
     END IF;
   END IF;
@@ -1042,14 +1085,7 @@ BEGIN
   END IF;
 
   -- Count strikes: rolling 30 days, status NO_SHOW, order was marked ready, after cleared_at
-  SELECT count(*) INTO v_strike_count
-  FROM public.orders o
-  LEFT JOIN public.student_strike_resets ssr ON ssr.student_id = v_user_id
-  WHERE o.user_id = v_user_id
-    AND o.status = 'NO_SHOW'::public.order_status
-    AND o.ready_at >= (clock_timestamp() - interval '30 days')
-    AND o.ready_at IS NOT NULL
-    AND (ssr.cleared_at IS NULL OR o.ready_at > ssr.cleared_at);
+  v_strike_count := public.internal_count_strikes(v_user_id);
 
   -- Strike limit is 3 everywhere
   v_is_limited := (v_strike_count >= 3);
@@ -1283,14 +1319,37 @@ BEGIN
   END IF;
 
   -- 7.1 Lazily transition caller's own expired READY orders to NO_SHOW so they never block new orders
-  UPDATE public.orders o
-  SET status = 'NO_SHOW'::public.order_status
-  FROM public.canteens c
-  WHERE o.canteen_id = c.id
-    AND o.user_id = v_user_id
-    AND o.status = 'READY'::public.order_status
-    AND o.ready_at IS NOT NULL
-    AND clock_timestamp() > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute'));
+  WITH moved AS (
+    UPDATE public.orders o
+    SET status = 'NO_SHOW'::public.order_status
+    FROM public.canteens c
+    WHERE o.canteen_id = c.id
+      AND o.user_id = v_user_id
+      AND o.status = 'READY'::public.order_status
+      AND o.ready_at IS NOT NULL
+      AND clock_timestamp() > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute'))
+    RETURNING o.id, o.order_code, o.canteen_id, o.ready_at, c.hold_minutes
+  )
+  INSERT INTO public.admin_audit_log (
+    actor_id,
+    action,
+    target_type,
+    target_id,
+    details
+  )
+  SELECT
+    v_user_id,
+    'ORDER_NO_SHOW_LAZY',
+    'order',
+    m.id::text,
+    jsonb_build_object(
+      'order_code', m.order_code,
+      'canteen_id', m.canteen_id,
+      'caller_rpc', 'place_order',
+      'ready_at', m.ready_at,
+      'hold_minutes', coalesce(m.hold_minutes, 15)
+    )
+  FROM moved m;
 
   -- 8. Active Orders Limit Check (checked AFTER canteen lock)
   SELECT count(*) INTO v_active_count
@@ -1308,15 +1367,7 @@ BEGIN
   END IF;
 
   -- 8.1 Strike Enforcement (checked AFTER canteen lock; limit is 3 strikes)
-  SELECT count(*) INTO v_strike_count
-  FROM public.orders o
-  LEFT JOIN public.student_strike_resets ssr ON ssr.student_id = v_user_id
-  WHERE o.user_id = v_user_id
-    AND o.status = 'NO_SHOW'::public.order_status
-    AND o.ready_at >= (clock_timestamp() - interval '30 days')
-    AND o.ready_at IS NOT NULL
-    AND (ssr.cleared_at IS NULL OR o.ready_at > ssr.cleared_at);
-
+  v_strike_count := public.internal_count_strikes(v_user_id);
   v_is_limited := (v_strike_count >= 3);
 
   -- If limited by 3 strikes, enforce maximum 2 total units across all order items
@@ -1545,29 +1596,38 @@ BEGIN
   END IF;
 
   -- Name, last 4 of college id, count, last no-show only; NO email
-  SELECT coalesce(jsonb_agg(item), '[]'::jsonb) INTO v_result
+  SELECT coalesce(jsonb_agg(sub.item), '[]'::jsonb) INTO v_result
   FROM (
     SELECT jsonb_build_object(
-      'student_id', p.id,
-      'name', coalesce(p.full_name, 'Student'),
-      'student_name', coalesce(p.full_name, 'Student'),
-      'college_id_last4', right(coalesce(p.college_id, '0000'), 4),
-      'count', count(o.id)::integer,
-      'strike_count', count(o.id)::integer,
-      'last_no_show_at', max(o.ready_at),
-      'is_limited', (count(o.id) >= 3)
+      'student_id', s.id,
+      'name', coalesce(s.full_name, 'Student'),
+      'student_name', coalesce(s.full_name, 'Student'),
+      'college_id_last4', right(coalesce(s.college_id, '0000'), 4),
+      'count', s.strike_count,
+      'strike_count', s.strike_count,
+      'last_no_show_at', s.last_no_show_at,
+      'is_limited', (s.strike_count >= 3)
     ) AS item
-    FROM public.profiles p
-    JOIN public.orders o ON o.user_id = p.id
-    LEFT JOIN public.student_strike_resets ssr ON ssr.student_id = p.id
-    WHERE p.role = 'student'::public.user_role
-      AND o.status = 'NO_SHOW'::public.order_status
-      AND o.ready_at >= (clock_timestamp() - interval '30 days')
-      AND o.ready_at IS NOT NULL
-      AND (ssr.cleared_at IS NULL OR o.ready_at > ssr.cleared_at)
-    GROUP BY p.id, p.full_name, p.college_id
-    HAVING count(o.id) > 0
-    ORDER BY count(o.id) DESC, max(o.ready_at) DESC
+    FROM (
+      SELECT 
+        p.id,
+        p.full_name,
+        p.college_id,
+        public.internal_count_strikes(p.id) AS strike_count,
+        (
+          SELECT max(o2.ready_at)
+          FROM public.orders o2
+          LEFT JOIN public.student_strike_resets ssr ON ssr.student_id = p.id
+          WHERE o2.user_id = p.id
+            AND o2.status = 'NO_SHOW'::public.order_status
+            AND o2.ready_at >= (clock_timestamp() - interval '30 days')
+            AND (ssr.cleared_at IS NULL OR o2.ready_at > ssr.cleared_at)
+        ) AS last_no_show_at
+      FROM public.profiles p
+      WHERE p.role = 'student'::public.user_role
+    ) s
+    WHERE s.strike_count > 0
+    ORDER BY s.strike_count DESC, s.last_no_show_at DESC
   ) sub;
 
   RETURN v_result;
@@ -1927,12 +1987,7 @@ BEGIN
     RAISE EXCEPTION 'FORBIDDEN: Only administrators may update canteen settings';
   END IF;
 
-  -- 2. Range & Time Validations (Preserving all from 0006, hold window updated to 5-120)
-  IF p_kitchen_capacity IS NULL OR p_min_lead_minutes IS NULL OR p_hold_minutes IS NULL OR
-     p_opens_at IS NULL OR p_closes_at IS NULL OR p_last_order_time IS NULL THEN
-    RAISE EXCEPTION 'INVALID_INPUT: All settings parameters are required';
-  END IF;
-
+  -- 2. Range & Time Validations
   IF p_kitchen_capacity < 1 OR p_kitchen_capacity > 50 THEN
     RAISE EXCEPTION 'INVALID_INPUT: Kitchen capacity must be between 1 and 50 units';
   END IF;
@@ -1973,7 +2028,7 @@ BEGIN
       hold_minutes = p_hold_minutes
   WHERE id = p_canteen_id;
 
-  -- 5. Audit log (Preserving exact 0006 columns and action name)
+  -- 5. Audit log
   INSERT INTO public.admin_audit_log (
     actor_id,
     action,

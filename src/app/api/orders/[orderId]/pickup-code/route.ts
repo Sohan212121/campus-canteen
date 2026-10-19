@@ -90,6 +90,10 @@ export async function GET(
     let friendlyError = "Unable to retrieve pickup code";
     if (errCode === "ORDER_NOT_READY") {
       friendlyError = "Order is not ready for pickup yet";
+    } else if (errCode === "ALREADY_COLLECTED") {
+      friendlyError = "This order has already been collected";
+    } else if (errCode === "PICKUP_EXPIRED") {
+      friendlyError = "Pickup window expired. This order was marked as uncollected.";
     } else if (errCode === "PICKUP_UNAVAILABLE") {
       friendlyError = "Pickup verification is temporarily unavailable";
     } else if (errCode === "NO_PICKUP_SECRET") {

@@ -695,6 +695,7 @@ DECLARE
   v_order_noready uuid := gen_random_uuid();
   v_status_2    jsonb;
   v_status_3    jsonb;
+  v_notif_count integer;
 BEGIN
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', '', true);
@@ -702,7 +703,7 @@ BEGIN
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_serial_id FROM _test_env WHERE key = 'serial_id';
 
-  -- Order 1: NO_SHOW, ready 5 days ago, ready_at IS NOT NULL, altered notification title -> MUST COUNT
+  -- Order 1: NO_SHOW, ready 5 days ago, ready_at IS NOT NULL, NO notification row -> MUST COUNT
   INSERT INTO public.orders (
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
@@ -711,10 +712,8 @@ BEGIN
     5, clock_timestamp() - interval '5 days', clock_timestamp() - interval '5 days',
     clock_timestamp() - interval '5 days', clock_timestamp() - interval '5 days'
   );
-  INSERT INTO public.notifications (user_id, order_id, title, body)
-  VALUES (v_serial_id, v_order1, 'Food Is Ready For Collection!', 'Your order has been prepared.');
 
-  -- Order 2: NO_SHOW, ready 2 days ago, ready_at IS NOT NULL, NO notification row at all -> MUST COUNT
+  -- Order 2: NO_SHOW, ready 2 days ago, ready_at IS NOT NULL, NO notification row -> MUST COUNT
   INSERT INTO public.orders (
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
@@ -749,7 +748,7 @@ BEGIN
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_serial_id::text, 'role', 'authenticated')::text, true);
   v_status_2 := public.get_my_account_status();
 
-  -- Now insert 3rd NO_SHOW order -> strikes = 3, is_limited = true
+  -- Now insert 3rd NO_SHOW order -> strikes = 3, is_limited = true (still ZERO notifications)
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', '', true);
 
@@ -768,11 +767,15 @@ BEGIN
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', '', true);
 
+  -- Confirm zero notification rows exist for this student
+  SELECT count(*) INTO v_notif_count FROM public.notifications WHERE user_id = v_serial_id;
+
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (10, 'Strike rule uses ready_at IS NOT NULL (unaffected by notification title edits/absence, threshold is 3)',
+  VALUES (10, 'Strike rule uses ready_at IS NOT NULL (zero notifications dependency, threshold is 3)',
+          v_notif_count = 0 AND
           (v_status_2->>'strikes')::int = 2 AND (v_status_2->>'is_limited')::boolean = false AND
           (v_status_3->>'strikes')::int = 3 AND (v_status_3->>'is_limited')::boolean = true,
-          'Status at 2 strikes: ' || v_status_2::text || ', Status at 3 strikes: ' || v_status_3::text);
+          'Notification count: ' || v_notif_count || ', Status at 2 strikes: ' || v_status_2::text || ', Status at 3 strikes: ' || v_status_3::text);
 EXCEPTION WHEN OTHERS THEN
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', '', true);
@@ -1289,6 +1292,7 @@ DECLARE
   v_status_res    jsonb;
   v_order_res     jsonb;
   v_order_status  public.order_status;
+  v_audit_count   integer;
 BEGIN
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', '', true);
@@ -1332,10 +1336,18 @@ BEGIN
   -- 3. Verify the old order was transitioned to NO_SHOW in DB
   SELECT status INTO v_order_status FROM public.orders WHERE id = v_expired_order;
 
+  -- 4. Verify ORDER_NO_SHOW_LAZY audit row was written by place_order
+  SELECT count(*) INTO v_audit_count
+  FROM public.admin_audit_log
+  WHERE target_id = v_expired_order::text
+    AND action = 'ORDER_NO_SHOW_LAZY'
+    AND actor_id = v_student_id
+    AND (details->>'caller_rpc') = 'place_order';
+
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (19, 'Expired unswept READY orders do not block student (lazily expired in place_order, excluded in get_my_account_status)',
-          (v_status_res->>'active_orders_count')::int = 0 AND (v_order_res->>'order_id') IS NOT NULL AND v_order_status = 'NO_SHOW',
-          'Account status active count: ' || (v_status_res->>'active_orders_count') || ', Place order id: ' || coalesce(v_order_res->>'order_id', 'FAIL') || ', Prior order status: ' || v_order_status);
+  VALUES (19, 'Expired unswept READY orders do not block student (lazily expired in place_order with ORDER_NO_SHOW_LAZY audit, excluded in get_my_account_status)',
+          (v_status_res->>'active_orders_count')::int = 0 AND (v_order_res->>'order_id') IS NOT NULL AND v_order_status = 'NO_SHOW' AND v_audit_count = 1,
+          'Account status active count: ' || (v_status_res->>'active_orders_count') || ', Place order id: ' || coalesce(v_order_res->>'order_id', 'FAIL') || ', Prior order status: ' || v_order_status || ', Audit count: ' || v_audit_count);
 EXCEPTION WHEN OTHERS THEN
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', '', true);
@@ -1393,6 +1405,9 @@ BEGIN
   VALUES (20, 'preview_collection on expired READY within 6h returns preview card and late_handover_available: true',
           (v_res->>'ok') = 'false' AND (v_res->>'error') = 'PICKUP_EXPIRED' AND
           (v_res->>'late_handover_available')::boolean = true AND
+          (v_res->>'order_id') IS NOT NULL AND (v_res->>'order_code') IS NOT NULL AND
+          (v_res->>'status') = 'NO_SHOW' AND (v_res->>'ready_at') IS NOT NULL AND
+          (v_res->>'hold_deadline') IS NOT NULL AND
           (v_res->>'first_name') IS NOT NULL AND jsonb_array_length(v_res->'items') >= 1,
           'Result: ' || v_res::text);
 EXCEPTION WHEN OTHERS THEN
@@ -1452,6 +1467,9 @@ BEGIN
   VALUES (21, 'preview_collection on NO_SHOW within 6h returns preview card and late_handover_available: true',
           (v_res->>'ok') = 'false' AND (v_res->>'error') = 'PICKUP_EXPIRED' AND
           (v_res->>'late_handover_available')::boolean = true AND
+          (v_res->>'order_id') IS NOT NULL AND (v_res->>'order_code') IS NOT NULL AND
+          (v_res->>'status') = 'NO_SHOW' AND (v_res->>'ready_at') IS NOT NULL AND
+          (v_res->>'hold_deadline') IS NOT NULL AND
           (v_res->>'first_name') IS NOT NULL AND jsonb_array_length(v_res->'items') >= 1,
           'Result: ' || v_res::text);
 EXCEPTION WHEN OTHERS THEN
@@ -1506,6 +1524,9 @@ BEGIN
   VALUES (22, 'preview_collection past 6h late window returns plain PICKUP_EXPIRED without card (late_handover_available: false)',
           (v_res->>'ok') = 'false' AND (v_res->>'error') = 'PICKUP_EXPIRED' AND
           (v_res->>'late_handover_available')::boolean = false AND
+          (v_res->>'order_id') IS NOT NULL AND (v_res->>'order_code') IS NOT NULL AND
+          (v_res->>'status') = 'NO_SHOW' AND (v_res->>'ready_at') IS NOT NULL AND
+          (v_res->>'hold_deadline') IS NOT NULL AND
           (v_res->>'items') IS NULL,
           'Result: ' || v_res::text);
 EXCEPTION WHEN OTHERS THEN
@@ -1518,29 +1539,70 @@ $$;
 
 
 -- ==============================================================================
--- TEST 23: Overload check: exactly one public.admin_update_canteen_settings exists
+-- TEST 23: Overload & Validation Check: exactly one public.admin_update_canteen_settings exists (hold 5-120)
 -- ==============================================================================
 DO $$
 DECLARE
   v_overload_count integer;
+  v_admin_id       uuid;
+  v_canteen1_id    uuid;
+  v_hold_fail_err  text := '';
+  v_update_res     jsonb;
 BEGIN
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', '', true);
+
+  SELECT val_uuid INTO v_admin_id FROM _test_env WHERE key = 'admin_id';
+  SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
 
   SELECT count(*) INTO v_overload_count
   FROM pg_proc p
   JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname = 'public' AND p.proname = 'admin_update_canteen_settings';
 
+  SET LOCAL ROLE authenticated;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_admin_id::text, 'role', 'authenticated')::text, true);
+
+  -- 1. Hold window < 5 (e.g. 4) must fail validation with INVALID_INPUT
+  BEGIN
+    PERFORM public.admin_update_canteen_settings(
+      v_canteen1_id,
+      '08:00:00'::time,
+      '22:00:00'::time,
+      '21:30:00'::time,
+      25,
+      10,
+      4
+    );
+  EXCEPTION WHEN OTHERS THEN
+    v_hold_fail_err := SQLERRM;
+  END;
+
+  -- 2. Hold window = 5 must succeed
+  v_update_res := public.admin_update_canteen_settings(
+    v_canteen1_id,
+    '08:00:00'::time,
+    '22:00:00'::time,
+    '21:30:00'::time,
+    25,
+    10,
+    5
+  );
+
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (23, 'Exactly one public.admin_update_canteen_settings overload exists in schema',
-          v_overload_count = 1,
-          'Overload count found: ' || v_overload_count);
+  VALUES (23, 'Exactly one admin_update_canteen_settings exists, rejects hold < 5 and accepts hold = 5',
+          v_overload_count = 1 AND
+          v_hold_fail_err ILIKE '%Hold window must be between 5 and 120 minutes%' AND
+          (v_update_res->>'hold_minutes')::int = 5,
+          'Overload count: ' || v_overload_count || ', Under-5 error: ' || v_hold_fail_err || ', Success res: ' || v_update_res::text);
 EXCEPTION WHEN OTHERS THEN
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', '', true);
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (23, 'Exactly one public.admin_update_canteen_settings overload exists in schema', false, 'Exception: ' || SQLERRM);
+  VALUES (23, 'Exactly one admin_update_canteen_settings exists, rejects hold < 5 and accepts hold = 5', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 

@@ -306,10 +306,16 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
       }
 
       if (!response.ok || !json.ok) {
-        const errCode = json?.code || "FAILED";
         let message = json?.error || "Pickup code is currently unavailable.";
+        let canRetryManually = true;
         if (errCode === "ORDER_NOT_READY") {
           message = "Order is not ready for pickup yet. Please wait for the canteen to call your order.";
+        } else if (errCode === "ALREADY_COLLECTED") {
+          message = "This order has already been collected.";
+          canRetryManually = false;
+        } else if (errCode === "PICKUP_EXPIRED") {
+          message = "Pickup window has expired. This order was marked as uncollected.";
+          canRetryManually = false;
         } else if (errCode === "PICKUP_UNAVAILABLE") {
           message = "Counter pickup verification is temporarily unavailable. Please show your order code to staff.";
         } else if (errCode === "NO_PICKUP_SECRET") {
@@ -318,7 +324,7 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
 
         setPickupError({
           message,
-          canRetryManually: true,
+          canRetryManually,
         });
         setPickupData(null);
         setExpiresAtPerf(null);
