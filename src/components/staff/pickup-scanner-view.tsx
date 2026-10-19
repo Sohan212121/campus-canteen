@@ -49,6 +49,7 @@ export function PickupScannerView() {
   // Late Handover Modal State (for orders expired within 6 hours)
   const [expiredOrderId, setExpiredOrderId] = useState<string | null>(null);
   const [expiredOrderCode, setExpiredOrderCode] = useState<string | null>(null);
+  const [lateHandoverCard, setLateHandoverCard] = useState<CollectionCard | null>(null);
   const [showLateHandoverModal, setShowLateHandoverModal] = useState(false);
   const [lateHandoverReason, setLateHandoverReason] = useState("");
   const [isSubmittingLateHandover, setIsSubmittingLateHandover] = useState(false);
@@ -92,10 +93,12 @@ export function PickupScannerView() {
         setErrorMessage(err);
         toast.error(err);
         setVerifiedCard(null);
-        setPaused(false);
         if (res.code === "PICKUP_EXPIRED") {
           setExpiredOrderId(res.order_id || null);
           setExpiredOrderCode(res.order_code || null);
+          setLateHandoverCard(res.data || null);
+        } else {
+          setLateHandoverCard(null);
         }
         if (code && res.code === "AMBER_REQUIRES_BOTH") {
           setLastScannedCode(code);
@@ -108,6 +111,7 @@ export function PickupScannerView() {
         setErrorStatus(null);
         setExpiredOrderId(null);
         setExpiredOrderCode(null);
+        setLateHandoverCard(null);
         if (code) setLastScannedCode(code);
         toast.success(`Order #${res.data.order_code} verified!`);
       }
@@ -206,6 +210,7 @@ export function PickupScannerView() {
     setExpiredOrderCode(null);
     setShowLateHandoverModal(false);
     setLateHandoverReason("");
+    setLateHandoverCard(null);
     setOrderCodeInput("");
     setCodeInput("");
     setPinInput("");
@@ -744,6 +749,29 @@ export function PickupScannerView() {
               <p className="text-muted-foreground leading-relaxed">
                 This order expired after the canteen hold window. Late handovers are permitted within 6 hours of expiry if the student arrived late at the counter. A reason (minimum 5 characters) is required and will be logged in the campus audit log.
               </p>
+              {lateHandoverCard && (
+                <div className="rounded-lg border bg-muted/40 p-3 space-y-2">
+                  <div className="flex items-center justify-between font-semibold text-foreground">
+                    <span>{lateHandoverCard.first_name} (ID: ••••{lateHandoverCard.college_id_last4})</span>
+                    <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                      ₹{(lateHandoverCard.total_paise / 100).toFixed(2)}
+                    </span>
+                  </div>
+                  {lateHandoverCard.pickup_for_name && (
+                    <p className="text-muted-foreground text-[11px]">
+                      Pickup for: <span className="text-foreground font-medium">{lateHandoverCard.pickup_for_name}</span>
+                    </p>
+                  )}
+                  <div className="divide-y divide-border/40 text-[11px] pt-1 max-h-28 overflow-y-auto">
+                    {lateHandoverCard.items.map((it, idx) => (
+                      <div key={idx} className="flex justify-between py-1 text-muted-foreground">
+                        <span>{it.quantity}x {it.name}</span>
+                        <span>₹{((it.unit_price_paise * it.quantity) / 100).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <label className="font-bold text-foreground">
                   Reason for Late Handover (Min 5 chars):

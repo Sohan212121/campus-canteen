@@ -241,6 +241,7 @@ export type PreviewCollectionResult = {
   status?: string;
   order_id?: string;
   order_code?: string;
+  late_handover_available?: boolean;
   data?: CollectionCard;
 };
 
@@ -299,7 +300,7 @@ export async function previewCollectionAction(input: {
     };
   }
 
-  const res = data as { ok: boolean; error?: string; status?: string; [key: string]: unknown };
+  const res = data as { ok: boolean; error?: string; status?: string; late_handover_available?: boolean; [key: string]: unknown };
   if (!res || !res.ok) {
     const code = res?.error || "VERIFY_FAILED";
     const status = typeof res?.status === "string" ? res.status : code === "ALREADY_COLLECTED" ? "COLLECTED" : undefined;
@@ -307,12 +308,32 @@ export async function previewCollectionAction(input: {
       code === "ORDER_NOT_READY" || code === "ALREADY_COLLECTED"
         ? getOrderNotReadyMessage(status)
         : (res?.error && COLLECTION_ERROR_MESSAGES[res.error]) || res?.error || "Verification failed.";
+    
+    const isLateAvailable = Boolean(res?.late_handover_available);
+    const cardData = isLateAvailable && res?.order_id
+      ? {
+          order_id: res.order_id as string,
+          order_code: (res.order_code as string) || "",
+          first_name: (res.first_name as string) || "Student",
+          college_id_last4: (res.college_id_last4 as string) || "----",
+          pickup_for_name: (res.pickup_for_name as string) || null,
+          total_paise: Number(res.total_paise || 0),
+          total_items: Array.isArray(res.items)
+            ? (res.items as { quantity?: number }[]).reduce((sum, it) => sum + (it.quantity || 1), 0)
+            : 0,
+          is_amber: false,
+          items: (res.items as CollectionCard["items"]) || [],
+        }
+      : undefined;
+
     return {
       success: false,
       code,
       status,
       order_id: typeof res?.order_id === "string" ? res.order_id : undefined,
       order_code: typeof res?.order_code === "string" ? res.order_code : undefined,
+      late_handover_available: isLateAvailable,
+      data: cardData,
       error: errorMsg,
     };
   }

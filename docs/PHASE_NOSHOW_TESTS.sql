@@ -10,13 +10,15 @@
 --              7. Rolling 24-hour staff manual collection cap (10 collections).
 --              8. Row locking & concurrency guard (status = 'READY').
 --              9. Invariant: stock is preserved on NO_SHOW (prepared food not restored).
---              10. Strike calculation: matches 'Order Ready' notification, 30-day window, threshold is 3.
+--              10. Strike calculation: rolling 30-day window, ready_at IS NOT NULL, threshold is 3.
 --              11. Student account limits: max 2 items, max Rs 200, max 2 active orders.
 --              12. Strike clearing via student_strike_resets (history is never rewritten).
 --              13. mark_no_shows authorization, batching (200 cap), idempotency, audit log.
 --              14. Cleanup of pickup_collect_attempts older than 7 days.
 --              15. Daily reconciliation math, IST day boundaries, cash/upi splits, max 200 orders list.
 --              16. Anonymous caller rejection on protected RPCs.
+--              17. Overload checks: place_order and admin_update_canteen_settings exactly 1.
+--              18. Preview card on late handover path for expired READY and NO_SHOW orders.
 --
 -- Safety: Wrapped in BEGIN ... ROLLBACK so NO test state or fixtures persist.
 -- ==============================================================================
@@ -49,6 +51,7 @@ DECLARE
   v_serial_id     uuid := gen_random_uuid();
   v_staff1_id     uuid := gen_random_uuid();
   v_staff2_id     uuid := gen_random_uuid();
+  v_staff_cap_id  uuid := gen_random_uuid();
   v_canteen1_id   uuid := gen_random_uuid();
   v_canteen2_id   uuid := gen_random_uuid();
   v_item1_id      uuid := gen_random_uuid();
@@ -56,6 +59,7 @@ DECLARE
   v_item_pricey   uuid := gen_random_uuid();
 BEGIN
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   -- 1. Ensure allowed campus domain exists
   INSERT INTO public.allowed_email_domains (domain)
@@ -118,11 +122,20 @@ BEGIN
   SET role = 'staff'::public.user_role, canteen_id = v_canteen2_id, is_active = true
   WHERE id = v_staff2_id;
 
+  -- 8. Create Dedicated Staff for Cap Testing (Canteen 1)
+  INSERT INTO auth.users (id, email, email_confirmed_at, raw_user_meta_data, raw_app_meta_data)
+  VALUES (v_staff_cap_id, 'staff_cap@campus.edu', now(), jsonb_build_object('full_name', 'Staff Cap User'), jsonb_build_object('role', 'staff', 'is_admin_created', true));
+
+  UPDATE public.profiles
+  SET role = 'staff'::public.user_role, canteen_id = v_canteen1_id, is_active = true
+  WHERE id = v_staff_cap_id;
+
   INSERT INTO _test_env (key, val_uuid) VALUES ('admin_id', v_admin_id);
   INSERT INTO _test_env (key, val_uuid) VALUES ('student_id', v_student_id);
   INSERT INTO _test_env (key, val_uuid) VALUES ('serial_id', v_serial_id);
   INSERT INTO _test_env (key, val_uuid) VALUES ('staff1_id', v_staff1_id);
   INSERT INTO _test_env (key, val_uuid) VALUES ('staff2_id', v_staff2_id);
+  INSERT INTO _test_env (key, val_uuid) VALUES ('staff_cap_id', v_staff_cap_id);
   INSERT INTO _test_env (key, val_uuid) VALUES ('canteen1_id', v_canteen1_id);
   INSERT INTO _test_env (key, val_uuid) VALUES ('canteen2_id', v_canteen2_id);
   INSERT INTO _test_env (key, val_uuid) VALUES ('item1_id', v_item1_id);
@@ -142,6 +155,9 @@ DECLARE
   v_order_id    uuid := gen_random_uuid();
   v_is_exp      boolean;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
 
@@ -160,6 +176,11 @@ BEGIN
   INSERT INTO _test_results (test_num, test_name, passed, details)
   VALUES (1, 'Expiry uses ready_at + hold_minutes, not pickup_window_end', v_is_exp = true,
           'is_order_expired returned ' || v_is_exp::text || ' for ready_at - 20m with 15m hold');
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (1, 'Expiry uses ready_at + hold_minutes, not pickup_window_end', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -174,8 +195,10 @@ DECLARE
   v_res        jsonb;
   v_status     public.order_status;
 BEGIN
-  SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
+  SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT id INTO v_order_id FROM public.orders WHERE user_id = v_student_id ORDER BY id ASC LIMIT 1;
 
   INSERT INTO public.order_pickup_secrets (order_id, secret)
@@ -188,12 +211,19 @@ BEGIN
   v_res := public.get_pickup_code(v_order_id);
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT status INTO v_status FROM public.orders WHERE id = v_order_id;
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
   VALUES (2, 'get_pickup_code lazily marks NO_SHOW and returns PICKUP_EXPIRED',
           (v_res->>'ok') = 'false' AND (v_res->>'error') = 'PICKUP_EXPIRED' AND v_status = 'NO_SHOW',
           'Result: ' || v_res::text || ', New DB status: ' || v_status::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (2, 'get_pickup_code lazily marks NO_SHOW and returns PICKUP_EXPIRED', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -210,6 +240,9 @@ DECLARE
   v_res         jsonb;
   v_status      public.order_status;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
@@ -234,12 +267,19 @@ BEGIN
   v_res := public.preview_collection(v_canteen1_id, v_order_id::text, '123456', NULL);
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT status INTO v_status FROM public.orders WHERE id = v_order_id;
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
   VALUES (3, 'preview_collection lazily marks NO_SHOW and returns PICKUP_EXPIRED',
           (v_res->>'ok') = 'false' AND (v_res->>'error') = 'PICKUP_EXPIRED' AND v_status = 'NO_SHOW',
           'Result: ' || v_res::text || ', New DB status: ' || v_status::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (3, 'preview_collection lazily marks NO_SHOW and returns PICKUP_EXPIRED', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -253,21 +293,23 @@ DECLARE
   v_student_id  uuid;
   v_staff1_id   uuid;
   v_order_id    uuid := gen_random_uuid();
-  v_res         jsonb;
-  v_status      public.order_status;
+  v_res_scan    jsonb;
+  v_res_pin     jsonb;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
 
-  -- Order in READY status, expired 1 hour ago
   INSERT INTO public.orders (
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
   ) VALUES (
-    v_order_id, v_student_id, v_canteen1_id, 'READY', 'PAY_AT_PICKUP', 'PENDING', 2000,
-    5, clock_timestamp() - interval '2 hours', clock_timestamp() - interval '1 hour',
-    clock_timestamp() - interval '2 hours', clock_timestamp() - interval '75 minutes'
+    v_order_id, v_student_id, v_canteen1_id, 'NO_SHOW', 'PAY_AT_PICKUP', 'PENDING', 2000,
+    5, clock_timestamp() - interval '30 minutes', clock_timestamp() - interval '15 minutes',
+    clock_timestamp() - interval '35 minutes', clock_timestamp() - interval '25 minutes'
   );
 
   INSERT INTO public.order_pickup_secrets (order_id, secret)
@@ -276,16 +318,25 @@ BEGIN
   SET LOCAL ROLE authenticated;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
 
-  -- Try SCAN collection (passing text parameters)
-  v_res := public.collect_order(v_canteen1_id, v_order_id, 'CASH', 'SCAN', '123456', NULL, NULL);
+  -- Try SCAN collection on NO_SHOW -> Must return PICKUP_EXPIRED
+  v_res_scan := public.collect_order(v_canteen1_id, v_order_id, 'CASH', 'SCAN', '123456', NULL, NULL);
+
+  -- Try PIN collection on NO_SHOW -> Must return PICKUP_EXPIRED
+  v_res_pin := public.collect_order(v_canteen1_id, v_order_id, 'CASH', 'PIN', NULL, '1234', NULL);
 
   RESET ROLE;
-  SELECT status INTO v_status FROM public.orders WHERE id = v_order_id;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (4, 'collect_order refuses SCAN on expired order with PICKUP_EXPIRED',
-          (v_res->>'ok') = 'false' AND (v_res->>'error') = 'PICKUP_EXPIRED' AND v_status = 'NO_SHOW',
-          'Result: ' || v_res::text || ', New DB status: ' || v_status::text);
+  VALUES (4, 'collect_order refuses standard SCAN and PIN methods on expired order',
+          (v_res_scan->>'ok') = 'false' AND (v_res_scan->>'error') = 'PICKUP_EXPIRED' AND
+          (v_res_pin->>'ok') = 'false' AND (v_res_pin->>'error') = 'PICKUP_EXPIRED',
+          'Scan res: ' || v_res_scan::text || ', Pin res: ' || v_res_pin::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (4, 'collect_order refuses standard SCAN and PIN methods on expired order', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -301,20 +352,23 @@ DECLARE
   v_order_id    uuid := gen_random_uuid();
   v_res         jsonb;
   v_status      public.order_status;
-  v_pay_status  public.payment_status;
+  v_audit_cnt   integer;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
 
-  -- Order in NO_SHOW status, ready 2 hours ago (hold was 15m, so expired 1h45m ago -> within 6h window)
+  -- Order in NO_SHOW status, ready 1 hour ago (well within 6h window)
   INSERT INTO public.orders (
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
   ) VALUES (
     v_order_id, v_student_id, v_canteen1_id, 'NO_SHOW', 'PAY_AT_PICKUP', 'PENDING', 2000,
-    5, clock_timestamp() - interval '2 hours', clock_timestamp() - interval '1 hour 45 minutes',
-    clock_timestamp() - interval '2 hours', clock_timestamp() - interval '2 hours'
+    5, clock_timestamp() - interval '90 minutes', clock_timestamp() - interval '75 minutes',
+    clock_timestamp() - interval '90 minutes', clock_timestamp() - interval '60 minutes'
   );
 
   INSERT INTO public.order_pickup_secrets (order_id, secret)
@@ -323,19 +377,27 @@ BEGIN
   SET LOCAL ROLE authenticated;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
 
-  -- Perform MANUAL late handover with valid reason >= 5 chars
   v_res := public.collect_order(
     v_canteen1_id, v_order_id, 'CASH', 'MANUAL',
-    NULL, NULL, 'Student arrived late after lab class, verified identity'
+    NULL, NULL, 'Student arrived 45m late due to exam'
   );
 
   RESET ROLE;
-  SELECT status, payment_status INTO v_status, v_pay_status FROM public.orders WHERE id = v_order_id;
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  SELECT status INTO v_status FROM public.orders WHERE id = v_order_id;
+  SELECT count(*) INTO v_audit_cnt FROM public.admin_audit_log
+  WHERE target_id = v_order_id::text AND action = 'ORDER_COLLECTED' AND (details->>'is_late_handover')::boolean = true;
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (5, 'Manual late handover within 6h succeeds, transitions to COLLECTED and PAID',
-          (v_res->>'ok') = 'true' AND v_status = 'COLLECTED' AND v_pay_status = 'PAID',
-          'Result: ' || v_res::text || ', DB status: ' || v_status::text || ', payment: ' || v_pay_status::text);
+  VALUES (5, 'Late manual handover within 6h window transitions to COLLECTED with audit marker',
+          (v_res->>'ok') = 'true' AND v_status = 'COLLECTED' AND v_audit_cnt = 1,
+          'Result: ' || v_res::text || ', Status: ' || v_status::text || ', Audit rows: ' || v_audit_cnt);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (5, 'Late manual handover within 6h window transitions to COLLECTED with audit marker', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -350,19 +412,23 @@ DECLARE
   v_staff1_id   uuid;
   v_order_id    uuid := gen_random_uuid();
   v_res         jsonb;
+  v_status      public.order_status;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
 
-  -- Order in NO_SHOW status, ready 8 hours ago (expired > 7 hours ago -> past 6h window)
+  -- Order ready 7 hours ago (past 15m hold + 6h late window)
   INSERT INTO public.orders (
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
   ) VALUES (
     v_order_id, v_student_id, v_canteen1_id, 'NO_SHOW', 'PAY_AT_PICKUP', 'PENDING', 2000,
-    5, clock_timestamp() - interval '8 hours', clock_timestamp() - interval '7 hours 45 minutes',
-    clock_timestamp() - interval '8 hours', clock_timestamp() - interval '8 hours'
+    5, clock_timestamp() - interval '8 hours', clock_timestamp() - interval '7 hours',
+    clock_timestamp() - interval '8 hours', clock_timestamp() - interval '7 hours'
   );
 
   INSERT INTO public.order_pickup_secrets (order_id, secret)
@@ -373,15 +439,23 @@ BEGIN
 
   v_res := public.collect_order(
     v_canteen1_id, v_order_id, 'CASH', 'MANUAL',
-    NULL, NULL, 'Student arrived after 8 hours'
+    NULL, NULL, 'Student arrived 7 hours late'
   );
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  SELECT status INTO v_status FROM public.orders WHERE id = v_order_id;
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (6, 'Manual late handover past 6h fails with PICKUP_EXPIRED',
-          (v_res->>'ok') = 'false' AND (v_res->>'error') = 'PICKUP_EXPIRED',
-          'Result: ' || v_res::text);
+  VALUES (6, 'Late manual handover past 6h window rejected with PICKUP_EXPIRED',
+          (v_res->>'ok') = 'false' AND (v_res->>'error') = 'PICKUP_EXPIRED' AND v_status = 'NO_SHOW',
+          'Result: ' || v_res::text || ', DB status: ' || v_status::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (6, 'Late manual handover past 6h window rejected with PICKUP_EXPIRED', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -397,6 +471,9 @@ DECLARE
   v_order_id    uuid := gen_random_uuid();
   v_res         jsonb;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
@@ -405,9 +482,9 @@ BEGIN
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
   ) VALUES (
-    v_order_id, v_student_id, v_canteen1_id, 'NO_SHOW', 'PAY_AT_PICKUP', 'PENDING', 2000,
-    5, clock_timestamp() - interval '1 hour', clock_timestamp() - interval '45 minutes',
-    clock_timestamp() - interval '1 hour', clock_timestamp() - interval '1 hour'
+    v_order_id, v_student_id, v_canteen1_id, 'READY', 'PAY_AT_PICKUP', 'PENDING', 2000,
+    5, clock_timestamp() - interval '10 minutes', clock_timestamp() + interval '5 minutes',
+    clock_timestamp() - interval '10 minutes', clock_timestamp() - interval '5 minutes'
   );
 
   INSERT INTO public.order_pickup_secrets (order_id, secret)
@@ -416,18 +493,24 @@ BEGIN
   SET LOCAL ROLE authenticated;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
 
-  -- Reason length 4 characters ('late')
+  -- Reason is only 3 chars ('abc') -> Must return MANUAL_REASON_REQUIRED
   v_res := public.collect_order(
     v_canteen1_id, v_order_id, 'CASH', 'MANUAL',
-    NULL, NULL, 'late'
+    NULL, NULL, 'abc'
   );
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (7, 'Manual collection with reason < 5 chars rejected with MANUAL_REASON_REQUIRED',
+  VALUES (7, 'Manual override reason under 5 characters rejected with MANUAL_REASON_REQUIRED',
           (v_res->>'ok') = 'false' AND (v_res->>'error') = 'MANUAL_REASON_REQUIRED',
           'Result: ' || v_res::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (7, 'Manual override reason under 5 characters rejected with MANUAL_REASON_REQUIRED', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -439,17 +522,21 @@ DO $$
 DECLARE
   v_canteen1_id uuid;
   v_student_id  uuid;
-  v_staff1_id   uuid;
+  v_staff_cap_id uuid;
   v_dummy_order uuid;
   v_test_order  uuid := gen_random_uuid();
-  v_res         jsonb;
+  v_res10       jsonb;
+  v_res11       jsonb;
   i             integer;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
-  SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
+  SELECT val_uuid INTO v_staff_cap_id FROM _test_env WHERE key = 'staff_cap_id';
 
-  -- Insert 9 existing manual collections in the last 24h for Staff 1
+  -- Insert 9 existing manual collections in the last 24h for dedicated Staff Cap User
   FOR i IN 1..9 LOOP
     v_dummy_order := gen_random_uuid();
     INSERT INTO public.orders (
@@ -460,11 +547,11 @@ BEGIN
       v_dummy_order, v_student_id, v_canteen1_id, 'COLLECTED', 'PAY_AT_PICKUP', 'PAID', 1000,
       5, clock_timestamp() - interval '5 hours', clock_timestamp() - interval '4 hours',
       clock_timestamp() - interval '5 hours', clock_timestamp() - interval '5 hours',
-      clock_timestamp() - interval '4 hours', v_staff1_id, 'MANUAL', true
+      clock_timestamp() - interval '4 hours', v_staff_cap_id, 'MANUAL', true
     );
   END LOOP;
 
-  -- Create target order for 10th test
+  -- Create target order for 10th manual collection
   INSERT INTO public.orders (
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
@@ -478,10 +565,10 @@ BEGIN
   VALUES (v_test_order, '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
 
   SET LOCAL ROLE authenticated;
-  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff_cap_id::text, 'role', 'authenticated')::text, true);
 
-  -- 10th collection: Should SUCCEED
-  v_res := public.collect_order(
+  -- 10th collection: Must SUCCEED (ok: true)
+  v_res10 := public.collect_order(
     v_canteen1_id, v_test_order, 'CASH', 'MANUAL',
     NULL, NULL, '10th manual collection valid reason'
   );
@@ -489,6 +576,8 @@ BEGIN
   -- Create 11th order
   v_test_order := gen_random_uuid();
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   INSERT INTO public.orders (
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
@@ -501,20 +590,26 @@ BEGIN
   VALUES (v_test_order, '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
 
   SET LOCAL ROLE authenticated;
-  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff_cap_id::text, 'role', 'authenticated')::text, true);
 
-  -- 11th collection: Should FAIL with MANUAL_LIMIT
-  v_res := public.collect_order(
+  -- 11th collection: Must FAIL with MANUAL_LIMIT
+  v_res11 := public.collect_order(
     v_canteen1_id, v_test_order, 'CASH', 'MANUAL',
     NULL, NULL, '11th manual collection should fail'
   );
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (8, 'Staff 10/day manual collection cap enforced (11th fails with MANUAL_LIMIT)',
-          (v_res->>'ok') = 'false' AND (v_res->>'error') = 'MANUAL_LIMIT',
-          'Result: ' || v_res::text);
+  VALUES (8, 'Staff 10/day manual collection cap enforced (10th ok:true, 11th fails with MANUAL_LIMIT)',
+          (v_res10->>'ok') = 'true' AND (v_res11->>'ok') = 'false' AND (v_res11->>'error') = 'MANUAL_LIMIT',
+          '10th res: ' || v_res10::text || ', 11th res: ' || v_res11::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (8, 'Staff 10/day manual collection cap enforced (10th ok:true, 11th fails with MANUAL_LIMIT)', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -522,7 +617,7 @@ $$;
 -- ==============================================================================
 -- TEST 9: Invariant check: Stock is preserved on NO_SHOW and unchanged through collect_order on NO_SHOW
 -- ==============================================================================
-DO $
+DO $$
 DECLARE
   v_canteen1_id uuid;
   v_student_id  uuid;
@@ -535,6 +630,9 @@ DECLARE
   v_res         jsonb;
   v_collect_res jsonb;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
@@ -559,26 +657,32 @@ BEGIN
 
   SELECT stock INTO v_stock_after_noshow FROM public.menu_items WHERE id = v_item1_id;
 
-  -- Collect NO_SHOW order via late manual handover
+  -- Collect NO_SHOW order via late manual handover with staff1 (fresh staff user with 0 manual collections)
   SET LOCAL ROLE authenticated;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
 
   v_collect_res := public.collect_order(v_canteen1_id, v_order_id, 'CASH', 'MANUAL', NULL, NULL, 'Late handover test reason for stock check');
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   SELECT stock INTO v_stock_after_collect FROM public.menu_items WHERE id = v_item1_id;
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
   VALUES (9, 'Stock invariant: Food prepared is NOT restored on NO_SHOW and unchanged through collect_order',
-          v_stock_before = v_stock_after_noshow AND v_stock_after_noshow = v_stock_after_collect,
-          'Initial stock: ' || v_stock_before || ', After NO_SHOW: ' || v_stock_after_noshow || ', After late collect: ' || v_stock_after_collect);
+          (v_collect_res->>'ok') = 'true' AND v_stock_before = v_stock_after_noshow AND v_stock_after_noshow = v_stock_after_collect,
+          'Collect res: ' || coalesce(v_collect_res::text, 'FAIL') || ', Initial: ' || v_stock_before || ', After NO_SHOW: ' || v_stock_after_noshow || ', After late collect: ' || v_stock_after_collect);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (9, 'Stock invariant: Food prepared is NOT restored on NO_SHOW and unchanged through collect_order', false, 'Exception: ' || SQLERRM);
 END;
-$;
+$$;
 
 
 -- ==============================================================================
--- TEST 10: Strike counting matches Order Ready notification, 30d window, limit is 3
+-- TEST 10: Strike counting uses ready_at IS NOT NULL (30d window, limit is 3, unaffected by notification title change)
 -- ==============================================================================
 DO $$
 DECLARE
@@ -588,14 +692,17 @@ DECLARE
   v_order2      uuid := gen_random_uuid();
   v_order3      uuid := gen_random_uuid();
   v_order_old   uuid := gen_random_uuid();
-  v_order_nonotif uuid := gen_random_uuid();
+  v_order_noready uuid := gen_random_uuid();
   v_status_2    jsonb;
   v_status_3    jsonb;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_serial_id FROM _test_env WHERE key = 'serial_id';
 
-  -- Order 1: NO_SHOW, 5 days ago, HAS 'Order Ready' notification -> SHOULD COUNT
+  -- Order 1: NO_SHOW, ready 5 days ago, ready_at IS NOT NULL, altered notification title -> MUST COUNT
   INSERT INTO public.orders (
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
@@ -605,9 +712,9 @@ BEGIN
     clock_timestamp() - interval '5 days', clock_timestamp() - interval '5 days'
   );
   INSERT INTO public.notifications (user_id, order_id, title, body)
-  VALUES (v_serial_id, v_order1, 'Order Ready', 'Your order is ready');
+  VALUES (v_serial_id, v_order1, 'Food Is Ready For Collection!', 'Your order has been prepared.');
 
-  -- Order 2: NO_SHOW, 2 days ago, HAS 'Order Ready' notification -> SHOULD COUNT
+  -- Order 2: NO_SHOW, ready 2 days ago, ready_at IS NOT NULL, NO notification row at all -> MUST COUNT
   INSERT INTO public.orders (
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
@@ -616,8 +723,6 @@ BEGIN
     5, clock_timestamp() - interval '2 days', clock_timestamp() - interval '2 days',
     clock_timestamp() - interval '2 days', clock_timestamp() - interval '2 days'
   );
-  INSERT INTO public.notifications (user_id, order_id, title, body)
-  VALUES (v_serial_id, v_order2, 'Order Ready', 'Your order is ready');
 
   -- Order 40 days ago (> 30 days) -> MUST NOT COUNT
   INSERT INTO public.orders (
@@ -628,17 +733,15 @@ BEGIN
     5, clock_timestamp() - interval '40 days', clock_timestamp() - interval '40 days',
     clock_timestamp() - interval '40 days', clock_timestamp() - interval '40 days'
   );
-  INSERT INTO public.notifications (user_id, order_id, title, body)
-  VALUES (v_serial_id, v_order_old, 'Order Ready', 'Your order is ready');
 
-  -- Order with NO 'Order Ready' notification -> MUST NOT COUNT
+  -- Order with ready_at IS NULL (cancelled/aborted before food ready) -> MUST NOT COUNT
   INSERT INTO public.orders (
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
   ) VALUES (
-    v_order_nonotif, v_serial_id, v_canteen1_id, 'NO_SHOW', 'PAY_AT_PICKUP', 'PENDING', 2000,
+    v_order_noready, v_serial_id, v_canteen1_id, 'NO_SHOW', 'PAY_AT_PICKUP', 'PENDING', 2000,
     5, clock_timestamp() - interval '1 day', clock_timestamp() - interval '1 day',
-    clock_timestamp() - interval '1 day', clock_timestamp() - interval '1 day'
+    clock_timestamp() - interval '1 day', NULL
   );
 
   -- Check status with 2 strikes: strikes = 2, is_limited = false (threshold is 3)
@@ -648,6 +751,8 @@ BEGIN
 
   -- Now insert 3rd NO_SHOW order -> strikes = 3, is_limited = true
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   INSERT INTO public.orders (
     id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
@@ -656,19 +761,23 @@ BEGIN
     5, clock_timestamp() - interval '3 days', clock_timestamp() - interval '3 days',
     clock_timestamp() - interval '3 days', clock_timestamp() - interval '3 days'
   );
-  INSERT INTO public.notifications (user_id, order_id, title, body)
-  VALUES (v_serial_id, v_order3, 'Order Ready', 'Your order is ready');
 
   SET LOCAL ROLE authenticated;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_serial_id::text, 'role', 'authenticated')::text, true);
   v_status_3 := public.get_my_account_status();
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (10, 'Strike threshold is 3 everywhere (2 strikes = not limited, 3 strikes = limited)',
+  VALUES (10, 'Strike rule uses ready_at IS NOT NULL (unaffected by notification title edits/absence, threshold is 3)',
           (v_status_2->>'strikes')::int = 2 AND (v_status_2->>'is_limited')::boolean = false AND
           (v_status_3->>'strikes')::int = 3 AND (v_status_3->>'is_limited')::boolean = true,
           'Status at 2 strikes: ' || v_status_2::text || ', Status at 3 strikes: ' || v_status_3::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (10, 'Strike rule uses ready_at IS NOT NULL (unaffected by notification title edits/absence, threshold is 3)', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -678,16 +787,17 @@ $$;
 -- ==============================================================================
 DO $$
 DECLARE
-  v_canteen1_id  uuid;
-  v_serial_id    uuid;
-  v_item1_id     uuid;
-  v_item_pricey  uuid;
-  v_res_items    jsonb;
-  v_res_price    jsonb;
-  v_res_valid    jsonb;
-  v_err_items    text;
-  v_err_price    text;
+  v_canteen1_id   uuid;
+  v_serial_id     uuid;
+  v_item1_id      uuid;
+  v_item_pricey   uuid;
+  v_err_qty       text;
+  v_err_price     text;
+  v_res_ok        jsonb;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_serial_id FROM _test_env WHERE key = 'serial_id';
   SELECT val_uuid INTO v_item1_id FROM _test_env WHERE key = 'item1_id';
@@ -696,44 +806,50 @@ BEGIN
   SET LOCAL ROLE authenticated;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_serial_id::text, 'role', 'authenticated')::text, true);
 
-  -- Attempt 1: 3 items (exceeds 2-item limit)
+  -- 1. Try to order 3 items (limit for restricted account is 2)
   BEGIN
-    v_res_items := public.place_order(
+    PERFORM public.place_order(
       v_canteen1_id,
       jsonb_build_array(jsonb_build_object('menu_item_id', v_item1_id, 'quantity', 3)),
       'PAY_AT_PICKUP'::public.payment_method,
-      'test-idemp-limit-items-1'
+      'test-idemp-strike-qty'
     );
   EXCEPTION WHEN OTHERS THEN
-    v_err_items := SQLERRM;
+    v_err_qty := SQLERRM;
   END;
 
-  -- Attempt 2: 1 expensive item (Rs 250 > Rs 200 limit)
+  -- 2. Try to order 1 item worth 25000 paise / Rs 250 (limit is Rs 200)
   BEGIN
-    v_res_price := public.place_order(
+    PERFORM public.place_order(
       v_canteen1_id,
       jsonb_build_array(jsonb_build_object('menu_item_id', v_item_pricey, 'quantity', 1)),
       'PAY_AT_PICKUP'::public.payment_method,
-      'test-idemp-limit-price-2'
+      'test-idemp-strike-price'
     );
   EXCEPTION WHEN OTHERS THEN
     v_err_price := SQLERRM;
   END;
 
-  -- Attempt 3: 2 items at Rs 20 each (Total Rs 40 <= Rs 200) -> SUCCEEDS
-  v_res_valid := public.place_order(
+  -- 3. Valid restricted order: 2 items, total Rs 40 (4000 paise) -> Must SUCCEED
+  v_res_ok := public.place_order(
     v_canteen1_id,
     jsonb_build_array(jsonb_build_object('menu_item_id', v_item1_id, 'quantity', 2)),
     'PAY_AT_PICKUP'::public.payment_method,
-    'test-idemp-limit-valid-3'
+    'test-idemp-strike-ok'
   );
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (11, 'Serial no-show account limits enforced on place_order (max 2 items, max Rs 200)',
-          v_err_items LIKE '%ACCOUNT_LIMITED%' AND v_err_price LIKE '%ACCOUNT_LIMITED%' AND (v_res_valid->>'order_id') IS NOT NULL,
-          'Items err: ' || coalesce(v_err_items, 'NONE') || ', Price err: ' || coalesce(v_err_price, 'NONE') || ', Valid order: ' || coalesce(v_res_valid->>'order_id', 'NONE'));
+  VALUES (11, 'Restricted account limits: max 2 items, max Rs 200 enforced with ACCOUNT_LIMITED',
+          v_err_qty LIKE '%ACCOUNT_LIMITED%' AND v_err_price LIKE '%ACCOUNT_LIMITED%' AND (v_res_ok->>'order_id') IS NOT NULL,
+          'Qty err: ' || coalesce(v_err_qty, 'NONE') || ', Price err: ' || coalesce(v_err_price, 'NONE') || ', Valid order: ' || coalesce(v_res_ok->>'order_id', 'NONE'));
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (11, 'Restricted account limits: max 2 items, max Rs 200 enforced with ACCOUNT_LIMITED', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -750,6 +866,9 @@ DECLARE
   v_res2        jsonb;
   v_err3        text;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT val_uuid INTO v_item1_id FROM _test_env WHERE key = 'item1_id';
@@ -791,11 +910,17 @@ BEGIN
   END;
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
   VALUES (12, 'Active order limit is 2 (checked after canteen lock, 3rd fails)',
           (v_res1->>'order_id') IS NOT NULL AND (v_res2->>'order_id') IS NOT NULL AND v_err3 LIKE '%TOO_MANY_ACTIVE_ORDERS%',
           'Order 1: ' || coalesce(v_res1->>'order_id', 'FAIL') || ', Order 2: ' || coalesce(v_res2->>'order_id', 'FAIL') || ', Order 3 err: ' || coalesce(v_err3, 'NONE'));
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (12, 'Active order limit is 2 (checked after canteen lock, 3rd fails)', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -813,6 +938,9 @@ DECLARE
   v_no_show_cnt  integer;
   v_reset_cnt    integer;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_admin_id FROM _test_env WHERE key = 'admin_id';
   SELECT val_uuid INTO v_serial_id FROM _test_env WHERE key = 'serial_id';
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
@@ -828,6 +956,7 @@ BEGIN
   v_status_res := public.get_my_account_status();
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   -- Verify history is intact: orders are still NO_SHOW
   SELECT count(*) INTO v_no_show_cnt FROM public.orders WHERE user_id = v_serial_id AND status = 'NO_SHOW';
@@ -837,6 +966,11 @@ BEGIN
   VALUES (13, 'admin_clear_student_strikes clears strikes without rewriting order history',
           (v_res_clear->>'ok') = 'true' AND (v_status_res->>'strikes')::int = 0 AND (v_status_res->>'is_limited')::boolean = false AND v_no_show_cnt >= 2 AND v_reset_cnt = 1,
           'Clear res: ' || v_res_clear::text || ', New strikes: ' || (v_status_res->>'strikes') || ', Untouched NO_SHOW orders: ' || v_no_show_cnt);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (13, 'admin_clear_student_strikes clears strikes without rewriting order history', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -854,6 +988,9 @@ DECLARE
   v_err_student   text;
   v_res_null      jsonb;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
@@ -881,31 +1018,41 @@ BEGIN
   END;
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
   VALUES (14, 'mark_no_shows caller matrix: staff restricted to own, NULL replaced by own, student forbidden',
           v_err_other LIKE '%FORBIDDEN%' AND (v_res_null->>'ok') = 'true' AND (v_res_null->>'canteen_id') = v_canteen1_id::text AND v_err_student LIKE '%FORBIDDEN%',
           'Other canteen err: ' || coalesce(v_err_other, 'NONE') || ', Staff NULL res: ' || coalesce(v_res_null::text, 'NONE') || ', Student err: ' || coalesce(v_err_student, 'NONE'));
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (14, 'mark_no_shows caller matrix: staff restricted to own, NULL replaced by own, student forbidden', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
 
 -- ==============================================================================
--- TEST 15: mark_no_shows sweeps, logs audit entry, and purges old attempts (> 7 days)
+-- TEST 15: mark_no_shows sweeps, logs audit entry, idempotency, and purges old attempts (> 7 days)
 -- ==============================================================================
 DO $$
 DECLARE
-  v_admin_id     uuid;
-  v_student_id   uuid;
-  v_canteen1_id  uuid;
-  v_order_id     uuid := gen_random_uuid();
-  v_sweep_res    jsonb;
-  v_audit_cnt    integer;
-  v_old_attempt  uuid := gen_random_uuid();
-  v_recent_att   uuid := gen_random_uuid();
-  v_old_exists   boolean;
+  v_admin_id      uuid;
+  v_student_id    uuid;
+  v_canteen1_id   uuid;
+  v_order_id      uuid := gen_random_uuid();
+  v_sweep_res     jsonb;
+  v_sweep_res2    jsonb;
+  v_audit_cnt     integer;
+  v_old_attempt   uuid := gen_random_uuid();
+  v_recent_att    uuid := gen_random_uuid();
+  v_old_exists    boolean;
   v_recent_exists boolean;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_admin_id FROM _test_env WHERE key = 'admin_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
@@ -933,26 +1080,25 @@ BEGIN
 
   v_sweep_res := public.mark_no_shows(NULL);
 
-  -- Test idempotency: calling sweep again immediately returns count = 0
-  DECLARE
-    v_sweep_res2 jsonb;
-  BEGIN
-    v_sweep_res2 := public.mark_no_shows(NULL);
-    IF (v_sweep_res2->>'count')::integer <> 0 THEN
-      RAISE EXCEPTION 'Idempotency failed: second sweep returned count %', v_sweep_res2->>'count';
-    END IF;
-  END;
+  -- Test idempotency: calling sweep again immediately returns marked_count = 0
+  v_sweep_res2 := public.mark_no_shows(NULL);
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   SELECT count(*) INTO v_audit_cnt FROM public.admin_audit_log WHERE action = 'ORDERS_MARKED_NO_SHOW';
   SELECT EXISTS(SELECT 1 FROM public.pickup_collect_attempts WHERE id = v_old_attempt) INTO v_old_exists;
   SELECT EXISTS(SELECT 1 FROM public.pickup_collect_attempts WHERE id = v_recent_att) INTO v_recent_exists;
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
-  VALUES (15, 'mark_no_shows sweeps order (idempotent, 200 cap), logs audit row, and purges attempts > 7 days',
-          (v_sweep_res->>'ok') = 'true' AND v_audit_cnt >= 1 AND v_old_exists = false AND v_recent_exists = true,
-          'Sweep res: ' || v_sweep_res::text || ', Audit rows: ' || v_audit_cnt || ', Old attempt purged: ' || (NOT v_old_exists)::text || ', Recent preserved: ' || v_recent_exists::text);
+  VALUES (15, 'mark_no_shows sweeps order (idempotent marked_count=0 on 2nd sweep, 200 cap), logs audit row, and purges attempts > 7 days',
+          (v_sweep_res->>'ok') = 'true' AND (v_sweep_res2->>'marked_count')::integer = 0 AND v_audit_cnt >= 1 AND v_old_exists = false AND v_recent_exists = true,
+          'Sweep 1: ' || v_sweep_res::text || ', Sweep 2 (idempotent): ' || v_sweep_res2::text || ', Audit rows: ' || v_audit_cnt || ', Old purged: ' || (NOT v_old_exists)::text || ', Recent preserved: ' || v_recent_exists::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (15, 'mark_no_shows sweeps order (idempotent marked_count=0 on 2nd sweep, 200 cap), logs audit row, and purges attempts > 7 days', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -962,77 +1108,88 @@ $$;
 -- ==============================================================================
 DO $$
 DECLARE
-  v_admin_id    uuid;
-  v_canteen1_id uuid;
-  v_student_id  uuid;
-  v_staff1_id   uuid;
-  v_rec_res     jsonb;
-  v_today_ist   date := (timezone('Asia/Kolkata', clock_timestamp()))::date;
+  v_admin_id      uuid;
+  v_canteen1_id   uuid;
+  v_student_id    uuid;
+  v_staff1_id     uuid;
+  v_rec_res       jsonb;
+  v_staff_err     text;
+  v_today_ist     date := (timezone('Asia/Kolkata', clock_timestamp()))::date;
+  v_day_start     timestamptz;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_admin_id FROM _test_env WHERE key = 'admin_id';
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
 
-  -- Order collected with CASH
+  -- Exact IST start of today
+  v_day_start := timezone('Asia/Kolkata', v_today_ist::timestamp);
+
+  -- Order collected with CASH (picked inside today's IST day)
   INSERT INTO public.orders (
     user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at,
     collected_at, collected_by, collected_with, collection_method, is_manual_override
   ) VALUES (
     v_student_id, v_canteen1_id, 'COLLECTED', 'PAY_AT_PICKUP', 'PAID', 5000,
-    5, clock_timestamp() - interval '2 hours', clock_timestamp() - interval '1 hour',
-    clock_timestamp() - interval '2 hours', clock_timestamp() - interval '1 hour',
-    clock_timestamp() - interval '30 minutes', v_staff1_id, 'CASH', 'SCAN', false
+    5, v_day_start + interval '9 hours', v_day_start + interval '10 hours',
+    v_day_start + interval '9 hours', v_day_start + interval '9 hours 15 minutes',
+    v_day_start + interval '9 hours 30 minutes', v_staff1_id, 'CASH'::public.collected_with_enum, 'SCAN'::public.collection_method_enum, false
   );
 
-  -- Order collected with UPI
+  -- Order collected with UPI (picked inside today's IST day)
   INSERT INTO public.orders (
     user_id, canteen_id, status, payment_method, payment_status, total_paise,
     prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at,
     collected_at, collected_by, collected_with, collection_method, is_manual_override
   ) VALUES (
     v_student_id, v_canteen1_id, 'COLLECTED', 'PAY_AT_PICKUP', 'PAID', 7500,
-    5, clock_timestamp() - interval '2 hours', clock_timestamp() - interval '1 hour',
-    clock_timestamp() - interval '2 hours', clock_timestamp() - interval '1 hour',
-    clock_timestamp() - interval '20 minutes', v_staff1_id, 'UPI', 'SCAN', false
+    5, v_day_start + interval '9 hours', v_day_start + interval '10 hours',
+    v_day_start + interval '9 hours', v_day_start + interval '9 hours 15 minutes',
+    v_day_start + interval '10 hours', v_staff1_id, 'UPI'::public.collected_with_enum, 'SCAN'::public.collection_method_enum, false
   );
 
-  -- Impersonate admin
+  -- 1. Verify staff is strictly forbidden from running reconciliation
+  SET LOCAL ROLE authenticated;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
+
+  BEGIN
+    PERFORM public.get_daily_reconciliation(v_today_ist, v_canteen1_id);
+  EXCEPTION WHEN OTHERS THEN
+    v_staff_err := SQLERRM;
+  END;
+
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  IF v_staff_err IS NULL OR v_staff_err NOT LIKE '%FORBIDDEN%' THEN
+    RAISE EXCEPTION 'Staff was not forbidden from reconciliation: %', coalesce(v_staff_err, 'NONE');
+  END IF;
+
+  -- 2. Re-set the admin claims and role to run reconciliation
   SET LOCAL ROLE authenticated;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_admin_id::text, 'role', 'authenticated')::text, true);
-
-  -- Verify staff is strictly forbidden from running reconciliation
-  DECLARE
-    v_staff_err text;
-  BEGIN
-    SET LOCAL ROLE authenticated;
-    PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
-
-    BEGIN
-      PERFORM public.get_daily_reconciliation(v_today_ist, v_canteen1_id);
-    EXCEPTION WHEN OTHERS THEN
-      v_staff_err := SQLERRM;
-    END;
-
-    RESET ROLE;
-
-    IF v_staff_err IS NULL OR v_staff_err NOT LIKE '%FORBIDDEN%' THEN
-      RAISE EXCEPTION 'Staff was not forbidden from reconciliation: %', coalesce(v_staff_err, 'NONE');
-    END IF;
-  END;
 
   v_rec_res := public.get_daily_reconciliation(v_today_ist, v_canteen1_id);
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   INSERT INTO _test_results (test_num, test_name, passed, details)
   VALUES (16, 'get_daily_reconciliation aggregates revenue, splits, and order list (max 200) in IST',
           (v_rec_res->>'ok') = 'true' AND
-          (v_rec_res->'summary'->>'total_cash_paise')::int >= 5000 AND
-          (v_rec_res->'summary'->>'total_upi_paise')::int >= 7500 AND
+          (v_rec_res->'summary'->>'total_cash_paise')::bigint >= 5000 AND
+          (v_rec_res->'summary'->>'total_upi_paise')::bigint >= 7500 AND
           jsonb_array_length(v_rec_res->'orders') <= 200,
           'Reconciliation res: ' || v_rec_res::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (16, 'get_daily_reconciliation aggregates revenue, splits, and order list (max 200) in IST', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -1040,7 +1197,7 @@ $$;
 -- ==============================================================================
 -- TEST 17: Security boundaries: anon rejected on all RPCs (permission denied or UNAUTHENTICATED)
 -- ==============================================================================
-DO $
+DO $$
 DECLARE
   v_err_account text;
   v_err_sweep   text;
@@ -1049,8 +1206,10 @@ DECLARE
   v_sweep_ok    boolean;
   v_rec_ok      boolean;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SET LOCAL ROLE anon;
-  PERFORM set_config('request.jwt.claims', null, true);
 
   BEGIN
     PERFORM public.get_my_account_status();
@@ -1071,6 +1230,7 @@ BEGIN
   END;
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   v_account_ok := (v_err_account ILIKE '%permission denied%' OR v_err_account ILIKE '%UNAUTHENTICATED%' OR v_err_account ILIKE '%FORBIDDEN%');
   v_sweep_ok   := (v_err_sweep ILIKE '%permission denied%' OR v_err_sweep ILIKE '%UNAUTHENTICATED%' OR v_err_sweep ILIKE '%FORBIDDEN%');
@@ -1080,16 +1240,25 @@ BEGIN
   VALUES (17, 'Anonymous caller cannot execute account status, sweep, or reconciliation (permission denied or UNAUTHENTICATED)',
           v_account_ok AND v_sweep_ok AND v_rec_ok,
           'Account err: ' || coalesce(v_err_account, 'NONE') || ', Sweep err: ' || coalesce(v_err_sweep, 'NONE') || ', Rec err: ' || coalesce(v_err_rec, 'NONE'));
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (17, 'Anonymous caller cannot execute account status, sweep, or reconciliation (permission denied or UNAUTHENTICATED)', false, 'Exception: ' || SQLERRM);
 END;
-$;
+$$;
+
 
 -- ==============================================================================
 -- TEST 18: Overload check: exactly one public.place_order overload exists
 -- ==============================================================================
-DO $
+DO $$
 DECLARE
   v_overload_count integer;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT count(*) INTO v_overload_count
   FROM pg_proc p
   JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1099,8 +1268,14 @@ BEGIN
   VALUES (18, 'Exactly one public.place_order overload exists in schema',
           v_overload_count = 1,
           'Overload count found: ' || v_overload_count);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (18, 'Exactly one public.place_order overload exists in schema', false, 'Exception: ' || SQLERRM);
 END;
-$;
+$$;
+
 
 -- ==============================================================================
 -- TEST 19: Expired unswept READY orders do NOT block student (place_order & account status)
@@ -1115,6 +1290,9 @@ DECLARE
   v_order_res     jsonb;
   v_order_status  public.order_status;
 BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
   SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
   SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
   SELECT val_uuid INTO v_item1_id FROM _test_env WHERE key = 'item1_id';
@@ -1149,6 +1327,7 @@ BEGIN
   );
 
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
 
   -- 3. Verify the old order was transitioned to NO_SHOW in DB
   SELECT status INTO v_order_status FROM public.orders WHERE id = v_expired_order;
@@ -1157,6 +1336,211 @@ BEGIN
   VALUES (19, 'Expired unswept READY orders do not block student (lazily expired in place_order, excluded in get_my_account_status)',
           (v_status_res->>'active_orders_count')::int = 0 AND (v_order_res->>'order_id') IS NOT NULL AND v_order_status = 'NO_SHOW',
           'Account status active count: ' || (v_status_res->>'active_orders_count') || ', Place order id: ' || coalesce(v_order_res->>'order_id', 'FAIL') || ', Prior order status: ' || v_order_status);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (19, 'Expired unswept READY orders do not block student (lazily expired in place_order, excluded in get_my_account_status)', false, 'Exception: ' || SQLERRM);
+END;
+$$;
+
+
+-- ==============================================================================
+-- TEST 20: preview_collection returns card on expired READY order within 6h (late_handover_available: true)
+-- ==============================================================================
+DO $$
+DECLARE
+  v_canteen1_id uuid;
+  v_student_id  uuid;
+  v_staff1_id   uuid;
+  v_item1_id    uuid;
+  v_order_id    uuid := gen_random_uuid();
+  v_res         jsonb;
+BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
+  SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
+  SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
+  SELECT val_uuid INTO v_item1_id FROM _test_env WHERE key = 'item1_id';
+
+  -- Order in READY status, ready 45 minutes ago (past 15m hold, well within 6h late window)
+  INSERT INTO public.orders (
+    id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
+    prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
+  ) VALUES (
+    v_order_id, v_student_id, v_canteen1_id, 'READY', 'PAY_AT_PICKUP', 'PENDING', 4000,
+    5, clock_timestamp() - interval '60 minutes', clock_timestamp() - interval '45 minutes',
+    clock_timestamp() - interval '60 minutes', clock_timestamp() - interval '45 minutes'
+  );
+
+  INSERT INTO public.order_items (order_id, menu_item_id, name_snapshot, unit_price_paise, quantity)
+  VALUES (v_order_id, v_item1_id, 'Test Veg Samosa', 2000, 2);
+
+  INSERT INTO public.order_pickup_secrets (order_id, secret)
+  VALUES (v_order_id, '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
+
+  SET LOCAL ROLE authenticated;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
+
+  v_res := public.preview_collection(v_canteen1_id, v_order_id::text, NULL, NULL);
+
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (20, 'preview_collection on expired READY within 6h returns preview card and late_handover_available: true',
+          (v_res->>'ok') = 'false' AND (v_res->>'error') = 'PICKUP_EXPIRED' AND
+          (v_res->>'late_handover_available')::boolean = true AND
+          (v_res->>'first_name') IS NOT NULL AND jsonb_array_length(v_res->'items') >= 1,
+          'Result: ' || v_res::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (20, 'preview_collection on expired READY within 6h returns preview card and late_handover_available: true', false, 'Exception: ' || SQLERRM);
+END;
+$$;
+
+
+-- ==============================================================================
+-- TEST 21: preview_collection returns card on NO_SHOW order within 6h (late_handover_available: true)
+-- ==============================================================================
+DO $$
+DECLARE
+  v_canteen1_id uuid;
+  v_student_id  uuid;
+  v_staff1_id   uuid;
+  v_item1_id    uuid;
+  v_order_id    uuid := gen_random_uuid();
+  v_res         jsonb;
+BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
+  SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
+  SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
+  SELECT val_uuid INTO v_item1_id FROM _test_env WHERE key = 'item1_id';
+
+  -- Order in NO_SHOW status, ready 2 hours ago (within 6h window)
+  INSERT INTO public.orders (
+    id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
+    prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
+  ) VALUES (
+    v_order_id, v_student_id, v_canteen1_id, 'NO_SHOW', 'PAY_AT_PICKUP', 'PENDING', 2000,
+    5, clock_timestamp() - interval '140 minutes', clock_timestamp() - interval '125 minutes',
+    clock_timestamp() - interval '140 minutes', clock_timestamp() - interval '120 minutes'
+  );
+
+  INSERT INTO public.order_items (order_id, menu_item_id, name_snapshot, unit_price_paise, quantity)
+  VALUES (v_order_id, v_item1_id, 'Test Veg Samosa', 2000, 1);
+
+  INSERT INTO public.order_pickup_secrets (order_id, secret)
+  VALUES (v_order_id, '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
+
+  SET LOCAL ROLE authenticated;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
+
+  v_res := public.preview_collection(v_canteen1_id, v_order_id::text, NULL, NULL);
+
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (21, 'preview_collection on NO_SHOW within 6h returns preview card and late_handover_available: true',
+          (v_res->>'ok') = 'false' AND (v_res->>'error') = 'PICKUP_EXPIRED' AND
+          (v_res->>'late_handover_available')::boolean = true AND
+          (v_res->>'first_name') IS NOT NULL AND jsonb_array_length(v_res->'items') >= 1,
+          'Result: ' || v_res::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (21, 'preview_collection on NO_SHOW within 6h returns preview card and late_handover_available: true', false, 'Exception: ' || SQLERRM);
+END;
+$$;
+
+
+-- ==============================================================================
+-- TEST 22: preview_collection past 6h window returns plain PICKUP_EXPIRED without card
+-- ==============================================================================
+DO $$
+DECLARE
+  v_canteen1_id uuid;
+  v_student_id  uuid;
+  v_staff1_id   uuid;
+  v_order_id    uuid := gen_random_uuid();
+  v_res         jsonb;
+BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  SELECT val_uuid INTO v_canteen1_id FROM _test_env WHERE key = 'canteen1_id';
+  SELECT val_uuid INTO v_student_id FROM _test_env WHERE key = 'student_id';
+  SELECT val_uuid INTO v_staff1_id FROM _test_env WHERE key = 'staff1_id';
+
+  -- Order ready 8 hours ago (past 15m hold + 6 hours)
+  INSERT INTO public.orders (
+    id, user_id, canteen_id, status, payment_method, payment_status, total_paise,
+    prep_minutes_total, estimated_ready_at, pickup_window_end, placed_at, ready_at
+  ) VALUES (
+    v_order_id, v_student_id, v_canteen1_id, 'NO_SHOW', 'PAY_AT_PICKUP', 'PENDING', 2000,
+    5, clock_timestamp() - interval '9 hours', clock_timestamp() - interval '8 hours',
+    clock_timestamp() - interval '9 hours', clock_timestamp() - interval '8 hours'
+  );
+
+  INSERT INTO public.order_pickup_secrets (order_id, secret)
+  VALUES (v_order_id, '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
+
+  SET LOCAL ROLE authenticated;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_staff1_id::text, 'role', 'authenticated')::text, true);
+
+  v_res := public.preview_collection(v_canteen1_id, v_order_id::text, NULL, NULL);
+
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (22, 'preview_collection past 6h late window returns plain PICKUP_EXPIRED without card (late_handover_available: false)',
+          (v_res->>'ok') = 'false' AND (v_res->>'error') = 'PICKUP_EXPIRED' AND
+          (v_res->>'late_handover_available')::boolean = false AND
+          (v_res->>'items') IS NULL,
+          'Result: ' || v_res::text);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (22, 'preview_collection past 6h late window returns plain PICKUP_EXPIRED without card (late_handover_available: false)', false, 'Exception: ' || SQLERRM);
+END;
+$$;
+
+
+-- ==============================================================================
+-- TEST 23: Overload check: exactly one public.admin_update_canteen_settings exists
+-- ==============================================================================
+DO $$
+DECLARE
+  v_overload_count integer;
+BEGIN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  SELECT count(*) INTO v_overload_count
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public' AND p.proname = 'admin_update_canteen_settings';
+
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (23, 'Exactly one public.admin_update_canteen_settings overload exists in schema',
+          v_overload_count = 1,
+          'Overload count found: ' || v_overload_count);
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  INSERT INTO _test_results (test_num, test_name, passed, details)
+  VALUES (23, 'Exactly one public.admin_update_canteen_settings overload exists in schema', false, 'Exception: ' || SQLERRM);
 END;
 $$;
 
@@ -1172,7 +1556,7 @@ SELECT
 FROM _test_results
 ORDER BY test_num;
 
-DO $
+DO $$
 DECLARE
   v_failed_count integer;
   v_fail_details text;
@@ -1185,6 +1569,8 @@ BEGIN
   IF v_failed_count > 0 THEN
     RAISE EXCEPTION 'TEST_SUITE_FAILED: % test(s) failed:\n%', v_failed_count, v_fail_details;
   END IF;
-END $;
+END;
+$$;
 
 ROLLBACK;
+

@@ -258,6 +258,8 @@ DECLARE
   v_is_pin_locked boolean := false;
   v_hold_minutes integer;
   v_is_expired boolean := false;
+  v_expiry_time timestamptz;
+  v_late_cutoff timestamptz;
 BEGIN
   v_staff_id := auth.uid();
   IF v_staff_id IS NULL THEN
@@ -312,47 +314,84 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
   END IF;
 
-  IF v_order.status = 'NO_SHOW'::public.order_status THEN
-    RETURN jsonb_build_object('ok', false, 'error', 'PICKUP_EXPIRED', 'status', 'NO_SHOW');
-  END IF;
-
-  IF v_order.status != 'READY'::public.order_status THEN
-    RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
-  END IF;
-
-  -- Check actual hold window expiration for READY orders
+  -- Check hold window and late cutoff
   SELECT c.hold_minutes INTO v_hold_minutes
   FROM public.canteens c
   WHERE c.id = v_order.canteen_id;
 
   v_hold_minutes := coalesce(v_hold_minutes, 15);
-  v_is_expired := (v_order.ready_at IS NOT NULL AND clock_timestamp() > (v_order.ready_at + (v_hold_minutes * interval '1 minute')));
+  v_expiry_time := v_order.ready_at + (v_hold_minutes * interval '1 minute');
+  v_late_cutoff := v_expiry_time + interval '6 hours';
 
-  IF v_is_expired THEN
-    -- Lazy enforcement: move READY order to NO_SHOW with guarded status update
-    UPDATE public.orders
-    SET status = 'NO_SHOW'::public.order_status
-    WHERE id = v_order.id
-      AND status = 'READY'::public.order_status;
+  -- Check if order is NO_SHOW or expired READY
+  IF v_order.status = 'NO_SHOW'::public.order_status OR (v_order.status = 'READY'::public.order_status AND v_order.ready_at IS NOT NULL AND clock_timestamp() > v_expiry_time) THEN
+    -- If it was READY and expired, lazily transition to NO_SHOW
+    IF v_order.status = 'READY'::public.order_status THEN
+      UPDATE public.orders
+      SET status = 'NO_SHOW'::public.order_status
+      WHERE id = v_order.id
+        AND status = 'READY'::public.order_status;
 
-    IF FOUND THEN
-      INSERT INTO public.admin_audit_log (actor_id, action, target_type, target_id, details)
-      VALUES (
-        v_staff_id,
-        'ORDER_NO_SHOW_LAZY',
-        'order',
-        v_order.id::text,
-        jsonb_build_object(
-          'order_code', v_order.order_code,
-          'canteen_id', v_order.canteen_id,
-          'caller_rpc', 'preview_collection',
-          'ready_at', v_order.ready_at,
-          'hold_minutes', v_hold_minutes
-        )
-      );
+      IF FOUND THEN
+        INSERT INTO public.admin_audit_log (actor_id, action, target_type, target_id, details)
+        VALUES (
+          v_staff_id,
+          'ORDER_NO_SHOW_LAZY',
+          'order',
+          v_order.id::text,
+          jsonb_build_object(
+            'order_code', v_order.order_code,
+            'canteen_id', v_order.canteen_id,
+            'caller_rpc', 'preview_collection',
+            'ready_at', v_order.ready_at,
+            'hold_minutes', v_hold_minutes
+          )
+        );
+      END IF;
     END IF;
 
-    RETURN jsonb_build_object('ok', false, 'error', 'PICKUP_EXPIRED', 'status', 'NO_SHOW');
+    -- If within 6-hour late window, return preview card details without checking code
+    IF clock_timestamp() <= v_late_cutoff THEN
+      SELECT full_name, college_id INTO v_student
+      FROM public.profiles
+      WHERE id = v_order.user_id;
+
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'name', name_snapshot,
+          'quantity', quantity,
+          'unit_price_paise', unit_price_paise
+        ) ORDER BY name_snapshot ASC
+      ) INTO v_items
+      FROM public.order_items
+      WHERE order_id = v_order.id;
+
+      RETURN jsonb_build_object(
+        'ok', false,
+        'error', 'PICKUP_EXPIRED',
+        'status', 'NO_SHOW',
+        'late_handover_available', true,
+        'order_id', v_order.id,
+        'order_code', v_order.order_code,
+        'first_name', split_part(v_student.full_name, ' ', 1),
+        'college_id_last4', right(v_student.college_id, 4),
+        'pickup_for_name', v_order.pickup_for_name,
+        'total_paise', v_order.total_paise,
+        'items', coalesce(v_items, '[]'::jsonb)
+      );
+    ELSE
+      -- Beyond 6 hours: return plain PICKUP_EXPIRED without the card
+      RETURN jsonb_build_object(
+        'ok', false,
+        'error', 'PICKUP_EXPIRED',
+        'status', 'NO_SHOW',
+        'late_handover_available', false
+      );
+    END IF;
+  END IF;
+
+  IF v_order.status != 'READY'::public.order_status THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'ORDER_NOT_READY', 'status', v_order.status);
   END IF;
 
   -- Read PIN counter & lock status from secure order_pickup_secrets
@@ -876,10 +915,16 @@ DECLARE
 BEGIN
   v_caller_id := auth.uid();
 
-  -- Support execution from internal background / automated caller (postgres / supabase_admin / service role).
-  -- Note: pg_cron is not installed and is not wired into migrations. Kept in docs only.
+  -- Authorisation check matching 0011:
+  -- In a SECURITY DEFINER routine, current_user is always the function owner (postgres),
+  -- so testing current_user can never reject unauthorized callers.
+  -- Instead, session_user reflects the original database connection user:
+  --   - In Supabase SQL Editor / direct DB: session_user is 'postgres' or 'supabase_admin'.
+  --   - Under PostgREST (API calls): session_user is 'authenticator', and service-role requests
+  --     set auth.role() = 'service_role'.
   IF v_caller_id IS NULL THEN
-    IF current_user NOT IN ('postgres', 'supabase_admin') THEN
+    IF session_user NOT IN ('postgres', 'service_role', 'supabase_admin')
+       AND coalesce(auth.role(), '') != 'service_role' THEN
       RAISE EXCEPTION 'UNAUTHENTICATED: Authentication required';
     END IF;
   ELSE
@@ -996,18 +1041,15 @@ BEGIN
     RAISE EXCEPTION 'FORBIDDEN: Only students can check account status';
   END IF;
 
-  -- Count strikes: rolling 30 days, status NO_SHOW, verified READY notification, after cleared_at
+  -- Count strikes: rolling 30 days, status NO_SHOW, order was marked ready, after cleared_at
   SELECT count(*) INTO v_strike_count
   FROM public.orders o
   LEFT JOIN public.student_strike_resets ssr ON ssr.student_id = v_user_id
   WHERE o.user_id = v_user_id
     AND o.status = 'NO_SHOW'::public.order_status
     AND o.ready_at >= (clock_timestamp() - interval '30 days')
-    AND (ssr.cleared_at IS NULL OR o.ready_at > ssr.cleared_at)
-    AND EXISTS (
-      SELECT 1 FROM public.notifications n
-      WHERE n.order_id = o.id AND n.title = 'Order Ready'
-    );
+    AND o.ready_at IS NOT NULL
+    AND (ssr.cleared_at IS NULL OR o.ready_at > ssr.cleared_at);
 
   -- Strike limit is 3 everywhere
   v_is_limited := (v_strike_count >= 3);
@@ -1272,11 +1314,8 @@ BEGIN
   WHERE o.user_id = v_user_id
     AND o.status = 'NO_SHOW'::public.order_status
     AND o.ready_at >= (clock_timestamp() - interval '30 days')
-    AND (ssr.cleared_at IS NULL OR o.ready_at > ssr.cleared_at)
-    AND EXISTS (
-      SELECT 1 FROM public.notifications n
-      WHERE n.order_id = o.id AND n.title = 'Order Ready'
-    );
+    AND o.ready_at IS NOT NULL
+    AND (ssr.cleared_at IS NULL OR o.ready_at > ssr.cleared_at);
 
   v_is_limited := (v_strike_count >= 3);
 
@@ -1524,11 +1563,8 @@ BEGIN
     WHERE p.role = 'student'::public.user_role
       AND o.status = 'NO_SHOW'::public.order_status
       AND o.ready_at >= (clock_timestamp() - interval '30 days')
+      AND o.ready_at IS NOT NULL
       AND (ssr.cleared_at IS NULL OR o.ready_at > ssr.cleared_at)
-      AND EXISTS (
-        SELECT 1 FROM public.notifications n
-        WHERE n.order_id = o.id AND n.title = 'Order Ready'
-      )
     GROUP BY p.id, p.full_name, p.college_id
     HAVING count(o.id) > 0
     ORDER BY count(o.id) DESC, max(o.ready_at) DESC
@@ -1830,9 +1866,32 @@ GRANT EXECUTE ON FUNCTION public.get_daily_reconciliation(date, uuid) TO authent
 -- =============================================================================
 -- 12. CANTEEN SETTINGS: public.admin_update_canteen_settings
 -- Base Definition: 0006_admin_operations.sql (lines 310-419)
+-- Real 0006 signature:
+--   public.admin_update_canteen_settings(
+--     p_canteen_id uuid,
+--     p_opens_at time without time zone,
+--     p_closes_at time without time zone,
+--     p_last_order_time time without time zone,
+--     p_kitchen_capacity integer,
+--     p_min_lead_minutes integer,
+--     p_hold_minutes integer
+--   ) RETURNS jsonb
 -- Preserves jsonb return and ALL validations (capacity 1-50, lead 0-120, NULL checks);
 -- Changes ONLY hold window from 0-120 to 5-120.
--- =============================================================================
+-- Explicitly drop the exact 0006 signature first to guarantee zero overloads exist.
+DROP FUNCTION IF EXISTS public.admin_update_canteen_settings(
+  uuid,
+  time without time zone,
+  time without time zone,
+  time without time zone,
+  integer,
+  integer,
+  integer
+);
+
+-- Post-apply verification query:
+-- SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'admin_update_canteen_settings';
+-- (Must return exactly 1)
 CREATE OR REPLACE FUNCTION public.admin_update_canteen_settings(
   p_canteen_id uuid,
   p_opens_at time,
