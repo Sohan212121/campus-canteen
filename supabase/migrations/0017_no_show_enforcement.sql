@@ -883,7 +883,8 @@ DECLARE
 BEGIN
   v_caller_id := auth.uid();
 
-  -- Support execution from internal background / pg_cron (executing as postgres / service role)
+  -- Support execution from internal background / automated caller (postgres / supabase_admin / service role).
+  -- Note: pg_cron is not installed and is not wired into migrations. Kept in docs only.
   IF v_caller_id IS NULL THEN
     IF current_user NOT IN ('postgres', 'supabase_admin') THEN
       RAISE EXCEPTION 'UNAUTHENTICATED: Authentication required';
@@ -1372,7 +1373,11 @@ BEGIN
     )
     RETURNING id, order_code INTO v_order_id, v_order_code;
 
-    -- 11.3 Insert Order Pickup Secret (using two gen_random_uuid hex strings)
+    -- 11.3 Insert Order Pickup Secret (exact 0014 definition)
+    -- pgcrypto is in the "extensions" schema with search_path = ''.
+    -- gen_random_uuid() is in pg_catalog. Any pgcrypto calls (crypt, gen_salt, gen_random_bytes)
+    -- must strictly be schema-qualified as extensions.crypt, extensions.gen_salt, or extensions.gen_random_bytes.
+    -- Never use public.gen_random_bytes or bare crypt/gen_salt.
     v_secret := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
     INSERT INTO public.order_pickup_secrets (order_id, secret)
     VALUES (v_order_id, v_secret);

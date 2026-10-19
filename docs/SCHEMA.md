@@ -875,7 +875,7 @@ PostgreSQL requires enum type extensions to be committed before new values can b
     2. Its `ready_at` occurred within the rolling 30-day window (`ready_at >= clock_timestamp() - interval '30 days'`).
     3. Its `ready_at` is strictly after the student's latest `cleared_at` in `student_strike_resets` (`cleared_at IS NULL OR ready_at > cleared_at`).
     4. An `'Order Ready'` notification was successfully recorded for that order (confirming the student was notified).
-- **Penalties for Serial No-Shows ($\ge 2$ active strikes)**:
+- **Penalties for Serial No-Shows ($\ge 3$ active strikes)**:
   - Total order quantity capped at 2 items (`SUM(quantity) <= 2`).
   - Total order value capped at ₹200 (`total_paise <= 20000`).
   - Maximum concurrent active orders (`PLACED`, `ACCEPTED`, `PREPARING`, `READY`) capped at 2.
