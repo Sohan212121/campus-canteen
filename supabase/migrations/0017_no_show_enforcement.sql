@@ -82,8 +82,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.is_order_expired(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.is_order_expired(uuid) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.is_order_expired(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.is_order_expired(uuid) TO service_role;
 
 -- =============================================================================
 -- 4. STUDENT RPC: public.get_pickup_code (with Row Locking & Lazy Expiry)
@@ -434,30 +434,23 @@ BEGIN
       RETURN jsonb_build_object('ok', false, 'error', 'AMBER_REQUIRES_BOTH');
     END IF;
   ELSE
-    -- Non-amber orders
-    IF p_code IS NOT NULL AND btrim(p_code) != '' THEN
-      IF NOT v_code_valid THEN
-        INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
-        VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW_SCAN', 'INVALID_CODE');
-        RETURN jsonb_build_object('ok', false, 'error', 'INVALID_CODE');
-      END IF;
-    ELSIF p_pin IS NOT NULL AND btrim(p_pin) != '' THEN
-      IF v_is_pin_locked THEN
-        RETURN jsonb_build_object('ok', false, 'error', 'PIN_LOCKED');
-      END IF;
+    IF NOT v_code_valid AND NOT v_pin_valid THEN
+      INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
+      VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW', 'INVALID_CREDENTIALS');
 
-      IF NOT v_pin_valid THEN
+      IF p_pin IS NOT NULL AND btrim(p_pin) != '' AND NOT v_pin_valid THEN
         UPDATE public.order_pickup_secrets
         SET failed_pin_attempts = failed_pin_attempts + 1,
             is_pin_locked = CASE WHEN failed_pin_attempts + 1 >= 3 THEN true ELSE false END
         WHERE order_id = v_order.id;
-
-        INSERT INTO public.pickup_collect_attempts (staff_id, order_id, canteen_id, method, outcome)
-        VALUES (v_staff_id, v_order.id, v_order.canteen_id, 'PREVIEW_PIN', 'WRONG_PIN');
-        RETURN jsonb_build_object('ok', false, 'error', 'WRONG_PIN');
       END IF;
-    ELSE
-      RETURN jsonb_build_object('ok', false, 'error', 'CODE_OR_PIN_REQUIRED');
+
+      RETURN jsonb_build_object('ok', false, 'error', 'INVALID_CODE');
+    END IF;
+
+    -- If PIN path is attempted and PIN is locked
+    IF NOT v_code_valid AND v_pin_valid AND v_is_pin_locked THEN
+      RETURN jsonb_build_object('ok', false, 'error', 'PIN_LOCKED');
     END IF;
   END IF;
 
@@ -1643,7 +1636,6 @@ DECLARE
   v_caller_id uuid;
   v_role public.user_role;
   v_active boolean;
-  v_staff_canteen uuid;
   v_target_date date;
   v_current_ist_date date;
   v_day_start timestamptz;
@@ -1658,7 +1650,7 @@ BEGIN
     RAISE EXCEPTION 'UNAUTHENTICATED: Authentication required';
   END IF;
 
-  SELECT role, is_active, canteen_id INTO v_role, v_active, v_staff_canteen
+  SELECT role, is_active INTO v_role, v_active
   FROM public.profiles
   WHERE id = v_caller_id;
 
@@ -1666,19 +1658,8 @@ BEGIN
     RAISE EXCEPTION 'USER_INACTIVE: Account is inactive or does not exist';
   END IF;
 
-  IF v_role NOT IN ('admin'::public.user_role, 'staff'::public.user_role) THEN
-    RAISE EXCEPTION 'FORBIDDEN: Admin or staff role required';
-  END IF;
-
-  -- Restrict staff to their own canteen
-  IF v_role = 'staff'::public.user_role THEN
-    IF v_staff_canteen IS NULL THEN
-      RAISE EXCEPTION 'FORBIDDEN: Staff has no assigned canteen';
-    END IF;
-    IF p_canteen_id IS NOT NULL AND p_canteen_id IS DISTINCT FROM v_staff_canteen THEN
-      RAISE EXCEPTION 'FORBIDDEN: Staff can only reconcile their assigned canteen';
-    END IF;
-    p_canteen_id := v_staff_canteen;
+  IF v_role <> 'admin'::public.user_role THEN
+    RAISE EXCEPTION 'FORBIDDEN: Admin role required';
   END IF;
 
   v_current_ist_date := (timezone('Asia/Kolkata', clock_timestamp()))::date;
@@ -1706,13 +1687,13 @@ BEGIN
         'canteen_name', c.name,
         'collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status)::integer,
         'total_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status), 0)::bigint,
-        'cash_collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum)::integer,
-        'cash_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum), 0)::bigint,
-        'upi_collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum)::integer,
-        'upi_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum), 0)::bigint,
+        'cash_collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH')::integer,
+        'cash_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'), 0)::bigint,
+        'upi_collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI')::integer,
+        'upi_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'), 0)::bigint,
         'manual_override_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true)::integer,
         'manual_override_rate', CASE WHEN count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status) > 0 THEN round((count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true)::numeric / count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status)::numeric), 4) ELSE 0.0 END,
-        'late_handover_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true AND o.collected_at > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')))::integer,
+        'late_handover_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true AND (o.collected_at > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')) OR EXISTS (SELECT 1 FROM public.admin_audit_log al WHERE al.target_id = o.id::text AND al.action = 'ORDER_COLLECTED' AND ((al.details->>'prior_status') = 'NO_SHOW' OR (al.details->>'is_late_handover')::boolean = true))))::integer,
         'no_show_count', (
           SELECT count(*)::integer
           FROM public.orders ns
@@ -1741,14 +1722,14 @@ BEGIN
         'staff_name', coalesce(p.full_name, 'Staff Member'),
         'collected_count', count(o.id)::integer,
         'total_collected_paise', coalesce(sum(o.total_paise), 0)::bigint,
-        'cash_count', count(o.id) FILTER (WHERE o.collected_with = 'CASH'::public.collected_with_enum)::integer,
-        'cash_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.collected_with = 'CASH'::public.collected_with_enum), 0)::bigint,
-        'upi_count', count(o.id) FILTER (WHERE o.collected_with = 'UPI'::public.collected_with_enum)::integer,
-        'upi_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.collected_with = 'UPI'::public.collected_with_enum), 0)::bigint,
+        'cash_count', count(o.id) FILTER (WHERE o.collected_with = 'CASH')::integer,
+        'cash_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.collected_with = 'CASH'), 0)::bigint,
+        'upi_count', count(o.id) FILTER (WHERE o.collected_with = 'UPI')::integer,
+        'upi_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.collected_with = 'UPI'), 0)::bigint,
         'manual_count', count(o.id) FILTER (WHERE o.is_manual_override = true)::integer,
         'manual_override_rate', CASE WHEN count(o.id) > 0 THEN round((count(o.id) FILTER (WHERE o.is_manual_override = true)::numeric / count(o.id)::numeric), 4) ELSE 0.0 END,
         'manual_rate_pct', CASE WHEN count(o.id) > 0 THEN round((count(o.id) FILTER (WHERE o.is_manual_override = true)::numeric / count(o.id)::numeric) * 100, 1) ELSE 0.0 END,
-        'late_handover_count', count(o.id) FILTER (WHERE o.is_manual_override = true AND o.collected_at > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')))::integer
+        'late_handover_count', count(o.id) FILTER (WHERE o.is_manual_override = true AND (o.collected_at > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')) OR EXISTS (SELECT 1 FROM public.admin_audit_log al WHERE al.target_id = o.id::text AND al.action = 'ORDER_COLLECTED' AND ((al.details->>'prior_status') = 'NO_SHOW' OR (al.details->>'is_late_handover')::boolean = true))))::integer
       ) AS s_item
     FROM public.orders o
     JOIN public.profiles p ON p.id = o.collected_by
@@ -1765,15 +1746,15 @@ BEGIN
     'total_collected_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status)::integer,
     'total_collected_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status), 0)::bigint,
     'grand_total_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status), 0)::bigint,
-    'total_cash_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum)::integer,
-    'total_cash_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum), 0)::bigint,
-    'cash_revenue_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'::public.collected_with_enum), 0)::bigint,
-    'total_upi_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum)::integer,
-    'total_upi_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum), 0)::bigint,
-    'upi_revenue_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'::public.collected_with_enum), 0)::bigint,
+    'total_cash_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH')::integer,
+    'total_cash_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'), 0)::bigint,
+    'cash_revenue_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'CASH'), 0)::bigint,
+    'total_upi_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI')::integer,
+    'total_upi_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'), 0)::bigint,
+    'upi_revenue_paise', coalesce(sum(o.total_paise) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.collected_with = 'UPI'), 0)::bigint,
     'total_manual_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true)::integer,
     'total_manual_rate', CASE WHEN count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status) > 0 THEN round((count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true)::numeric / count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status)::numeric), 4) ELSE 0.0 END,
-    'total_late_handover_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true AND o.collected_at > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')))::integer,
+    'total_late_handover_count', count(o.id) FILTER (WHERE o.status = 'COLLECTED'::public.order_status AND o.is_manual_override = true AND (o.collected_at > (o.ready_at + (coalesce(c.hold_minutes, 15) * interval '1 minute')) OR EXISTS (SELECT 1 FROM public.admin_audit_log al WHERE al.target_id = o.id::text AND al.action = 'ORDER_COLLECTED' AND ((al.details->>'prior_status') = 'NO_SHOW' OR (al.details->>'is_late_handover')::boolean = true))))::integer,
     'total_no_show_count', (
       SELECT count(*)::integer
       FROM public.orders ns
