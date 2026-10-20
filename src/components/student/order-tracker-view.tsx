@@ -306,6 +306,7 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
       }
 
       if (!response.ok || !json.ok) {
+        const errCode = json?.code;
         let message = json?.error || "Pickup code is currently unavailable.";
         let canRetryManually = true;
         if (errCode === "ORDER_NOT_READY") {
