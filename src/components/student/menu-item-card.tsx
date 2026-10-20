@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Plus, Minus, Clock } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,6 +19,7 @@ interface MenuItemCardProps {
 }
 
 export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
+  const router = useRouter();
   const currentQuantity = useCartStore((s) => s.getItemQuantity(item.id));
   const addItem = useCartStore((s) => s.addItem);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
@@ -35,7 +37,13 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
   const handleQuickAdd = () => {
     if (isOutOfStock) return;
     addItem(item.id, 1);
-    toast.success(`Added ${item.name} to cart`);
+    toast.success(`Added ${item.name} to cart`, {
+      id: "cart-add-feedback",
+      action: {
+        label: "View cart",
+        onClick: () => router.push("/cart"),
+      },
+    });
   };
 
   const handleIncrement = () => {

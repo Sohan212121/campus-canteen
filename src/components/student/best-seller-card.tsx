@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Plus, Minus, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,6 +25,7 @@ export function BestSellerCard({
   onOpenDetail,
   className = "",
 }: BestSellerCardProps) {
+  const router = useRouter();
   const { item, rank, units_sold } = bestSeller;
   const currentQuantity = useCartStore((s) => s.getItemQuantity(item.id));
   const addItem = useCartStore((s) => s.addItem);
@@ -42,7 +44,13 @@ export function BestSellerCard({
   const handleQuickAdd = () => {
     if (isOutOfStock) return;
     addItem(item.id, 1);
-    toast.success(`Added ${item.name} to cart`);
+    toast.success(`Added ${item.name} to cart`, {
+      id: "cart-add-feedback",
+      action: {
+        label: "View cart",
+        onClick: () => router.push("/cart"),
+      },
+    });
   };
 
   const handleIncrement = () => {

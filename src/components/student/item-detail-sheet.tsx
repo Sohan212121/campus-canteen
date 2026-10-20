@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { X, Plus, Minus, Clock, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 
@@ -69,6 +70,7 @@ function ItemDetailDialogContent({
   item: MenuItemData;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [quantity, setQuantity] = useState(1);
   const addItem = useCartStore((s) => s.addItem);
   const currentInCart = useCartStore((s) => s.getItemQuantity(item.id));
@@ -98,7 +100,13 @@ function ItemDetailDialogContent({
   const handleAddToCart = () => {
     if (isOutOfStock) return;
     addItem(item.id, quantity);
-    toast.success(`Added ${quantity} × ${item.name} to cart`);
+    toast.success(`Added ${quantity} × ${item.name} to cart`, {
+      id: "cart-add-feedback",
+      action: {
+        label: "View cart",
+        onClick: () => router.push("/cart"),
+      },
+    });
     onClose();
   };
 

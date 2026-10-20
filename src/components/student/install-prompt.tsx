@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 import { Download, Share2, X, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useCartStore } from "@/lib/cart-store";
+import { cn } from "@/lib/utils";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -96,6 +99,17 @@ export function StudentInstallPrompt() {
     }
   };
 
+  const pathname = usePathname();
+  const totalItemCount = useCartStore((s) => s.getTotalItemCount());
+  const hasHydrated = useCartStore((s) => s.hasHydrated);
+
+  // If student is on /menu with items in cart, CartShortcut renders at bottom-4.25rem.
+  // Stack install prompt directly above it with transition to avoid overlap.
+  const hasCartShortcut = hasHydrated && totalItemCount > 0 && pathname === "/menu";
+  const bottomOffsetClass = hasCartShortcut
+    ? "bottom-[calc(8rem+env(safe-area-inset-bottom,0px))]"
+    : "bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))]";
+
   const isDismissed = isStorageDismissed || sessionDismissed;
 
   // Never render in standalone mode or once dismissed
@@ -107,7 +121,10 @@ export function StudentInstallPrompt() {
   if (deferredPrompt) {
     return (
       <div
-        className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-3 right-3 z-30 mx-auto max-w-md animate-in slide-in-from-bottom-3 duration-200"
+        className={cn(
+          "fixed left-3 right-3 z-30 mx-auto max-w-md animate-in slide-in-from-bottom-3 duration-200 transition-all",
+          bottomOffsetClass
+        )}
         role="region"
         aria-label="Install app prompt"
       >
@@ -151,7 +168,10 @@ export function StudentInstallPrompt() {
   if (isIos) {
     return (
       <div
-        className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-3 right-3 z-30 mx-auto max-w-md animate-in slide-in-from-bottom-3 duration-200"
+        className={cn(
+          "fixed left-3 right-3 z-30 mx-auto max-w-md animate-in slide-in-from-bottom-3 duration-200 transition-all",
+          bottomOffsetClass
+        )}
         role="region"
         aria-label="Add to home screen hint"
       >

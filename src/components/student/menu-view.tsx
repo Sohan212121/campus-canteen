@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { MenuItemCard } from "@/components/student/menu-item-card";
 import { ItemDetailSheet, type MenuItemData } from "@/components/student/item-detail-sheet";
 import { BestSellersRow } from "@/components/student/best-sellers-row";
+import { CartShortcut } from "@/components/student/cart-shortcut";
+import { useCartStore } from "@/lib/cart-store";
 import type { BestSellerItem } from "@/server/actions/best-sellers";
 
 export type CategoryData = {
@@ -29,6 +31,10 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
   const [vegFilter, setVegFilter] = useState<"all" | "veg" | "non-veg">("all");
   const [availableOnly, setAvailableOnly] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MenuItemData | null>(null);
+
+  const totalItemCount = useCartStore((s) => s.getTotalItemCount());
+  const hasHydrated = useCartStore((s) => s.hasHydrated);
+  const isCartShortcutVisible = hasHydrated && totalItemCount > 0 && !selectedItem;
 
   // Filter items:
   // - Note: is_active=false items are already excluded or hidden per requirement 10.
@@ -220,7 +226,7 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
 
       {/* Item List */}
       {filteredItems.length > 0 ? (
-        <div className="space-y-3">
+        <div className={`space-y-3 ${isCartShortcutVisible ? "pb-20" : ""}`}>
           {filteredItems.map((item) => (
             <MenuItemCard
               key={item.id}
@@ -231,7 +237,7 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
         </div>
       ) : (
         /* Empty State */
-        <div className="rounded-2xl border border-dashed border-border/80 bg-muted/20 py-12 px-4 text-center space-y-3">
+        <div className={`rounded-2xl border border-dashed border-border/80 bg-muted/20 py-12 px-4 text-center space-y-3 ${isCartShortcutVisible ? "pb-20" : ""}`}>
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <UtensilsCrossed className="h-6 w-6" />
           </div>
@@ -260,6 +266,12 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
         item={selectedItem}
         isOpen={Boolean(selectedItem)}
         onClose={() => setSelectedItem(null)}
+      />
+
+      {/* Floating 1-tap Cart Shortcut (visible on menu when cart has items) */}
+      <CartShortcut
+        menuItems={initialItems}
+        isDetailSheetOpen={Boolean(selectedItem)}
       />
     </div>
   );
