@@ -225,15 +225,114 @@ describe("getBestSellersAction Server Action", () => {
     expect(result.data).toEqual([]);
   });
 
-  it("handles unexpected thrown exceptions with silent degradation", async () => {
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    mockRequireRole.mockRejectedValue(new Error("Network exploded"));
+  it("handles missing column error (42703) with clear warning and falls back to basic columns", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const rawRpc = [
+      { menu_item_id: "item-1", rank: 1, units_sold: "100+" },
+      { menu_item_id: "item-2", rank: 2, units_sold: "50+" },
+      { menu_item_id: "item-3", rank: 3, units_sold: "10+" },
+    ];
+    mockRpc.mockResolvedValue({ data: rawRpc, error: null });
+
+    const menuRowsWithoutNutrition = [
+      {
+        id: "item-1",
+        canteen_id: dummyCanteenId,
+        category_id: "cat-1",
+        name: "Crispy Dosa",
+        description: "Delicious",
+        price_paise: 5000,
+        image_url: null,
+        is_veg: true,
+        is_available: true,
+        stock: 50,
+        prep_minutes: 5,
+        is_active: true,
+      },
+      {
+        id: "item-2",
+        canteen_id: dummyCanteenId,
+        category_id: "cat-1",
+        name: "Filter Coffee",
+        description: "Hot",
+        price_paise: 2000,
+        image_url: null,
+        is_veg: true,
+        is_available: true,
+        stock: 100,
+        prep_minutes: 3,
+        is_active: true,
+      },
+      {
+        id: "item-3",
+        canteen_id: dummyCanteenId,
+        category_id: "cat-2",
+        name: "Idli Sambar",
+        description: "Steamed",
+        price_paise: 4000,
+        image_url: null,
+        is_veg: true,
+        is_available: true,
+        stock: 20,
+        prep_minutes: 4,
+        is_active: true,
+      },
+    ];
+
+    let queryCount = 0;
+    mockFrom.mockImplementation(() => {
+      queryCount++;
+      if (queryCount === 1) {
+        // First query fails with 42703 (undefined column)
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          in: vi.fn().mockReturnThis(),
+          then: (resolve: (v: unknown) => unknown) =>
+            resolve({
+              data: null,
+              error: {
+                code: "42703",
+                message: 'column menu_items.calories_kcal does not exist',
+                details: "migration 0018 not yet applied",
+                hint: "Run migration 0018",
+              },
+            }),
+        };
+      } else {
+        // Fallback query succeeds with basic columns
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          in: vi.fn().mockReturnThis(),
+          then: (resolve: (v: unknown) => unknown) =>
+            resolve({ data: menuRowsWithoutNutrition, error: null }),
+        };
+      }
+    });
 
     const result = await getBestSellersAction();
 
+    // Must succeed and assemble all 3 items rather than returning an empty list
     expect(result.success).toBe(true);
-    expect(result.data).toEqual([]);
-    expect(consoleSpy).toHaveBeenCalled();
-    consoleSpy.mockRestore();
+    expect(result.data).toHaveLength(3);
+    expect(result.data[0].item.name).toBe("Crispy Dosa");
+    expect(result.data[0].item.calories_kcal).toBeNull();
+    expect(result.data[0].item.ingredients).toEqual([]);
+
+    // Must log a clear one-line warning mentioning "migration 0018 not applied"
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("migration 0018 not applied")
+    );
+
+    // Must log the Supabase error via logSupabaseError (with code and message stringified)
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('code: "42703"')
+    );
+
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 });

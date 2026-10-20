@@ -5,6 +5,7 @@ import * as z from "zod";
 
 import { requireRole } from "@/server/auth";
 import { createClient } from "@/lib/supabase/server";
+import { logSupabaseError } from "@/lib/supabase-error";
 
 const listAdminReviewsSchema = z.object({
   status: z.enum(["all", "visible", "hidden"]).optional().default("all"),
@@ -76,7 +77,7 @@ export async function adminListReviewsAction(input?: {
     });
 
     if (error) {
-      console.error("[adminListReviewsAction] RPC error:", error);
+      logSupabaseError("adminListReviewsAction:rpc", error);
       return { success: false, error: "Failed to load moderation reviews", code: "RPC_ERROR" };
     }
 
@@ -116,7 +117,7 @@ export async function adminSetReviewHiddenAction(
     });
 
     if (error) {
-      console.error("[adminSetReviewHiddenAction] RPC error:", error);
+      logSupabaseError("adminSetReviewHiddenAction:rpc", error);
       return { success: false, error: "Failed to update review visibility", code: "RPC_ERROR" };
     }
 

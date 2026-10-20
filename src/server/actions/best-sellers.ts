@@ -5,6 +5,7 @@ import * as z from "zod";
 import { requireRole } from "@/server/auth";
 import { getActiveCanteenId } from "@/server/canteen";
 import { createClient } from "@/lib/supabase/server";
+import { logSupabaseError, isMissingColumnError } from "@/lib/supabase-error";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
 
 const bestSellersQuerySchema = z.object({
@@ -72,7 +73,7 @@ export async function getBestSellersAction(
     });
 
     if (rpcError) {
-      console.error("[getBestSellersAction] RPC get_best_sellers failed:", rpcError);
+      logSupabaseError("getBestSellersAction:rpc", rpcError);
       return { success: true, data: [] };
     }
 
@@ -87,20 +88,48 @@ export async function getBestSellersAction(
     const { data: itemRows, error: itemsError } = await supabase
       .from("menu_items")
       .select(
-        "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count"
+        "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count, calories_kcal, ingredients"
       )
       .eq("canteen_id", canteenId)
       .in("id", itemIds)
       .eq("is_active", true)
       .eq("is_available", true);
 
+    let finalItemRows = itemRows;
+
     if (itemsError) {
-      console.error("[getBestSellersAction] Failed to fetch item details:", itemsError);
-      return { success: true, data: [] };
+      logSupabaseError("getBestSellersAction:items", itemsError);
+
+      if (isMissingColumnError(itemsError)) {
+        // TODO: Remove fallback after migration 0018 is applied
+        console.warn("[getBestSellersAction] WARNING: migration 0018 not applied");
+        const fallbackRes = await supabase
+          .from("menu_items")
+          .select(
+            "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count"
+          )
+          .eq("canteen_id", canteenId)
+          .in("id", itemIds)
+          .eq("is_active", true)
+          .eq("is_available", true);
+
+        if (fallbackRes.error) {
+          logSupabaseError("getBestSellersAction:items_fallback", fallbackRes.error);
+          return { success: true, data: [] };
+        }
+
+        finalItemRows = (fallbackRes.data ?? []).map((row: Record<string, unknown>) => ({
+          ...row,
+          calories_kcal: null,
+          ingredients: [],
+        })) as unknown as typeof itemRows;
+      } else {
+        return { success: true, data: [] };
+      }
     }
 
     const itemsMap = new Map<string, MenuItemData>();
-    for (const row of (itemRows as MenuItemData[]) ?? []) {
+    for (const row of (finalItemRows as MenuItemData[]) ?? []) {
       itemsMap.set(row.id, row);
     }
 

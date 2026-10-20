@@ -5,6 +5,7 @@ import * as z from "zod";
 
 import { requireRole } from "@/server/auth";
 import { createClient } from "@/lib/supabase/server";
+import { logSupabaseError } from "@/lib/supabase-error";
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -107,7 +108,7 @@ export async function submitReviewAction(
     });
 
     if (error) {
-      console.error("[submitReviewAction] RPC error:", error);
+      logSupabaseError("submitReviewAction:rpc", error);
       const msg = error.message || "";
       if (msg.includes("NOT_ELIGIBLE")) {
         return {
@@ -177,7 +178,7 @@ export async function deleteMyReviewAction(
     });
 
     if (error) {
-      console.error("[deleteMyReviewAction] RPC error:", error);
+      logSupabaseError("deleteMyReviewAction:rpc", error);
       return { success: false, error: "Failed to delete review.", code: "RPC_ERROR" };
     }
 
@@ -220,7 +221,7 @@ export async function getItemReviewsAction(
     });
 
     if (error) {
-      console.error("[getItemReviewsAction] RPC error:", error);
+      logSupabaseError("getItemReviewsAction:rpc", error);
       if (error.message?.includes("NOT_FOUND")) {
         return { success: false, error: "Item not found", code: "NOT_FOUND" };
       }
@@ -265,7 +266,7 @@ export async function getReviewEligibilityAction(
     });
 
     if (error) {
-      console.error("[getReviewEligibilityAction] RPC error:", error);
+      logSupabaseError("getReviewEligibilityAction:rpc", error);
       return { success: false, error: "Failed to check eligibility", code: "RPC_ERROR" };
     }
 

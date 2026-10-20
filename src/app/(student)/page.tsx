@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { requireRole } from "@/server/auth";
 import { getActiveCanteenId } from "@/server/canteen";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { logSupabaseError, isMissingColumnError } from "@/lib/supabase-error";
 import { getBestSellersAction, type BestSellerItem } from "@/server/actions/best-sellers";
 import { formatPaise } from "@/lib/money";
 import { formatIstTime, getStatusBadgeConfig } from "@/lib/order-status";
@@ -57,10 +58,10 @@ export default async function StudentHomePage() {
 
     // 2. Fetch fallback preview items if best sellers not available
     if (bestSellers.length < 3) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("menu_items")
         .select(
-          "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count"
+          "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count, calories_kcal, ingredients"
         )
         .eq("canteen_id", canteenId)
         .eq("is_active", true)
@@ -70,6 +71,33 @@ export default async function StudentHomePage() {
 
       if (data) {
         previewItems = data as MenuItemData[];
+      } else if (error) {
+        logSupabaseError("StudentHomePage:previewItems", error);
+
+        if (isMissingColumnError(error)) {
+          // TODO: Remove fallback after migration 0018 is applied
+          console.warn("[StudentHomePage] WARNING: migration 0018 not applied");
+          const fallbackRes = await supabase
+            .from("menu_items")
+            .select(
+              "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count"
+            )
+            .eq("canteen_id", canteenId)
+            .eq("is_active", true)
+            .eq("is_available", true)
+            .order("name", { ascending: true })
+            .limit(4);
+
+          if (fallbackRes.data) {
+            previewItems = fallbackRes.data.map((row: Record<string, unknown>) => ({
+              ...row,
+              calories_kcal: null,
+              ingredients: [],
+            })) as MenuItemData[];
+          } else if (fallbackRes.error) {
+            logSupabaseError("StudentHomePage:previewItems_fallback", fallbackRes.error);
+          }
+        }
       }
     }
   }

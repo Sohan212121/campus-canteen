@@ -49,6 +49,7 @@ export function MenuView({
   const [items, setItems] = useState<AdminMenuItem[]>(initialItems);
   const [search, setSearch] = useState("");
   const [selectedCatId, setSelectedCatId] = useState<string>("ALL");
+  const [filterMissingDetailsOnly, setFilterMissingDetailsOnly] = useState(false);
 
   // Category Modal State
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
@@ -69,6 +70,9 @@ export function MenuView({
   const [itemStock, setItemStock] = useState("");
   const [itemPrepMinutes, setItemPrepMinutes] = useState("10");
   const [itemImageUrl, setItemImageUrl] = useState<string | null>(null);
+  const [itemCalories, setItemCalories] = useState("");
+  const [itemIngredients, setItemIngredients] = useState<string[]>([]);
+  const [ingredientInput, setIngredientInput] = useState("");
   const [itemSubmitting, setItemSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
@@ -86,7 +90,10 @@ export function MenuView({
         item.description.toLowerCase().includes(search.toLowerCase()));
     const matchesCategory =
       selectedCatId === "ALL" || item.category_id === selectedCatId;
-    return matchesSearch && matchesCategory;
+    const isMissingDetails =
+      item.calories_kcal == null || !item.ingredients || item.ingredients.length === 0;
+    const matchesMissingFilter = !filterMissingDetailsOnly || isMissingDetails;
+    return matchesSearch && matchesCategory && matchesMissingFilter;
   });
 
   // -------------------------------------------------------------------------
@@ -184,6 +191,9 @@ export function MenuView({
       setItemStock(item.stock !== null ? String(item.stock) : "");
       setItemPrepMinutes(String(item.prep_minutes));
       setItemImageUrl(item.image_url);
+      setItemCalories(item.calories_kcal != null ? String(item.calories_kcal) : "");
+      setItemIngredients(item.ingredients ? [...item.ingredients] : []);
+      setIngredientInput("");
     } else {
       setEditingItem(null);
       setItemName("");
@@ -195,8 +205,50 @@ export function MenuView({
       setItemStock("");
       setItemPrepMinutes("10");
       setItemImageUrl(null);
+      setItemCalories("");
+      setItemIngredients([]);
+      setIngredientInput("");
     }
     setItemModalOpen(true);
+  };
+
+  const handleAddIngredient = (rawInput?: string) => {
+    const textToAdd = rawInput !== undefined ? rawInput : ingredientInput;
+    if (!textToAdd.trim()) return;
+
+    // Support comma-separated batch adding/pasting
+    const candidates = textToAdd
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    const updated = [...itemIngredients];
+    for (const cand of candidates) {
+      if (cand.length > 60) {
+        toast.error(`"${cand.slice(0, 20)}..." exceeds 60 characters.`);
+        continue;
+      }
+      if (updated.length >= 30) {
+        toast.error("Maximum 30 ingredients allowed.");
+        break;
+      }
+      // Case-insensitive duplicate check
+      const isDuplicate = updated.some(
+        (existing) => existing.toLowerCase() === cand.toLowerCase()
+      );
+      if (isDuplicate) {
+        toast.error(`"${cand}" is already added.`);
+        continue;
+      }
+      updated.push(cand);
+    }
+
+    setItemIngredients(updated);
+    setIngredientInput("");
+  };
+
+  const handleRemoveIngredient = (indexToRemove: number) => {
+    setItemIngredients((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -247,6 +299,8 @@ export function MenuView({
     setItemSubmitting(true);
     const stockVal = itemStock.trim() !== "" ? parseInt(itemStock, 10) : null;
     const prepMins = parseInt(itemPrepMinutes, 10) || 10;
+    const calTrimmed = itemCalories.trim();
+    const caloriesVal = calTrimmed === "" ? null : parseInt(calTrimmed, 10);
 
     const payload = {
       canteen_id: canteenId,
@@ -259,6 +313,8 @@ export function MenuView({
       is_available: itemAvailable,
       stock: stockVal,
       prep_minutes: prepMins,
+      calories_kcal: caloriesVal,
+      ingredients: itemIngredients,
     };
 
     try {
@@ -280,6 +336,8 @@ export function MenuView({
                     image_url: itemImageUrl,
                     stock: stockVal,
                     description: payload.description,
+                    calories_kcal: caloriesVal,
+                    ingredients: itemIngredients,
                   }
                 : i
             )
@@ -378,12 +436,23 @@ export function MenuView({
             type="button"
             onClick={() => setSelectedCatId("ALL")}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors border ${
-              selectedCatId === "ALL"
+              selectedCatId === "ALL" && !filterMissingDetailsOnly
                 ? "bg-primary text-primary-foreground border-primary"
                 : "bg-card text-muted-foreground border-border/60 hover:text-foreground"
             }`}
           >
             All Items ({items.filter((i) => i.is_active).length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMissingDetailsOnly((prev) => !prev)}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors border ${
+              filterMissingDetailsOnly
+                ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                : "bg-card text-amber-700 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/10"
+            }`}
+          >
+            Missing Details Only ({items.filter((i) => i.is_active && (i.calories_kcal == null || !i.ingredients || i.ingredients.length === 0)).length})
           </button>
           {activeCategories.map((cat) => (
             <div key={cat.id} className="inline-flex items-center group">
@@ -464,9 +533,24 @@ export function MenuView({
                             {item.name}
                           </h3>
                         </div>
-                        <Badge variant="outline" className="text-[10px] mt-1">
-                          {catName}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                          <Badge variant="outline" className="text-[10px]">
+                            {catName}
+                          </Badge>
+                          {(item.calories_kcal == null || !item.ingredients || item.ingredients.length === 0) && (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 font-medium"
+                            >
+                              Details missing
+                            </Badge>
+                          )}
+                          {item.calories_kcal != null && (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                              {item.calories_kcal} kcal
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       <span className="font-bold font-mono text-primary text-base shrink-0">
@@ -726,6 +810,78 @@ export function MenuView({
                     />
                     Available for Ordering
                   </label>
+                </div>
+
+                {/* Calories & Ingredients Section */}
+                <div className="space-y-3 pt-2 border-t">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold">Calories (kcal)</label>
+                      <span className="text-[11px] text-muted-foreground">Optional (0 - 5,000 kcal)</span>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="5000"
+                      placeholder="e.g. 350"
+                      value={itemCalories}
+                      onChange={(e) => setItemCalories(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold">Ingredients</label>
+                      <span className="text-[11px] text-muted-foreground">
+                        {itemIngredients.length}/30 items (max 60 chars each)
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Type ingredient and press Enter (or paste comma-separated)..."
+                        value={ingredientInput}
+                        onChange={(e) => setIngredientInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddIngredient();
+                          }
+                        }}
+                        disabled={itemIngredients.length >= 30}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleAddIngredient()}
+                        disabled={!ingredientInput.trim() || itemIngredients.length >= 30}
+                      >
+                        Add
+                      </Button>
+                    </div>
+
+                    {itemIngredients.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1.5 max-h-36 overflow-y-auto p-1.5 bg-muted/30 rounded-lg border">
+                        {itemIngredients.map((ing, idx) => (
+                          <span
+                            key={`${ing}-${idx}`}
+                            className="inline-flex items-center gap-1 rounded-md bg-background px-2.5 py-1 text-xs font-medium border text-foreground shadow-2xs"
+                          >
+                            <span>{ing}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveIngredient(idx)}
+                              className="text-muted-foreground hover:text-destructive rounded-full p-0.5"
+                              aria-label={`Remove ingredient ${ing}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Image Upload Dropzone */}

@@ -12,6 +12,8 @@ import {
   isAllowedMenuImageUrl,
   extractStorageFilename,
 } from "@/lib/image-upload";
+import { validateAndNormalizeNutrition } from "@/lib/menu-nutrition";
+import { logSupabaseError, isMissingColumnError } from "@/lib/supabase-error";
 
 const uuidSchema = z.string().uuid("Invalid ID format");
 
@@ -442,6 +444,8 @@ export type AdminMenuItem = {
   stock: number | null;
   prep_minutes: number;
   is_active: boolean;
+  calories_kcal: number | null;
+  ingredients: string[];
 };
 
 export async function getAdminMenuDataAction(
@@ -466,16 +470,54 @@ export async function getAdminMenuDataAction(
     supabase
       .from("menu_items")
       .select(
-        "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active"
+        "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, calories_kcal, ingredients"
       )
       .eq("canteen_id", activeCanteenId)
       .order("name", { ascending: true }),
   ]);
 
-  if (categoriesRes.error || itemsRes.error) {
+  let itemsData = itemsRes.data;
+
+  if (itemsRes.error) {
+    logSupabaseError("getAdminMenuDataAction:items", itemsRes.error);
+
+    if (isMissingColumnError(itemsRes.error)) {
+      // TODO: Remove fallback after migration 0018 is applied
+      console.warn("[getAdminMenuDataAction] WARNING: migration 0018 not applied");
+      const fallbackRes = await supabase
+        .from("menu_items")
+        .select(
+          "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active"
+        )
+        .eq("canteen_id", activeCanteenId)
+        .order("name", { ascending: true });
+
+      if (fallbackRes.error) {
+        logSupabaseError("getAdminMenuDataAction:items_fallback", fallbackRes.error);
+        return {
+          success: false,
+          error: fallbackRes.error.message || "Failed to load menu data.",
+        };
+      }
+
+      itemsData = (fallbackRes.data || []).map((row: Record<string, unknown>) => ({
+        ...row,
+        calories_kcal: null,
+        ingredients: [],
+      })) as unknown as typeof itemsRes.data;
+    } else {
+      return {
+        success: false,
+        error: itemsRes.error.message || "Failed to load menu data.",
+      };
+    }
+  }
+
+  if (categoriesRes.error) {
+    logSupabaseError("getAdminMenuDataAction:categories", categoriesRes.error);
     return {
       success: false,
-      error: categoriesRes.error?.message || itemsRes.error?.message || "Failed to load menu data.",
+      error: categoriesRes.error.message || "Failed to load menu data.",
     };
   }
 
@@ -483,7 +525,7 @@ export async function getAdminMenuDataAction(
     success: true,
     data: {
       categories: (categoriesRes.data || []) as AdminCategory[],
-      items: (itemsRes.data || []) as AdminMenuItem[],
+      items: (itemsData || []) as AdminMenuItem[],
       selectedCanteenId: activeCanteenId,
     },
   };
@@ -598,6 +640,8 @@ export interface MenuItemInput {
   is_available: boolean;
   stock?: number | null;
   prep_minutes: number;
+  calories_kcal?: number | null;
+  ingredients?: string[] | null;
 }
 
 export async function adminCreateMenuItemAction(
@@ -625,6 +669,17 @@ export async function adminCreateMenuItemAction(
   const prepMins = Math.max(1, Math.min(item.prep_minutes || 5, 180));
   const stockVal = item.stock !== undefined && item.stock !== null ? Math.max(0, item.stock) : null;
 
+  const nutritionValidation = validateAndNormalizeNutrition({
+    calories_kcal: item.calories_kcal,
+    ingredients: item.ingredients,
+  });
+  if (!nutritionValidation.success) {
+    return { success: false, error: nutritionValidation.error || "Invalid nutrition data." };
+  }
+
+  const caloriesVal = nutritionValidation.calories_kcal ?? null;
+  const ingredientsVal = nutritionValidation.ingredients ?? [];
+
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("menu_items")
@@ -640,9 +695,11 @@ export async function adminCreateMenuItemAction(
       stock: stockVal,
       prep_minutes: prepMins,
       is_active: true,
+      calories_kcal: caloriesVal,
+      ingredients: ingredientsVal,
     })
     .select(
-      "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active"
+      "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, calories_kcal, ingredients"
     )
     .single();
 
@@ -689,6 +746,14 @@ export async function adminUpdateMenuItemAction(
   const prepMins = Math.max(1, Math.min(item.prep_minutes || 5, 180));
   const stockVal = item.stock !== undefined && item.stock !== null ? Math.max(0, item.stock) : null;
 
+  const nutritionValidation = validateAndNormalizeNutrition({
+    calories_kcal: item.calories_kcal,
+    ingredients: item.ingredients,
+  });
+  if (!nutritionValidation.success) {
+    return { success: false, error: nutritionValidation.error || "Invalid nutrition data." };
+  }
+
   const supabase = await createClient();
 
   // If old image is replaced or removed, safely clean up old storage object
@@ -699,19 +764,29 @@ export async function adminUpdateMenuItemAction(
     }
   }
 
+  const updatePayload: Record<string, unknown> = {
+    category_id: item.category_id,
+    name: cleanName,
+    description: item.description?.trim() || null,
+    price_paise: priceParsed.paise,
+    image_url: item.image_url?.trim() || null,
+    is_veg: item.is_veg,
+    is_available: item.is_available,
+    stock: stockVal,
+    prep_minutes: prepMins,
+  };
+
+  if ("calories_kcal" in item && item.calories_kcal !== undefined) {
+    updatePayload.calories_kcal = nutritionValidation.calories_kcal ?? null;
+  }
+
+  if ("ingredients" in item && item.ingredients !== undefined) {
+    updatePayload.ingredients = nutritionValidation.ingredients ?? [];
+  }
+
   const { error } = await supabase
     .from("menu_items")
-    .update({
-      category_id: item.category_id,
-      name: cleanName,
-      description: item.description?.trim() || null,
-      price_paise: priceParsed.paise,
-      image_url: item.image_url?.trim() || null,
-      is_veg: item.is_veg,
-      is_available: item.is_available,
-      stock: stockVal,
-      prep_minutes: prepMins,
-    })
+    .update(updatePayload)
     .eq("id", itemId);
 
   if (error) {

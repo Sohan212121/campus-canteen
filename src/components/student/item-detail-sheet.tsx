@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { X, Plus, Minus, Clock, ShoppingBag } from "lucide-react";
+import { X, Plus, Minus, Clock, ShoppingBag, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,8 @@ export type MenuItemData = {
   is_active: boolean;
   rating_avg?: number | null;
   rating_count?: number;
+  calories_kcal?: number | null;
+  ingredients?: string[];
 };
 
 interface ItemDetailSheetProps {
@@ -72,6 +74,7 @@ function ItemDetailDialogContent({
 }) {
   const router = useRouter();
   const [quantity, setQuantity] = useState(1);
+  const [isIngredientsOpen, setIsIngredientsOpen] = useState(false);
   const addItem = useCartStore((s) => s.addItem);
   const currentInCart = useCartStore((s) => s.getItemQuantity(item.id));
 
@@ -153,7 +156,7 @@ function ItemDetailDialogContent({
         {/* Content scrollable body */}
         <div className="p-5 overflow-y-auto space-y-4">
           <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
+            <div className="space-y-1 min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <VegIndicator isVeg={item.is_veg} showLabel />
                 {item.prep_minutes > 0 && (
@@ -163,7 +166,7 @@ function ItemDetailDialogContent({
                   </Badge>
                 )}
               </div>
-              <h2 id="item-detail-title" className="text-xl font-bold tracking-tight">
+              <h2 id="item-detail-title" className="text-xl font-bold tracking-tight break-words">
                 {item.name}
               </h2>
               <div className="pt-0.5">
@@ -174,16 +177,66 @@ function ItemDetailDialogContent({
                 />
               </div>
             </div>
-            <div className="text-right shrink-0">
+            <div className="text-right shrink-0 flex flex-col items-end gap-1">
               <span className="text-xl font-bold text-foreground">
                 {formatPaise(item.price_paise)}
               </span>
+              {item.calories_kcal != null && (
+                <span
+                  className="inline-flex items-center rounded-full bg-secondary/80 px-2.5 py-0.5 text-xs font-medium text-secondary-foreground"
+                  aria-label={`About ${item.calories_kcal} calories per serving`}
+                >
+                  ~{item.calories_kcal} kcal
+                </span>
+              )}
             </div>
           </div>
 
           {item.description && (
             <p className="text-sm text-muted-foreground leading-relaxed">
               {item.description}
+            </p>
+          )}
+
+          {item.ingredients && item.ingredients.length > 0 && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setIsIngredientsOpen((prev) => !prev)}
+                className="flex items-center justify-between w-full py-2 text-sm font-semibold text-foreground hover:text-foreground/80 transition-colors"
+                aria-expanded={isIngredientsOpen}
+                aria-controls="ingredients-panel"
+              >
+                <span>Ingredients ({item.ingredients.length})</span>
+                <ChevronDown
+                  className={`h-4 w-4 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none ${
+                    isIngredientsOpen ? "rotate-180" : ""
+                  }`}
+                  aria-hidden="true"
+                />
+              </button>
+
+              {isIngredientsOpen && (
+                <div
+                  id="ingredients-panel"
+                  className="flex flex-wrap gap-1.5 pt-2 pb-1"
+                >
+                  {item.ingredients.map((ing, idx) => (
+                    <span
+                      key={`${ing}-${idx}`}
+                      className="inline-flex items-center rounded-md bg-muted px-2.5 py-1 text-xs text-muted-foreground"
+                    >
+                      {ing}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {(item.calories_kcal != null || (item.ingredients && item.ingredients.length > 0)) && (
+            <p className="text-[11px] text-muted-foreground/80 italic">
+              Calorie and ingredient details are provided by the canteen and are approximate.
             </p>
           )}
 

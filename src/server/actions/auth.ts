@@ -6,6 +6,7 @@ import * as z from "zod";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
+import { logSupabaseError } from "@/lib/supabase-error";
 import { ROLE_HOME, type UserRole } from "@/server/auth";
 import {
   forgotPasswordSchema,
@@ -179,7 +180,7 @@ export async function signupAction(
   });
 
   if (error) {
-    console.error("Supabase signup error:", error);
+    logSupabaseError("auth:signup", error);
     const rawMsg = error.message || "";
 
     if (rawMsg.includes("DOMAIN_NOT_ALLOWED")) {
@@ -226,7 +227,7 @@ export async function resendConfirmationAction(
   });
 
   if (error) {
-    console.error("Resend confirmation error:", error);
+    logSupabaseError("auth:resendConfirmation", error);
   }
 
   // Generic message — avoid user enumeration
@@ -279,11 +280,7 @@ export async function forgotPasswordAction(
       }
     );
     if (error) {
-      // Log real error on server (rate limit, non-existent, provider issue)
-      console.error(
-        "[forgotPasswordAction] Provider error (masked for anti-enumeration):",
-        error.message
-      );
+      logSupabaseError("forgotPasswordAction:provider", error);
     }
   } catch (err) {
     console.error("[forgotPasswordAction] Unexpected exception:", err);
@@ -324,7 +321,7 @@ export async function verifyConfirmTokenAction(
   });
 
   if (error || !data?.user) {
-    console.error("[verifyConfirmTokenAction] OTP error:", error?.message);
+    logSupabaseError("verifyConfirmTokenAction:otp", error);
     redirect("/forgot-password?error=link_expired");
   }
 
@@ -390,7 +387,7 @@ export async function setPasswordAction(
   });
 
   if (error) {
-    console.error("[setPasswordAction] Update error:", error.message);
+    logSupabaseError("setPasswordAction:update", error);
     return {
       error:
         "Failed to update password. Please try again or request a new link.",

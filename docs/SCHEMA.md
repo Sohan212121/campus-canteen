@@ -892,7 +892,100 @@ PostgreSQL requires enum type extensions to be committed before new values can b
   - Distinguishes manual late handovers from on-time collections.
   - Reports count of `NO_SHOW` and `CANCELLED` orders.
 
+---
 
+## 18. Menu Item Nutrition & Ingredients Architecture
 
+Added in migration `0018_menu_item_nutrition_ingredients.sql`.
 
+### 18.1 Overview & Design Goals
+Empowers students to make informed dietary decisions by providing calorie estimations and full ingredient breakdowns directly in the item detail sheet. All data is authored and curated exclusively by canteen administrators, with strict validation guarantees enforced at both the PostgreSQL schema layer and Next.js server action boundary.
 
+### 18.2 Schema Modifications & Column Specifications
+The following columns are added to `public.menu_items`:
+
+| Column | Type | Constraints / Default | Description |
+|---|---|---|---|
+| `calories_kcal` | `integer` | `NULL`, `CHECK (calories_kcal IS NULL OR (calories_kcal >= 0 AND calories_kcal <= 5000))` | Estimated per-serving energy value in kilocalories. |
+| `ingredients` | `text[]` | `NOT NULL DEFAULT '{}'::text[]`, `CHECK (public.validate_menu_item_ingredients(ingredients))` | Ordered list of ingredients (max 30 items, 1–60 characters each). |
+
+### 18.3 Ingredients Validation Helper (`public.validate_menu_item_ingredients`)
+To avoid repetitive inline logic and ensure deterministic check constraint evaluation across all queries and bulk inserts, validation is encapsulated in a pure SQL function:
+
+```sql
+CREATE OR REPLACE FUNCTION public.validate_menu_item_ingredients(p_ingredients text[])
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path = ''
+AS $$
+  SELECT
+    p_ingredients IS NOT NULL
+    AND cardinality(p_ingredients) <= 30
+    AND NOT EXISTS (
+      SELECT 1
+      FROM unnest(p_ingredients) AS item
+      WHERE item IS NULL
+         OR length(btrim(item)) < 1
+         OR length(item) > 60
+    );
+$$;
+
+REVOKE ALL ON FUNCTION public.validate_menu_item_ingredients(text[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.validate_menu_item_ingredients(text[]) TO authenticated, service_role;
+```
+
+#### Constraint Invariants
+1. **Empty Array Passes**: An empty ingredient list (`'{}'::text[]`) returns `cardinality = 0` and passes without error.
+2. **Cardinality Limit**: Exactly 30 items pass; 31 items fail.
+3. **Item Bounds**: Items with 1 to 60 characters pass; items with 61 characters fail.
+4. **Whitespace Rejection**: Blank or whitespace-only items fail (`length(btrim(item)) < 1`). Null array elements fail.
+5. **Execution Hardening**: Pure `IMMUTABLE`, `PARALLEL SAFE`, `SET search_path = ''`, with privileges revoked from `PUBLIC` and `anon`.
+
+### 18.4 Staff Guard & Role Enforcement (`public.prevent_menu_item_unauthorized_update`)
+Canteen staff possess row-update privileges on `public.menu_items` solely to flip availability toggles and adjust live stock counts during busy shifts. Staff must never modify menu pricing, titles, descriptions, prep durations, categories, photos, or nutrition details.
+
+In migration 0018, `public.prevent_menu_item_unauthorized_update()` is updated to explicitly forbid staff from altering `calories_kcal` and `ingredients`:
+```sql
+    IF NEW.id IS DISTINCT FROM OLD.id OR
+       NEW.canteen_id IS DISTINCT FROM OLD.canteen_id OR
+       NEW.category_id IS DISTINCT FROM OLD.category_id OR
+       NEW.name IS DISTINCT FROM OLD.name OR
+       NEW.description IS DISTINCT FROM OLD.description OR
+       NEW.price_paise IS DISTINCT FROM OLD.price_paise OR
+       NEW.image_url IS DISTINCT FROM OLD.image_url OR
+       NEW.is_veg IS DISTINCT FROM OLD.is_veg OR
+       NEW.prep_minutes IS DISTINCT FROM OLD.prep_minutes OR
+       NEW.is_active IS DISTINCT FROM OLD.is_active OR
+       NEW.calories_kcal IS DISTINCT FROM OLD.calories_kcal OR
+       NEW.ingredients IS DISTINCT FROM OLD.ingredients OR
+       NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+      RAISE EXCEPTION 'Staff are only permitted to update is_available and stock';
+    END IF;
+```
+
+#### Column Privileges on `public.menu_items`
+- `SELECT`: Granted to `anon`, `authenticated`, and `service_role`.
+- `INSERT`: Prohibited directly; routed via admin server actions (`adminCreateMenuItemAction`).
+- `UPDATE`: Executable by `admin` (all columns except ratings) and `staff` (restricted strictly to `is_available` and `stock`). Protected by `prevent_menu_item_unauthorized_update` trigger.
+- `DELETE`: Prohibited; items are soft-archived via `is_active = false` to preserve historical order snapshots and ratings integrity.
+
+### 18.5 Server Action Update Semantics
+Admin updates via `adminUpdateMenuItemAction` follow precise partial update semantics:
+- **Omission**: Omitting `calories_kcal` or `ingredients` leaves stored values untouched in the database.
+- **Calories Clearing**: Passing `null` sets `calories_kcal = NULL`.
+- **Ingredients Clearing**: Passing an empty array `[]` (or `null`) sets `ingredients = '{}'::text[]`.
+- **Form Idempotency**: Opening an existing dish in the admin menu editor and saving without editing nutrition fields preserves existing values without wiping them.
+- **Preserved Existing Validations**: Price parsing (`parseRupeesToPaise`), storage URL validation (`isAllowedMenuImageUrl`), and prep duration clamping (`1..180`) remain completely untouched.
+
+### 18.6 Student Sheet UX & Mobile Viewport Safety
+- **Right-Hand Layout**: In `ItemDetailSheet`, the calories pill (`~{calories_kcal} kcal`) sits directly beneath the item price in the right column (`flex flex-col items-end gap-1`).
+- **375px Viewport Hardening**:
+  - The left title block utilizes `min-w-0 flex-1` with `break-words` on the heading.
+  - Prevents horizontal overflow, maintains touch-friendly 44px tap targets, and keeps the "Add to cart" CTA fully visible without sideways scrolling.
+- **Collapsible Ingredients Disclosure**:
+  - Hidden by default; rendered via a button with a rotating chevron (`aria-expanded`, `aria-controls="ingredients-panel"`).
+  - Ingredients rendered as compact chips with `motion-reduce:transition-none`.
+  - Returns nothing if the ingredient list is empty.
+  - Accompanied by a disclaimer note: *"Calorie and ingredient details are provided by the canteen and are approximate."*

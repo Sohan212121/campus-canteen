@@ -1,6 +1,7 @@
 import { requireRole } from "@/server/auth";
 import { getActiveCanteenId } from "@/server/canteen";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { logSupabaseError, isMissingColumnError } from "@/lib/supabase-error";
 import { getBestSellersAction, type BestSellerItem } from "@/server/actions/best-sellers";
 import { MenuView, type CategoryData } from "@/components/student/menu-view";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
@@ -27,7 +28,7 @@ export default async function MenuPage() {
       supabase
         .from("menu_items")
         .select(
-          "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count"
+          "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count, calories_kcal, ingredients"
         )
         .eq("canteen_id", canteenId)
         .eq("is_active", true)
@@ -41,10 +42,39 @@ export default async function MenuPage() {
 
     if (categoriesRes.data) {
       categories = categoriesRes.data as CategoryData[];
+    } else if (categoriesRes.error) {
+      logSupabaseError("MenuPage:categories", categoriesRes.error);
     }
+
     if (itemsRes.data) {
       menuItems = itemsRes.data as MenuItemData[];
+    } else if (itemsRes.error) {
+      logSupabaseError("MenuPage:menu_items", itemsRes.error);
+
+      if (isMissingColumnError(itemsRes.error)) {
+        // TODO: Remove fallback after migration 0018 is applied
+        console.warn("[MenuPage] WARNING: migration 0018 not applied");
+        const fallbackRes = await supabase
+          .from("menu_items")
+          .select(
+            "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count"
+          )
+          .eq("canteen_id", canteenId)
+          .eq("is_active", true)
+          .order("name", { ascending: true });
+
+        if (fallbackRes.data) {
+          menuItems = fallbackRes.data.map((row: Record<string, unknown>) => ({
+            ...row,
+            calories_kcal: null,
+            ingredients: [],
+          })) as MenuItemData[];
+        } else if (fallbackRes.error) {
+          logSupabaseError("MenuPage:menu_items_fallback", fallbackRes.error);
+        }
+      }
     }
+
     if (bestSellersRes.success && bestSellersRes.data) {
       bestSellers = bestSellersRes.data;
     }
