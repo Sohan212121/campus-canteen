@@ -44,6 +44,15 @@ export function calculateEstimatedCartTotal(
 }
 
 /**
+ * Formats the visible label for the CartShortcut bar:
+ * "Go to Cart · {count} items · {total}"
+ */
+export function formatCartShortcutVisibleLabel(count: number, totalPaise: number): string {
+  const itemText = count === 1 ? "1 item" : `${count} items`;
+  return `Go to Cart · ${itemText} · ${formatPaise(totalPaise)}`;
+}
+
+/**
  * Formats an accessible name for the CartShortcut link.
  * Clarifies that the total is an estimate (the cart page is authoritative).
  */

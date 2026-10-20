@@ -107,7 +107,7 @@ export function StudentInstallPrompt() {
   // Stack install prompt directly above it with transition to avoid overlap.
   const hasCartShortcut = hasHydrated && totalItemCount > 0 && pathname === "/menu";
   const bottomOffsetClass = hasCartShortcut
-    ? "bottom-[calc(8rem+env(safe-area-inset-bottom,0px))]"
+    ? "bottom-[calc(8.5rem+env(safe-area-inset-bottom,0px))]"
     : "bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))]";
 
   const isDismissed = isStorageDismissed || sessionDismissed;

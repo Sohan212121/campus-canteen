@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   calculateEstimatedCartTotal,
+  formatCartShortcutVisibleLabel,
   getCartShortcutAriaLabel,
   getCartShortcutAnnouncement,
   shouldShowCartShortcut,
@@ -47,6 +48,16 @@ describe("calculateEstimatedCartTotal", () => {
       { menu_item_id: "item-3", quantity: 1 }, // 1500
     ];
     expect(calculateEstimatedCartTotal(cart, menuItems)).toBe(1500);
+  });
+});
+
+describe("formatCartShortcutVisibleLabel", () => {
+  it("formats single item visible label accurately", () => {
+    expect(formatCartShortcutVisibleLabel(1, 2500)).toBe("Go to Cart · 1 item · ₹25");
+  });
+
+  it("formats multiple items visible label accurately", () => {
+    expect(formatCartShortcutVisibleLabel(3, 12000)).toBe("Go to Cart · 3 items · ₹120");
   });
 });
 

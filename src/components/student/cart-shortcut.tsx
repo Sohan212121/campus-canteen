@@ -6,9 +6,9 @@ import { usePathname } from "next/navigation";
 import { ShoppingBag, ArrowRight } from "lucide-react";
 
 import { useCartStore } from "@/lib/cart-store";
-import { formatPaise } from "@/lib/money";
 import {
   calculateEstimatedCartTotal,
+  formatCartShortcutVisibleLabel,
   getCartShortcutAriaLabel,
   getCartShortcutAnnouncement,
   shouldShowCartShortcut,
@@ -81,34 +81,23 @@ export function CartShortcut({
         <aside
           role="region"
           aria-label="Floating cart shortcut"
-          className="fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] left-3 right-3 z-30 mx-auto max-w-md pointer-events-auto animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none motion-reduce:transition-none"
+          className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-3 right-3 z-40 mx-auto max-w-md pointer-events-auto animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none motion-reduce:transition-none"
         >
           <Link
             href="/cart"
             aria-label={getCartShortcutAriaLabel(totalCount, estimatedTotal)}
             className="flex min-h-[48px] w-full items-center justify-between gap-3 rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground shadow-lg transition-transform active:scale-[0.99] hover:bg-primary/95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
-            {/* Left: Cart badge, item count & estimated price */}
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="flex h-7 min-w-[28px] items-center justify-center rounded-xl bg-primary-foreground/20 px-2 text-xs font-bold text-primary-foreground">
-                <ShoppingBag className="h-3.5 w-3.5 mr-1" />
-                {totalCount}
+            {/* Visible label: Go to Cart · {count} items · {total} */}
+            <div className="flex items-center gap-2 min-w-0">
+              <ShoppingBag className="h-4 w-4 shrink-0 opacity-90" />
+              <span className="text-xs sm:text-sm font-bold leading-tight truncate">
+                {formatCartShortcutVisibleLabel(totalCount, estimatedTotal)}
               </span>
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs font-bold leading-tight truncate">
-                  {totalCount === 1 ? "1 item" : `${totalCount} items`}
-                </span>
-                <span className="text-[11px] text-primary-foreground/80 leading-tight">
-                  Est. {formatPaise(estimatedTotal)}
-                </span>
-              </div>
             </div>
 
-            {/* Right: View cart action */}
-            <div className="flex items-center gap-1.5 text-xs font-bold tracking-wide shrink-0">
-              <span>View cart</span>
-              <ArrowRight className="h-4 w-4" />
-            </div>
+            {/* Right: Action arrow */}
+            <ArrowRight className="h-4 w-4 shrink-0" />
           </Link>
         </aside>
       )}
