@@ -11,6 +11,7 @@ import {
   Sparkles,
   Utensils,
   ArrowRight,
+  Leaf,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -566,8 +567,16 @@ export function StudentHomeView({
           })}
         </div>
 
-        {/* Smart Quick Filter Chips (In Stock, Under ₹100, Fast Prep) */}
+        {/* Smart Quick Filter Chips (In Stock, Under ₹100, Fast Prep, Healthy Mode) */}
         <div className="flex items-center gap-2 flex-wrap pt-0.5">
+          <Link
+            href="/healthy"
+            className="min-h-[36px] h-9 px-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
+          >
+            <Leaf className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>🥗 Healthy Mode</span>
+          </Link>
+
           <button
             type="button"
             onClick={() => {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { RotateCw, ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { RotateCw, ArrowRight, Leaf } from "lucide-react";
 
 interface StudentGreetingHeaderProps {
   fullName?: string | null;
@@ -363,11 +364,16 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
             </h1>
           </div>
 
-          {/* Bottom row: Call-to-action & Prominent Food Mood Button */}
-          <div className="pt-3 border-t border-border/50 flex items-center justify-between gap-3">
-            <span className="text-xs font-medium text-muted-foreground">
-              What are you craving today?
-            </span>
+          {/* Bottom row: Call-to-action & Prominent Healthy Mode + Food Mood Buttons */}
+          <div className="pt-3 border-t border-border/50 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+            <Link
+              href="/healthy"
+              onClick={(e) => e.stopPropagation()}
+              className="min-h-[38px] h-9 px-3.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95 transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <Leaf className="h-3.5 w-3.5" />
+              <span>Healthy Mode 🥗</span>
+            </Link>
 
             <button
               type="button"
@@ -433,11 +439,16 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
             </p>
           </div>
 
-          {/* Bottom Row: Tap hint and Next Quote button */}
+          {/* Bottom Row: Healthy Mode link and Next Quote button */}
           <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-2 text-xs">
-            <span className="text-[11px] text-muted-foreground font-medium truncate">
-              Tap card for next quote 💬
-            </span>
+            <Link
+              href="/healthy"
+              onClick={(e) => e.stopPropagation()}
+              className="min-h-[32px] px-2.5 rounded-lg text-[11px] font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+            >
+              <Leaf className="h-3 w-3" />
+              <span>Healthy Mode</span>
+            </Link>
 
             <button
               type="button"
