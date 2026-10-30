@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { UtensilsCrossed } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import { UtensilsCrossed, Leaf } from "lucide-react";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
@@ -17,6 +17,8 @@ interface StudentHeaderProps {
 
 export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const isHealthy = pathname === "/healthy";
   const [unreadCount, setUnreadCount] = useState<number>(initialUnreadCount);
   const toastedNotificationIds = useRef<Set<string>>(new Set());
 
@@ -110,6 +112,28 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
       </Link>
 
       <div className="flex items-center gap-2">
+        <Link
+          href={isHealthy ? "/" : "/healthy"}
+          prefetch={true}
+          className={`group/healthy h-11 px-3 sm:px-3.5 rounded-xl border font-bold text-xs flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all select-none cursor-pointer ${
+            isHealthy
+              ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+              : "border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 hover:border-emerald-500/60 hover:shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+          }`}
+          title={isHealthy ? "Back to Campus Canteen menu" : "Healthy Mode & High-Protein Fuel"}
+          aria-label="Healthy Mode"
+        >
+          <Leaf
+            className={`h-4 w-4 shrink-0 transition-transform duration-300 group-hover/healthy:rotate-12 ${
+              isHealthy ? "text-white" : "text-emerald-600 dark:text-emerald-400"
+            }`}
+          />
+          <span className="font-extrabold tracking-tight">Healthy</span>
+          <span className="hidden sm:inline font-extrabold tracking-tight">
+            {isHealthy ? "Active" : "Mode"}
+          </span>
+        </Link>
+
         <NotificationBell unreadCount={unreadCount} />
       </div>
     </header>
