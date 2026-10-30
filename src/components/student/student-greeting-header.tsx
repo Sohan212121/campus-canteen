@@ -344,35 +344,44 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
               handleFrontClick();
             }
           }}
-          className="flip-card-face rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs flex items-center justify-between gap-3 cursor-pointer hover:border-foreground/30 hover:shadow-sm transition-all duration-200 select-none text-left"
+          className="flip-card-face rounded-2xl border border-border/80 bg-card p-5 shadow-xs flex flex-col justify-between cursor-pointer hover:border-foreground/30 hover:shadow-sm transition-all duration-200 select-none text-left min-h-[185px]"
           title="Click to flip for food cravings!"
         >
-          <div className="space-y-1 min-w-0">
+          {/* Top row: Status indicator */}
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span className="text-xs font-semibold text-muted-foreground">Smart Pickup Active</span>
+          </div>
+
+          {/* Center: Welcome Heading */}
+          <div className="my-auto py-2">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground truncate">
               Welcome, {firstName}!
             </h1>
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-              </span>
-              <span className="text-xs font-semibold text-muted-foreground">Smart Pickup Active</span>
-            </div>
           </div>
 
-          {/* Cool Interactive Flip Button */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleFrontClick();
-            }}
-            className="min-h-[44px] h-11 px-4 rounded-xl font-bold text-xs bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all shadow-xs inline-flex items-center gap-2 group cursor-pointer shrink-0"
-            title="Flip for food cravings"
-          >
-            <span>Food Mood</span>
-            <RotateCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-500 text-primary-foreground/90" />
-          </button>
+          {/* Bottom row: Call-to-action & Prominent Food Mood Button */}
+          <div className="pt-3 border-t border-border/50 flex items-center justify-between gap-3">
+            <span className="text-xs font-medium text-muted-foreground">
+              What are you craving today?
+            </span>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFrontClick();
+              }}
+              className="min-h-[38px] h-9 px-4 rounded-xl font-bold text-xs bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all shadow-xs inline-flex items-center gap-2 group cursor-pointer shrink-0"
+              title="Flip for food cravings"
+            >
+              <span>Food Mood</span>
+              <RotateCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-500 text-primary-foreground/90" />
+            </button>
+          </div>
         </div>
 
         {/* =========================================================================
@@ -388,7 +397,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
               handleNextQuote();
             }
           }}
-          className="flip-card-back rounded-2xl border border-border/90 bg-card p-5 shadow-xs flex flex-col justify-between select-none text-left cursor-pointer hover:border-foreground/30 transition-all duration-200"
+          className="flip-card-back rounded-2xl border border-border/90 bg-card p-5 shadow-xs flex flex-col justify-between select-none text-left cursor-pointer hover:border-foreground/30 transition-all duration-200 min-h-[185px]"
           title="Click to see another quote, or click Back to return"
         >
           {/* Top Row: Category tag, headline & flip back button */}
