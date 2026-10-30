@@ -34,8 +34,8 @@ export function getSectionTitle(path: string): string {
   return "Campus Dining";
 }
 
-const MIN_DISPLAY_MS = 600; // Choreographed minimum display time to ensure smooth, premium animation
-const EXIT_FADE_MS = 280;   // Matches cb-backdrop-exit & cb-stage-exit duration
+const MIN_DISPLAY_MS = 350; // Responsive & fluid: shows pop & light sweep cleanly without sluggish lag
+const EXIT_FADE_MS = 240;   // Matches cb-backdrop-exit & cb-stage-exit duration
 const MAX_FAILSAFE_MS = 2500; // Failsafe if route change completely stalls
 
 export function NavigationTransitionProvider({ children }: { children: React.ReactNode }) {

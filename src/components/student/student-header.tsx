@@ -95,7 +95,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
 
   return (
     <header className="flex items-center justify-between pb-3 mb-2 border-b border-border/60">
-      <Link href="/" className="flex items-center gap-2 group min-h-[44px] py-1">
+      <Link href="/" prefetch={true} className="flex items-center gap-2 group min-h-[44px] py-1">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-2xs group-hover:scale-105 transition-transform">
           <UtensilsCrossed className="h-4 w-4" />
         </div>
@@ -112,6 +112,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
       <div className="flex items-center gap-2">
         <Link
           href="/notifications"
+          prefetch={true}
           className={cn(
             "relative flex h-11 w-11 items-center justify-center rounded-xl border border-border/80 bg-card text-muted-foreground transition-colors hover:text-foreground hover:bg-muted active:scale-95"
           )}

@@ -14,8 +14,10 @@ import { StudentHomeView, type CategoryData } from "@/components/student/student
 import { cn } from "@/lib/utils";
 
 export default async function StudentHomePage() {
-  const profile = await requireRole(["student"]);
-  const canteenId = await getActiveCanteenId();
+  const [profile, canteenId] = await Promise.all([
+    requireRole(["student"]),
+    getActiveCanteenId(),
+  ]);
 
   const supabase = await createReadOnlyClient();
   let categories: CategoryData[] = [];
@@ -29,79 +31,81 @@ export default async function StudentHomePage() {
     pickup_window_end: string;
   } | null = null;
 
-  // Fetch student's latest active order
-  const { data: activeOrderData } = await supabase
-    .from("orders")
-    .select("id, order_code, status, estimated_ready_at, pickup_window_end")
-    .eq("user_id", profile.id)
-    .in("status", ["PLACED", "ACCEPTED", "PREPARING", "READY"])
-    .order("placed_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Fetch student's latest active order and canteen data in parallel
+  const [activeOrderRes, categoriesRes, itemsRes, bestSellersRes] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("id, order_code, status, estimated_ready_at, pickup_window_end")
+      .eq("user_id", profile.id)
+      .in("status", ["PLACED", "ACCEPTED", "PREPARING", "READY"])
+      .order("placed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
 
-  if (activeOrderData) {
-    latestActiveOrder = activeOrderData;
-  }
+    canteenId
+      ? supabase
+          .from("categories")
+          .select("id, name, display_order, is_active")
+          .eq("canteen_id", canteenId)
+          .eq("is_active", true)
+          .order("display_order", { ascending: true })
+      : Promise.resolve({ data: null, error: null }),
 
-  if (canteenId) {
-    const [categoriesRes, itemsRes, bestSellersRes] = await Promise.all([
-      supabase
-        .from("categories")
-        .select("id, name, display_order, is_active")
-        .eq("canteen_id", canteenId)
-        .eq("is_active", true)
-        .order("display_order", { ascending: true }),
-
-      supabase
-        .from("menu_items")
-        .select(
-          "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count, calories_kcal, ingredients"
-        )
-        .eq("canteen_id", canteenId)
-        .eq("is_active", true)
-        .order("name", { ascending: true }),
-
-      getBestSellersAction().catch((err) => {
-        console.error("Failed to load best sellers on home page:", err);
-        return { success: true, data: [] };
-      }),
-    ]);
-
-    if (categoriesRes.data) {
-      categories = categoriesRes.data as CategoryData[];
-    } else if (categoriesRes.error) {
-      logSupabaseError("StudentHomePage:categories", categoriesRes.error);
-    }
-
-    if (itemsRes.data) {
-      menuItems = itemsRes.data as MenuItemData[];
-    } else if (itemsRes.error) {
-      logSupabaseError("StudentHomePage:menu_items", itemsRes.error);
-
-      if (isMissingColumnError(itemsRes.error)) {
-        // Fallback for missing nutrition/ingredients columns
-        const fallbackRes = await supabase
+    canteenId
+      ? supabase
           .from("menu_items")
           .select(
-            "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count"
+            "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count, calories_kcal, ingredients"
           )
           .eq("canteen_id", canteenId)
           .eq("is_active", true)
-          .order("name", { ascending: true });
+          .order("name", { ascending: true })
+      : Promise.resolve({ data: null, error: null }),
 
-        if (fallbackRes.data) {
-          menuItems = fallbackRes.data.map((row: Record<string, unknown>) => ({
-            ...row,
-            calories_kcal: null,
-            ingredients: [],
-          })) as MenuItemData[];
-        }
+    getBestSellersAction().catch((err) => {
+      console.error("Failed to load best sellers on home page:", err);
+      return { success: true, data: [] };
+    }),
+  ]);
+
+  if (activeOrderRes.data) {
+    latestActiveOrder = activeOrderRes.data;
+  }
+
+  if (categoriesRes.data) {
+    categories = categoriesRes.data as CategoryData[];
+  } else if (categoriesRes.error) {
+    logSupabaseError("StudentHomePage:categories", categoriesRes.error);
+  }
+
+  if (itemsRes.data) {
+    menuItems = itemsRes.data as MenuItemData[];
+  } else if (itemsRes.error) {
+    logSupabaseError("StudentHomePage:menu_items", itemsRes.error);
+
+    if (isMissingColumnError(itemsRes.error) && canteenId) {
+      // Fallback for missing nutrition/ingredients columns
+      const fallbackRes = await supabase
+        .from("menu_items")
+        .select(
+          "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, rating_avg, rating_count"
+        )
+        .eq("canteen_id", canteenId)
+        .eq("is_active", true)
+        .order("name", { ascending: true });
+
+      if (fallbackRes.data) {
+        menuItems = fallbackRes.data.map((row: Record<string, unknown>) => ({
+          ...row,
+          calories_kcal: null,
+          ingredients: [],
+        })) as MenuItemData[];
       }
     }
+  }
 
-    if (bestSellersRes.success && bestSellersRes.data) {
-      bestSellers = bestSellersRes.data;
-    }
+  if (bestSellersRes.success && bestSellersRes.data) {
+    bestSellers = bestSellersRes.data;
   }
 
   return (

@@ -53,6 +53,7 @@ export function StudentBottomNav() {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={true}
               onClick={() => {
                 if (!isActive) {
                   startTransition(item.href, item.label);
