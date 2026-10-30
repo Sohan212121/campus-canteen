@@ -1,17 +1,11 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import { toast } from "sonner";
+import { useState, useRef, useCallback } from "react";
+import { RotateCw, ArrowRight } from "lucide-react";
 
 interface StudentGreetingHeaderProps {
   fullName?: string | null;
   initialHour?: number;
-}
-
-interface TimeGreetingConfig {
-  greeting: string;
-  emoji: string;
-  subtext: string;
 }
 
 export interface ZomatoQuote {
@@ -257,35 +251,6 @@ export const ZOMATO_FOOD_QUOTES: ZomatoQuote[] = [
   },
 ];
 
-function getTimeGreetingConfig(hour: number): TimeGreetingConfig {
-  if (hour >= 5 && hour < 12) {
-    return {
-      greeting: "Good morning",
-      emoji: "🍳",
-      subtext: "Crispy dosas & hot filter coffee ready before your first lecture.",
-    };
-  }
-  if (hour >= 12 && hour < 17) {
-    return {
-      greeting: "Good afternoon",
-      emoji: "🍱",
-      subtext: "Skip the lunch rush — fresh meal combos & biryani ready for quick pickup.",
-    };
-  }
-  if (hour >= 17 && hour < 21) {
-    return {
-      greeting: "Good evening",
-      emoji: "🥪",
-      subtext: "Recharge between classes with samosas, rolls & piping hot chai.",
-    };
-  }
-  return {
-    greeting: "Night study fuel",
-    emoji: "🌙",
-    subtext: "Late cravings? Grab a fresh bite & recharge your study session.",
-  };
-}
-
 /**
  * Creates a randomized permutation of array indices using Fisher-Yates,
  * ensuring the first item of a new shuffle does not repeat the last item of the previous deck.
@@ -302,25 +267,23 @@ function createShuffledIndices(length: number, previousLastIndex: number = -1): 
   return indices;
 }
 
-export function StudentGreetingHeader({ fullName, initialHour }: StudentGreetingHeaderProps) {
-  // Compute contextual greeting directly without useEffect
-  const effectiveHour = initialHour ?? (typeof window !== "undefined" ? new Date().getHours() : 12);
-  const greetingConfig = getTimeGreetingConfig(effectiveHour);
-
+export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) {
   // Extract clean first name
   const firstName = fullName?.trim() ? fullName.trim().split(" ")[0] : "Student";
+
+  // 3D Card flip state: false = Front (Welcome greeting), true = Back (Food quote card)
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [isSpinningNext, setIsSpinningNext] = useState(false);
 
   // Non-repeating randomized quote deck: guarantees a different message on every single click
   const deckRef = useRef<number[]>([]);
   const deckPointerRef = useRef<number>(0);
   const lastPickedIndexRef = useRef<number>(-1);
-  const triggerRef = useRef<() => void>(() => {});
 
-  // Initial quote (clean state initialization without touching refs in render)
+  // Initial quote
   const [currentQuote, setCurrentQuote] = useState<ZomatoQuote>(ZOMATO_FOOD_QUOTES[0]);
-  const [isAnimating, setIsAnimating] = useState(false);
 
-  // Function to pull the next unique random quote from the shuffle deck
+  // Pull next unique random quote from the shuffle deck
   const getNextQuote = useCallback((): ZomatoQuote => {
     if (deckRef.current.length === 0 || deckPointerRef.current >= deckRef.current.length) {
       deckRef.current = createShuffledIndices(ZOMATO_FOOD_QUOTES.length, lastPickedIndexRef.current);
@@ -332,108 +295,155 @@ export function StudentGreetingHeader({ fullName, initialHour }: StudentGreeting
     return ZOMATO_FOOD_QUOTES[quoteIndex];
   }, []);
 
-  // Click handler: fires every time the user taps or clicks the greeting section
-  const handleSectionClick = useCallback(() => {
+  // Handler: Flips to back face and loads a fresh quote
+  const handleFrontClick = useCallback(() => {
     const nextQuote = getNextQuote();
     setCurrentQuote(nextQuote);
-    setIsAnimating(true);
-
-    // Pop up notification with Zomato-style humor / cheesy / motivating lines
-    toast(nextQuote.headline, {
-      description: nextQuote.quote,
-      icon: nextQuote.emoji,
-      duration: 4500,
-      id: "food-craving-popup",
-      action: {
-        label: "Another 🎲",
-        onClick: (e) => {
-          e?.stopPropagation();
-          triggerRef.current();
-        },
-      },
-    });
-
-    const timer = setTimeout(() => setIsAnimating(false), 350);
-    return () => clearTimeout(timer);
+    setIsFlipped(true);
   }, [getNextQuote]);
 
-  useEffect(() => {
-    triggerRef.current = handleSectionClick;
-  }, [handleSectionClick]);
+  // Handler: Flips back to the greeting front face
+  const handleFlipBack = useCallback(() => {
+    setIsFlipped(false);
+  }, []);
+
+  // Handler: Cycles to the next quote on the back face with smooth 3D flip spin
+  const handleNextQuote = useCallback(() => {
+    if (isSpinningNext) return;
+    setIsSpinningNext(true);
+
+    // Halfway through spin (when edge-on), swap to the next unique quote
+    setTimeout(() => {
+      const nextQuote = getNextQuote();
+      setCurrentQuote(nextQuote);
+    }, 200);
+
+    // Reset spin animation class
+    setTimeout(() => {
+      setIsSpinningNext(false);
+    }, 450);
+  }, [getNextQuote, isSpinningNext]);
 
   return (
-    <header
-      role="button"
-      tabIndex={0}
-      onClick={handleSectionClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          handleSectionClick();
-        }
-      }}
-      className={`group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs transition-all duration-200 hover:border-foreground/25 hover:shadow-sm active:scale-[0.985] cursor-pointer select-none text-left ${
-        isAnimating ? "ring-2 ring-primary/30" : ""
-      }`}
-      aria-label="Campus greeting section - click for a fresh food mood quote"
-    >
-      {/* Top accent border bar */}
-      <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500 via-primary to-emerald-500 opacity-80" />
+    <div className="flip-card-container w-full" aria-label="Interactive campus greeting and food cravings card">
+      <div
+        className={`flip-card-inner ${isFlipped ? "flip-card-flipped" : ""} ${
+          isSpinningNext ? "animate-flip-quote-spin" : ""
+        }`}
+      >
+        {/* =========================================================================
+            FRONT FACE: CLEAN, PROFESSIONAL GREETING
+            ========================================================================= */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={handleFrontClick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleFrontClick();
+            }
+          }}
+          className="flip-card-face rounded-2xl border border-border/80 bg-card p-5 shadow-xs flex flex-col justify-between cursor-pointer hover:border-foreground/30 hover:shadow-sm transition-all duration-200 select-none text-left"
+          title="Click to flip for food cravings!"
+        >
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
+              Campus Canteen
+            </p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+              Welcome, {firstName}!
+            </h1>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              Pre-order fresh meals before your break and pick up without waiting.
+            </p>
+          </div>
 
-      {/* Top Row: Live Kitchen Status & Interactive Hint */}
-      <div className="flex items-center justify-between gap-2 pb-2.5">
-        <div className="flex items-center gap-2">
-          {/* Live indicator dot */}
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-          </span>
-          <span className="text-xs font-semibold text-foreground">Kitchen Active</span>
-          <span className="text-muted-foreground/40 font-medium">·</span>
-          <span className="text-xs text-muted-foreground font-medium">Avg ~4m pickup</span>
+          <div className="pt-3.5 flex items-center justify-between text-xs text-muted-foreground border-t border-border/40 mt-3">
+            <span className="flex items-center gap-1.5 font-medium text-[11px]">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <span>Smart Pickup Active</span>
+            </span>
+
+            <span className="inline-flex items-center gap-1 font-semibold text-primary text-[11px] group-hover:underline">
+              <span>Food Mood</span>
+              <RotateCw className="h-3 w-3" />
+            </span>
+          </div>
         </div>
 
-        {/* Sleek interactive prompt badge */}
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground group-hover:text-foreground transition-colors bg-muted/60 group-hover:bg-muted px-2.5 py-0.5 rounded-full border border-border/40">
-          <span>Tap for food mood</span>
-          <span className="text-xs select-none">💬</span>
+        {/* =========================================================================
+            BACK FACE: 3D FLIPPED FOOD MOOD / ZOMATO QUOTE CARD
+            ========================================================================= */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={handleNextQuote}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleNextQuote();
+            }
+          }}
+          className="flip-card-back rounded-2xl border border-border/90 bg-card p-5 shadow-xs flex flex-col justify-between select-none text-left cursor-pointer hover:border-foreground/30 transition-all duration-200"
+          title="Click to see another quote, or click Back to return"
+        >
+          {/* Top Row: Category tag, headline & flip back button */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="shrink-0 px-2 py-0.5 rounded-md bg-muted text-[10px] font-bold tracking-wider uppercase text-muted-foreground border border-border/50">
+                {currentQuote.category}
+              </span>
+              <span className="text-xs font-bold text-foreground flex items-center gap-1.5 truncate">
+                <span className="text-sm select-none">{currentQuote.emoji}</span>
+                <span className="truncate">{currentQuote.headline}</span>
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFlipBack();
+              }}
+              className="min-h-[32px] px-2.5 rounded-lg text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1 cursor-pointer shrink-0 border border-border/40"
+              title="Flip back to greeting"
+            >
+              <RotateCw className="h-3 w-3" />
+              <span>Back</span>
+            </button>
+          </div>
+
+          {/* Middle Row: Quote Text */}
+          <div className="py-2.5 my-auto">
+            <p className="text-sm sm:text-base font-medium text-foreground leading-snug italic">
+              &ldquo;{currentQuote.quote}&rdquo;
+            </p>
+          </div>
+
+          {/* Bottom Row: Tap hint and Next Quote button */}
+          <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-2 text-xs">
+            <span className="text-[11px] text-muted-foreground font-medium truncate">
+              Tap card for next quote 💬
+            </span>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleNextQuote();
+              }}
+              className="min-h-[36px] h-9 px-3 rounded-xl bg-primary text-primary-foreground font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs hover:bg-primary/90 active:scale-95 transition-all cursor-pointer shrink-0"
+            >
+              <span>Next Quote</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
-
-      {/* Main Greeting Typography */}
-      <div className="space-y-1">
-        <p className="text-[10px] sm:text-xs font-bold tracking-widest uppercase text-muted-foreground">
-          Campus Canteen
-        </p>
-
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2 flex-wrap">
-          <span>{greetingConfig.greeting}, {firstName}!</span>
-          <span className="text-2xl select-none">{greetingConfig.emoji}</span>
-        </h1>
-
-        <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-          {greetingConfig.subtext}
-        </p>
-      </div>
-
-      {/* Interactive Food Mood Quotation Pill (Refreshes on each click) */}
-      <div className="mt-3.5 pt-3 border-t border-border/60 flex items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="shrink-0 px-2 py-0.5 rounded-md bg-muted text-[10px] font-bold tracking-wider uppercase text-muted-foreground border border-border/50">
-            {currentQuote.category}
-          </span>
-          <p
-            key={currentQuote.quote}
-            className="font-medium text-foreground truncate italic animate-in fade-in-50 duration-300"
-          >
-            &ldquo;{currentQuote.quote}&rdquo;
-          </p>
-        </div>
-
-        <span className="shrink-0 text-[11px] font-semibold text-primary group-hover:underline">
-          Tap card 🎲
-        </span>
-      </div>
-    </header>
+    </div>
   );
 }
