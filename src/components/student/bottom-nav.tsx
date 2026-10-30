@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { useCartStore } from "@/lib/cart-store";
+import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -32,6 +33,7 @@ export function StudentBottomNav() {
   const pathname = usePathname();
   const totalItemCount = useCartStore((s) => s.getTotalItemCount());
   const hasHydrated = useCartStore((s) => s.hasHydrated);
+  const { startTransition } = useNavigationTransition();
 
   return (
     <nav
@@ -51,6 +53,11 @@ export function StudentBottomNav() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => {
+                if (!isActive) {
+                  startTransition(item.href, item.label);
+                }
+              }}
               className={cn(
                 "relative flex flex-1 flex-col items-center justify-center min-h-[48px] min-w-[44px] py-1 rounded-xl transition-colors",
                 isActive
