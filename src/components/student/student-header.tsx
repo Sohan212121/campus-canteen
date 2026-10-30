@@ -31,11 +31,6 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
     }, 850);
   }, []);
 
-  const triggerRingRef = useRef(triggerRing);
-  useEffect(() => {
-    triggerRingRef.current = triggerRing;
-  }, [triggerRing]);
-
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -81,7 +76,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
 
           if (newNotif && !newNotif.is_read) {
             setUnreadCount((prev) => prev + 1);
-            triggerRingRef.current();
+            triggerRing();
 
             // Dedupe toasts by notification ID
             if (!toastedNotificationIds.current.has(newNotif.id)) {
@@ -115,7 +110,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
       window.clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
-  }, [userId, router, refreshUnread]);
+  }, [userId, router, refreshUnread, triggerRing]);
 
   return (
     <header className="flex items-center justify-between pb-3 mb-2 border-b border-border/60">
