@@ -132,3 +132,314 @@
     font-family: var(--font-sans);
   }
 }
+
+/* Celebration Overlay & Animation System */
+@keyframes cc-overlay-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cc-card-enter {
+  0% {
+    opacity: 0;
+    transform: perspective(1000px) rotateX(12deg) translateY(24px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(1000px) rotateX(0deg) translateY(0) scale(1);
+  }
+}
+
+@keyframes cc-circle-draw {
+  0% {
+    stroke-dashoffset: 228;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes cc-check-draw {
+  0% {
+    stroke-dashoffset: 65;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes cc-glow-pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.25;
+  }
+}
+
+@keyframes cc-stagger-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cc-confetti-burst {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: translate3d(var(--cc-tx), calc(var(--cc-ty) * 0.7), 0) rotate(calc(var(--cc-rot) * 0.6)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--cc-tx), var(--cc-ty), 0) rotate(var(--cc-rot)) scale(0.8);
+  }
+}
+
+.cc-overlay-backdrop {
+  animation: cc-overlay-fade 250ms ease-out forwards;
+}
+
+.cc-card-3d {
+  animation: cc-card-enter 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.cc-circle-path {
+  stroke-dasharray: 228;
+  stroke-dashoffset: 228;
+  animation: cc-circle-draw 500ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+.cc-check-path {
+  stroke-dasharray: 65;
+  stroke-dashoffset: 65;
+  animation: cc-check-draw 350ms cubic-bezier(0.65, 0, 0.35, 1) 380ms forwards;
+}
+
+.cc-glow {
+  animation: cc-glow-pulse 800ms ease-out 300ms forwards;
+}
+
+.cc-stagger-1 {
+  animation: cc-stagger-fade 400ms ease-out 480ms both;
+}
+
+.cc-stagger-2 {
+  animation: cc-stagger-fade 400ms ease-out 600ms both;
+}
+
+.cc-stagger-3 {
+  animation: cc-stagger-fade 400ms ease-out 720ms both;
+}
+
+.cc-stagger-4 {
+  animation: cc-stagger-fade 400ms ease-out 840ms both;
+}
+
+/* Hide fixed bottom bars while celebration overlay is open */
+body[data-celebration-open="true"] [role="region"][aria-label*="install" i],
+body[data-celebration-open="true"] [role="region"][aria-label*="Install" i],
+body[data-celebration-open="true"] [data-cart-shortcut] {
+  display: none !important;
+}
+
+/* Sonner Toast High-Contrast Description & Typography */
+[data-sonner-toast] [data-description] {
+  color: var(--muted-foreground) !important;
+  font-weight: 500;
+  opacity: 1 !important;
+}
+
+/* =========================================================================
+   CAMPUSBITES LOGO TRANSITION ANIMATIONS (3D Pop, Glow, Ripple, Light Sweep)
+   ========================================================================= */
+@keyframes cb-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cb-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes cb-logo-pop {
+  0% {
+    transform: perspective(1200px) translate3d(0, 18px, -140px) rotateX(24deg) rotateY(-16deg) scale(0.55);
+    opacity: 0;
+  }
+  45% {
+    transform: perspective(1200px) translate3d(0, -6px, 30px) rotateX(-3deg) rotateY(4deg) scale(1.08);
+    opacity: 1;
+  }
+  75% {
+    transform: perspective(1200px) translate3d(0, 0, -5px) rotateX(1deg) rotateY(-1deg) scale(0.98);
+    opacity: 1;
+  }
+  100% {
+    transform: perspective(1200px) translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes cb-ambient-glow {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 0.5;
+  }
+}
+
+@keyframes cb-ripple-1 {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@keyframes cb-ripple-2 {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes cb-light-sweep {
+  0% {
+    transform: translateX(-160%) skewX(-25deg);
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateX(200%) skewX(-25deg);
+    opacity: 0;
+  }
+}
+
+@keyframes cb-mote-1 {
+  0% {
+    transform: translate(0, 0) scale(0.2);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-8px, -20px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes cb-mote-2 {
+  0% {
+    transform: translate(0, 0) scale(0.2);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(12px, -24px) scale(1);
+    opacity: 0;
+  }
+}
+
+.cb-overlay-enter {
+  animation: cb-fade-in 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cb-overlay-exit {
+  animation: cb-fade-out 220ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+}
+
+.cb-logo-pop {
+  animation: cb-logo-pop 820ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-style: preserve-3d;
+}
+
+.cb-ambient-glow {
+  animation: cb-ambient-glow 900ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cb-ripple-1 {
+  animation: cb-ripple-1 950ms ease-out infinite;
+}
+
+.cb-ripple-2 {
+  animation: cb-ripple-2 1050ms ease-out 180ms infinite;
+}
+
+.cb-light-sweep {
+  animation: cb-light-sweep 750ms cubic-bezier(0.16, 1, 0.3, 1) 180ms forwards;
+}
+
+.cb-mote-1 {
+  animation: cb-mote-1 800ms ease-out 250ms infinite;
+}
+
+.cb-mote-2 {
+  animation: cb-mote-2 850ms ease-out 320ms infinite;
+}
+
+/* Prefers-reduced-motion: instantly settled, no confetti or vibration */
+@media (prefers-reduced-motion: reduce) {
+  .cc-overlay-backdrop,
+  .cc-card-3d,
+  .cc-circle-path,
+  .cc-check-path,
+  .cc-glow,
+  .cc-stagger-1,
+  .cc-stagger-2,
+  .cc-stagger-3,
+  .cc-stagger-4,
+  .cb-overlay-enter,
+  .cb-overlay-exit,
+  .cb-logo-pop,
+  .cb-ambient-glow,
+  .cb-ripple-1,
+  .cb-ripple-2,
+  .cb-light-sweep,
+  .cb-mote-1,
+  .cb-mote-2 {
+    animation: none !important;
+    transition: none !important;
+    stroke-dashoffset: 0 !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

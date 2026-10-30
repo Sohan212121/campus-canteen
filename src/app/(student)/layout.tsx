@@ -3,6 +3,7 @@ import { StudentBottomNav } from "@/components/student/bottom-nav";
 import { CartUserSync } from "@/components/student/cart-user-sync";
 import { StudentHeader } from "@/components/student/student-header";
 import { StudentInstallPrompt } from "@/components/student/install-prompt";
+import { NavigationTransitionProvider } from "@/components/navigation/navigation-transition-provider";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 
 export default async function StudentLayout({
@@ -21,14 +22,16 @@ export default async function StudentLayout({
     .eq("is_read", false);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background overflow-x-hidden">
-      <CartUserSync userId={profile.id} />
-      <main className="mx-auto w-full max-w-md flex-1 px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
-        <StudentHeader userId={profile.id} initialUnreadCount={count ?? 0} />
-        {children}
-      </main>
-      <StudentInstallPrompt />
-      <StudentBottomNav />
-    </div>
+    <NavigationTransitionProvider>
+      <div className="flex min-h-screen flex-col bg-background overflow-x-hidden">
+        <CartUserSync userId={profile.id} />
+        <main className="mx-auto w-full max-w-md flex-1 px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+          <StudentHeader userId={profile.id} initialUnreadCount={count ?? 0} />
+          {children}
+        </main>
+        <StudentInstallPrompt />
+        <StudentBottomNav />
+      </div>
+    </NavigationTransitionProvider>
   );
 }
