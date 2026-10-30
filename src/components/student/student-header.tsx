@@ -18,7 +18,25 @@ interface StudentHeaderProps {
 export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderProps) {
   const router = useRouter();
   const [unreadCount, setUnreadCount] = useState<number>(initialUnreadCount);
+  const [isRinging, setIsRinging] = useState(false);
+  const ringTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const toastedNotificationIds = useRef<Set<string>>(new Set());
+
+  // Trigger bell ringing animation on hover, click, or when a new notification arrives
+  const triggerRing = useCallback(() => {
+    setIsRinging(true);
+    if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
+    ringTimeoutRef.current = setTimeout(() => {
+      setIsRinging(false);
+    }, 850);
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
+    };
+  }, []);
 
   // Function to fetch latest unread count during polling
   const refreshUnread = useCallback(async () => {
@@ -58,6 +76,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
 
           if (newNotif && !newNotif.is_read) {
             setUnreadCount((prev) => prev + 1);
+            triggerRing();
 
             // Dedupe toasts by notification ID
             if (!toastedNotificationIds.current.has(newNotif.id)) {
@@ -91,7 +110,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
       window.clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
-  }, [userId, router, refreshUnread]);
+  }, [userId, router, refreshUnread, triggerRing]);
 
   return (
     <header className="flex items-center justify-between pb-3 mb-2 border-b border-border/60">
@@ -113,14 +132,29 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
         <Link
           href="/notifications"
           prefetch={true}
+          onMouseEnter={triggerRing}
+          onClick={triggerRing}
           className={cn(
-            "relative flex h-11 w-11 items-center justify-center rounded-xl border border-border/80 bg-card text-muted-foreground transition-colors hover:text-foreground hover:bg-muted active:scale-95"
+            "group/bell relative flex h-11 w-11 items-center justify-center rounded-xl border border-border/80 bg-card text-muted-foreground transition-all duration-200 hover:text-foreground hover:bg-muted hover:border-amber-500/40 hover:shadow-[0_0_12px_rgba(245,158,11,0.15)] active:scale-95",
+            isRinging && "border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.15)] text-foreground"
           )}
           aria-label={`Notifications (${unreadCount} unread)`}
         >
-          <Bell className="h-5 w-5" />
+          <Bell
+            className={cn(
+              "h-5 w-5 origin-top transition-colors duration-200 group-hover/bell:text-amber-500",
+              isRinging && "animate-bell-ring text-amber-500",
+              "group-hover/bell:animate-bell-ring"
+            )}
+          />
           {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground shadow-xs animate-in zoom-in-75">
+            <span
+              className={cn(
+                "absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground shadow-xs animate-in zoom-in-75",
+                isRinging && "animate-bell-badge",
+                "group-hover/bell:animate-bell-badge"
+              )}
+            >
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}

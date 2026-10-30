@@ -269,6 +269,62 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 }
 
 /* =========================================================================
+   NOTIFICATION BELL RINGING ANIMATION (Hover & Click)
+   ========================================================================= */
+@keyframes bell-ring {
+  0% {
+    transform: rotate(0deg);
+  }
+  12% {
+    transform: rotate(18deg);
+  }
+  24% {
+    transform: rotate(-16deg);
+  }
+  36% {
+    transform: rotate(14deg);
+  }
+  48% {
+    transform: rotate(-10deg);
+  }
+  60% {
+    transform: rotate(6deg);
+  }
+  72% {
+    transform: rotate(-4deg);
+  }
+  84% {
+    transform: rotate(2deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes bell-badge-bounce {
+  0%, 100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.18) translateY(-1px);
+  }
+  60% {
+    transform: scale(0.95);
+  }
+}
+
+.animate-bell-ring {
+  animation: bell-ring 0.85s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  transform-origin: top center !important;
+  will-change: transform;
+}
+
+.animate-bell-badge {
+  animation: bell-badge-bounce 0.85s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  will-change: transform;
+}
+
+/* =========================================================================
    CAMPUSBITES LOGO TRANSITION ANIMATIONS (3D Pop, Glow, Ripple, Light Sweep)
    ========================================================================= */
 @keyframes cb-backdrop-enter {
@@ -462,7 +518,9 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
   .cb-ripple-2,
   .cb-light-sweep,
   .cb-mote-1,
-  .cb-mote-2 {
+  .cb-mote-2,
+  .animate-bell-ring,
+  .animate-bell-badge {
     animation: none !important;
     transition: none !important;
     stroke-dashoffset: 0 !important;
