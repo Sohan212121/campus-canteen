@@ -332,7 +332,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
         }`}
       >
         {/* =========================================================================
-            FRONT FACE: CLEAN, PROFESSIONAL GREETING
+            FRONT FACE: CLEAN, PROFESSIONAL GREETING WITH COOL FOOD MOOD BUTTON
             ========================================================================= */}
         <div
           role="button"
@@ -344,35 +344,35 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
               handleFrontClick();
             }
           }}
-          className="flip-card-face rounded-2xl border border-border/80 bg-card p-5 shadow-xs flex flex-col justify-between cursor-pointer hover:border-foreground/30 hover:shadow-sm transition-all duration-200 select-none text-left"
+          className="flip-card-face rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs flex items-center justify-between gap-3 cursor-pointer hover:border-foreground/30 hover:shadow-sm transition-all duration-200 select-none text-left"
           title="Click to flip for food cravings!"
         >
-          <div className="space-y-1.5">
-            <p className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
-              Campus Canteen
-            </p>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+          <div className="space-y-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground truncate">
               Welcome, {firstName}!
             </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              Pre-order fresh meals before your break and pick up without waiting.
-            </p>
-          </div>
-
-          <div className="pt-3.5 flex items-center justify-between text-xs text-muted-foreground border-t border-border/40 mt-3">
-            <span className="flex items-center gap-1.5 font-medium text-[11px]">
+            <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
               </span>
-              <span>Smart Pickup Active</span>
-            </span>
-
-            <span className="inline-flex items-center gap-1 font-semibold text-primary text-[11px] group-hover:underline">
-              <span>Food Mood</span>
-              <RotateCw className="h-3 w-3" />
-            </span>
+              <span className="text-xs font-semibold text-muted-foreground">Smart Pickup Active</span>
+            </div>
           </div>
+
+          {/* Cool Interactive Flip Button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleFrontClick();
+            }}
+            className="min-h-[44px] h-11 px-4 rounded-xl font-bold text-xs bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all shadow-xs inline-flex items-center gap-2 group cursor-pointer shrink-0"
+            title="Flip for food cravings"
+          >
+            <span>Food Mood</span>
+            <RotateCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-500 text-primary-foreground/90" />
+          </button>
         </div>
 
         {/* =========================================================================

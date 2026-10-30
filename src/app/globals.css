@@ -517,7 +517,7 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 
 .flip-card-face {
   width: 100%;
-  min-height: 148px;
+  min-height: 125px;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
