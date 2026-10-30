@@ -637,9 +637,9 @@ export function StudentHomeView({
           )}
         </div>
 
-        {/* Items Grid */}
+        {/* Items List (Full Width Cards for Clean, Legible Layout) */}
         {filteredItems.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="space-y-3">
             {filteredItems.map((item) => (
               <MenuItemCard
                 key={item.id}
