@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { Search, X, SlidersHorizontal, UtensilsCrossed } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,22 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
   const [vegFilter, setVegFilter] = useState<"all" | "veg" | "non-veg">("all");
   const [availableOnly, setAvailableOnly] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MenuItemData | null>(null);
+  const foodItemsSectionRef = useRef<HTMLDivElement>(null);
+  const filterSectionRef = useRef<HTMLDivElement>(null);
+
+  const scrollToFoodSection = useCallback(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const target = filterSectionRef.current || foodItemsSectionRef.current;
+        if (target) {
+          target.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }
+      }, 50);
+    });
+  }, []);
 
   const totalItemCount = useCartStore((s) => s.getTotalItemCount());
   const hasHydrated = useCartStore((s) => s.hasHydrated);
@@ -79,12 +95,13 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
     availableOnly ||
     searchQuery.trim().length > 0;
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setSelectedCategory("all");
     setSearchQuery("");
     setVegFilter("all");
     setAvailableOnly(false);
-  };
+    scrollToFoodSection();
+  }, [scrollToFoodSection]);
 
   return (
     <div className="space-y-4">
@@ -116,7 +133,10 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
         <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
           <button
             type="button"
-            onClick={() => setVegFilter("all")}
+            onClick={() => {
+              setVegFilter("all");
+              scrollToFoodSection();
+            }}
             className={`min-h-[36px] rounded-md px-3 font-medium transition-colors ${
               vegFilter === "all"
                 ? "bg-card text-foreground shadow-xs font-semibold"
@@ -127,7 +147,10 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
           </button>
           <button
             type="button"
-            onClick={() => setVegFilter("veg")}
+            onClick={() => {
+              setVegFilter("veg");
+              scrollToFoodSection();
+            }}
             className={`min-h-[36px] flex items-center gap-1 rounded-md px-3 font-medium transition-colors ${
               vegFilter === "veg"
                 ? "bg-card text-emerald-700 dark:text-emerald-400 shadow-xs font-semibold"
@@ -139,7 +162,10 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
           </button>
           <button
             type="button"
-            onClick={() => setVegFilter("non-veg")}
+            onClick={() => {
+              setVegFilter("non-veg");
+              scrollToFoodSection();
+            }}
             className={`min-h-[36px] flex items-center gap-1 rounded-md px-3 font-medium transition-colors ${
               vegFilter === "non-veg"
                 ? "bg-card text-red-700 dark:text-red-400 shadow-xs font-semibold"
@@ -154,7 +180,10 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
         {/* Available only toggle button */}
         <button
           type="button"
-          onClick={() => setAvailableOnly(!availableOnly)}
+          onClick={() => {
+            setAvailableOnly(!availableOnly);
+            scrollToFoodSection();
+          }}
           className={`min-h-[36px] flex items-center gap-1.5 rounded-lg border px-3 font-medium transition-colors ${
             availableOnly
               ? "border-primary bg-primary/10 text-primary font-semibold"
@@ -175,10 +204,17 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
       )}
 
       {/* Horizontal Category Scroll Tabs */}
-      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-1">
+      <div
+        ref={filterSectionRef}
+        className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-1 scroll-mt-3"
+      >
         <button
           type="button"
-          onClick={() => setSelectedCategory("all")}
+          onClick={(e) => {
+            setSelectedCategory("all");
+            e.currentTarget.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+            scrollToFoodSection();
+          }}
           className={`min-h-[38px] shrink-0 rounded-full px-4 text-xs font-semibold transition-all ${
             selectedCategory === "all"
               ? "bg-primary text-primary-foreground shadow-xs"
@@ -195,7 +231,11 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
             <button
               key={cat.id}
               type="button"
-              onClick={() => setSelectedCategory(cat.id)}
+              onClick={(e) => {
+                setSelectedCategory(cat.id);
+                e.currentTarget.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+                scrollToFoodSection();
+              }}
               className={`min-h-[38px] shrink-0 rounded-full px-4 text-xs font-semibold transition-all ${
                 selectedCategory === cat.id
                   ? "bg-primary text-primary-foreground shadow-xs"
@@ -226,7 +266,11 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
 
       {/* Item List */}
       {filteredItems.length > 0 ? (
-        <div className={`space-y-3 ${isCartShortcutVisible ? "pb-20" : ""}`}>
+        <div
+          ref={foodItemsSectionRef}
+          key={`${selectedCategory}-${vegFilter}-${availableOnly}`}
+          className={`space-y-3 animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ease-out scroll-mt-4 ${isCartShortcutVisible ? "pb-20" : ""}`}
+        >
           {filteredItems.map((item) => (
             <MenuItemCard
               key={item.id}

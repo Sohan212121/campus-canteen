@@ -211,6 +211,23 @@ export function StudentHomeView({
   const totalItemCount = useCartStore((s) => s.getTotalItemCount());
   const hasHydrated = useCartStore((s) => s.hasHydrated);
   const isCartShortcutVisible = hasHydrated && totalItemCount > 0 && !selectedItem;
+  const filterSectionRef = useRef<HTMLDivElement>(null);
+  const foodItemsSectionRef = useRef<HTMLElement>(null);
+
+  // Smooth auto-scroll to the filtered food items section when any filter is clicked
+  const scrollToFoodSection = useCallback(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const target = filterSectionRef.current || foodItemsSectionRef.current;
+        if (target) {
+          target.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }
+      }, 50);
+    });
+  }, []);
 
   // Category map for rapid lookup
   const categoryMap = useMemo(() => {
@@ -327,11 +344,7 @@ export function StudentHomeView({
 
   const handleSlideCta = (mealTarget: MealType) => {
     setSelectedMeal(mealTarget);
-    // Smooth scroll to items section
-    const target = document.getElementById("home-food-section");
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth" });
-    }
+    scrollToFoodSection();
   };
 
   return (
@@ -445,7 +458,7 @@ export function StudentHomeView({
       {/* =========================================================================
           SECTION 2: SEARCH BAR & SLIDING VEG TOGGLE SWITCH (ZOMATO STYLE)
           ========================================================================= */}
-      <section className="space-y-3" id="home-food-section">
+      <section className="space-y-3">
         <div className="flex items-center gap-2.5">
           {/* Search Box */}
           <div className="relative flex-1">
@@ -475,7 +488,10 @@ export function StudentHomeView({
               type="button"
               role="switch"
               aria-checked={isVegOnly}
-              onClick={() => setIsVegOnly((prev) => !prev)}
+              onClick={() => {
+                setIsVegOnly((prev) => !prev);
+                scrollToFoodSection();
+              }}
               className={`min-h-[48px] h-12 px-3 rounded-2xl border transition-all duration-200 flex items-center gap-2 shadow-2xs cursor-pointer active:scale-95 select-none ${
                 isVegOnly
                   ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30"
@@ -513,7 +529,10 @@ export function StudentHomeView({
         {/* =========================================================================
             SECTION 3: MEAL TABS (Breakfast, Lunch, Snacks, Dinner, All, Beverages)
             ========================================================================= */}
-        <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-1">
+        <div
+          ref={filterSectionRef}
+          className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-1 scroll-mt-3"
+        >
           {MEAL_TABS.map((tab) => {
             const count = initialItems.filter((i) => i.is_active && matchesMealType(i, categoryMap, tab.id)).length;
             const isSelected = selectedMeal === tab.id;
@@ -522,7 +541,11 @@ export function StudentHomeView({
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setSelectedMeal(tab.id)}
+                onClick={(e) => {
+                  setSelectedMeal(tab.id);
+                  e.currentTarget.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+                  scrollToFoodSection();
+                }}
                 className={`min-h-[44px] shrink-0 rounded-2xl px-3.5 py-2 text-xs font-bold transition-all duration-200 flex items-center gap-2 border cursor-pointer active:scale-95 ${
                   isSelected
                     ? "bg-primary text-primary-foreground border-primary shadow-xs ring-1 ring-primary/30"
@@ -547,7 +570,10 @@ export function StudentHomeView({
         <div className="flex items-center gap-2 flex-wrap pt-0.5">
           <button
             type="button"
-            onClick={() => setInStockOnly((prev) => !prev)}
+            onClick={() => {
+              setInStockOnly((prev) => !prev);
+              scrollToFoodSection();
+            }}
             className={`min-h-[36px] h-9 px-3 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               inStockOnly
                 ? "bg-primary/10 border-primary text-primary shadow-2xs"
@@ -560,7 +586,10 @@ export function StudentHomeView({
 
           <button
             type="button"
-            onClick={() => setUnder100Only((prev) => !prev)}
+            onClick={() => {
+              setUnder100Only((prev) => !prev);
+              scrollToFoodSection();
+            }}
             className={`min-h-[36px] h-9 px-3 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               under100Only
                 ? "bg-primary/10 border-primary text-primary shadow-2xs"
@@ -575,7 +604,10 @@ export function StudentHomeView({
           {hasActiveFilters && (
             <button
               type="button"
-              onClick={handleResetFilters}
+              onClick={() => {
+                handleResetFilters();
+                scrollToFoodSection();
+              }}
               className="min-h-[36px] h-9 px-3 rounded-xl text-xs font-bold text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1 cursor-pointer"
             >
               <X className="h-3 w-3" />
@@ -617,7 +649,12 @@ export function StudentHomeView({
       {/* =========================================================================
           SECTION 5: CATEGORIZED FOOD ITEMS LIST (Breakfast / Lunch / Snacks / etc.)
           ========================================================================= */}
-      <section className="space-y-3" aria-label="Available Food Items">
+      <section
+        id="home-food-section"
+        ref={foodItemsSectionRef}
+        className="space-y-3 scroll-mt-4"
+        aria-label="Available Food Items"
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h2 className="text-base font-bold tracking-tight">
@@ -637,9 +674,12 @@ export function StudentHomeView({
           )}
         </div>
 
-        {/* Items List (Full Width Cards for Clean, Legible Layout) */}
+        {/* Items List (Full Width Cards with Smooth Filter Transition) */}
         {filteredItems.length > 0 ? (
-          <div className="space-y-3">
+          <div
+            key={`${selectedMeal}-${isVegOnly}-${inStockOnly}-${under100Only}-${selectedCategory}`}
+            className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ease-out"
+          >
             {filteredItems.map((item) => (
               <MenuItemCard
                 key={item.id}
