@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Sparkles, Zap, UtensilsCrossed } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 
 interface StudentGreetingHeaderProps {
@@ -14,6 +13,249 @@ interface TimeGreetingConfig {
   emoji: string;
   subtext: string;
 }
+
+export interface ZomatoQuote {
+  category: "Cheesy" | "Flirty" | "Humour" | "Motivation" | "Campus Life";
+  emoji: string;
+  headline: string;
+  quote: string;
+}
+
+export const ZOMATO_FOOD_QUOTES: ZomatoQuote[] = [
+  // Flirty & Cheesy (Zomato Classic Notifications)
+  {
+    category: "Flirty",
+    emoji: "🍟",
+    headline: "Can't resist you",
+    quote: "Are you french fries? Because no matter how full I am, I always have space for you.",
+  },
+  {
+    category: "Cheesy",
+    emoji: "🧀",
+    headline: "Melted over you",
+    quote: "You're the extra melted cheese on my pizza—holding my whole chaotic day together.",
+  },
+  {
+    category: "Flirty",
+    emoji: "🍗",
+    headline: "All I ever wanted",
+    quote: "Are you chicken dum biryani? Because even with extra elaichi, you're the best part of my day.",
+  },
+  {
+    category: "Cheesy",
+    emoji: "☕",
+    headline: "Piping hot bond",
+    quote: "Relationship status: In a committed, unbreakable relationship with hot cutting chai and samosas.",
+  },
+  {
+    category: "Flirty",
+    emoji: "🌯",
+    headline: "Spicy crush",
+    quote: "Stop staring at your campus crush during lectures—they won't feed you. Order that paneer kathi roll instead.",
+  },
+  {
+    category: "Cheesy",
+    emoji: "🍕",
+    headline: "True commitment",
+    quote: "I love you more than cold pizza at 2 AM, and honestly, that's the highest honor I can give.",
+  },
+  {
+    category: "Flirty",
+    emoji: "🍯",
+    headline: "Sweet tooth",
+    quote: "Are you warm gulab jamun? Because you're dangerously sweet and impossible to stop at one.",
+  },
+  {
+    category: "Cheesy",
+    emoji: "🥟",
+    headline: "Poetic cravings",
+    quote: "Roses are red, samosas are hot. I promised I'd take one bite, but devoured the whole lot.",
+  },
+  {
+    category: "Flirty",
+    emoji: "🌶️",
+    headline: "Instant connection",
+    quote: "Is your name butter chicken? Because you just made everything in my day 10x richer.",
+  },
+  {
+    category: "Cheesy",
+    emoji: "🥪",
+    headline: "Soulmate test",
+    quote: "If we both reach for the last grilled cheese sandwich at the counter, is it true love or a campus duel?",
+  },
+  {
+    category: "Flirty",
+    emoji: "🍩",
+    headline: "Sweet surrender",
+    quote: "Forget butterflies in the stomach. I want chocolate donuts and crispy puffs in my stomach.",
+  },
+  {
+    category: "Cheesy",
+    emoji: "🫓",
+    headline: "Heart's GPS",
+    quote: "I followed my heart, and it led me straight to the canteen's fresh paratha counter.",
+  },
+
+  // Humour & Relatable Campus Life
+  {
+    category: "Humour",
+    emoji: "🥗",
+    headline: "Diet update",
+    quote: "I've been on a 30-day strict diet. So far, I've lost 15 days and absolutely 0 grams of biryani.",
+  },
+  {
+    category: "Campus Life",
+    emoji: "📚",
+    headline: "Risk assessment",
+    quote: "Attendance at 74%? Extremely risky. But skipping your canteen break? Unacceptable behavior.",
+  },
+  {
+    category: "Humour",
+    emoji: "🧪",
+    headline: "Break physics",
+    quote: "Calories consumed between 10 AM and 4 PM during break do not count. It's written in campus bylaws.",
+  },
+  {
+    category: "Campus Life",
+    emoji: "🏃",
+    headline: "Cardio training",
+    quote: "The only sprint I ever train for is rushing to the canteen before the whole batch empties the snack counter.",
+  },
+  {
+    category: "Humour",
+    emoji: "🧀",
+    headline: "Assignment therapy",
+    quote: "Stressed about assignments? Add extra cheese. Science proves everything hurts 40% less with cheese.",
+  },
+  {
+    category: "Campus Life",
+    emoji: "⚡",
+    headline: "Supreme flex",
+    quote: "Walking past the crowded physical canteen queue with a ready pre-order token is the ultimate student flex.",
+  },
+  {
+    category: "Humour",
+    emoji: "🍔",
+    headline: "Grammar lesson",
+    quote: "There is no 'we' in food. It's 'me', 'myself', and this double patty burger. Don't touch the fries.",
+  },
+  {
+    category: "Campus Life",
+    emoji: "🔔",
+    headline: "Conditioned response",
+    quote: "The lecture bell ringing is just Pavlovian conditioning for your stomach to scream 'Canteen time!'.",
+  },
+  {
+    category: "Humour",
+    emoji: "🧠",
+    headline: "Brain vs Hunger",
+    quote: "Dear brain: please perform in exams with the same unmatched enthusiasm as you display while picking lunch.",
+  },
+  {
+    category: "Humour",
+    emoji: "💸",
+    headline: "Budget clash",
+    quote: "My bank balance says 'eat air', but the canteen aroma insists 'you deserve a rich butter masala dosa'.",
+  },
+  {
+    category: "Campus Life",
+    emoji: "🤝",
+    headline: "Campus truce",
+    quote: "There is no group project conflict that cannot be amicably solved over hot chai and Maggi.",
+  },
+  {
+    category: "Humour",
+    emoji: "🚨",
+    headline: "Emergency dispatch",
+    quote: "Hunger is the only emergency on campus that can be fully cured in 4 minutes flat with a hot roll.",
+  },
+  {
+    category: "Humour",
+    emoji: "🍪",
+    headline: "Zero regrets",
+    quote: "I regret nothing. Except that one time in first semester when I chose not to order extra fries.",
+  },
+  {
+    category: "Campus Life",
+    emoji: "🎒",
+    headline: "Survival kit",
+    quote: "Pens: optional. Notebooks: borrowed. Pre-ordered canteen token: loaded and ready.",
+  },
+
+  // Food Motivation & Uplifting Quotes
+  {
+    category: "Motivation",
+    emoji: "🎯",
+    headline: "Priority check",
+    quote: "First we eat, then we conquer the semester. Prioritize your victories in the right order.",
+  },
+  {
+    category: "Motivation",
+    emoji: "🌟",
+    headline: "Know your worth",
+    quote: "Never let anyone treat you like leftover tiffin sabzi. You are fresh weekend dum biryani.",
+  },
+  {
+    category: "Motivation",
+    emoji: "🍰",
+    headline: "Cosmic sign",
+    quote: "Stress spelled backwards is literally Desserts. The universe is telling you to take a delicious break.",
+  },
+  {
+    category: "Motivation",
+    emoji: "🚀",
+    headline: "Future fuel",
+    quote: "Your future graduated self will thank you for fueling up with good food right now. Go eat!",
+  },
+  {
+    category: "Motivation",
+    emoji: "☕",
+    headline: "Engine fuel",
+    quote: "One cannot think well, love well, or debug code well, if one has not dined well.",
+  },
+  {
+    category: "Motivation",
+    emoji: "🔋",
+    headline: "Recharge mode",
+    quote: "Low battery? A warm meal with hot masala chai recharges 100% of your academic stamina.",
+  },
+  {
+    category: "Motivation",
+    emoji: "❤️",
+    headline: "Heart's truth",
+    quote: "Never let anyone convince you that one samosa is enough. Always listen to your heart.",
+  },
+  {
+    category: "Motivation",
+    emoji: "🌈",
+    headline: "Turnaround power",
+    quote: "Even the toughest lecture day looks 100x brighter after a piping hot plate of chole bhature.",
+  },
+  {
+    category: "Motivation",
+    emoji: "🌯",
+    headline: "Balanced life",
+    quote: "A perfectly balanced college lifestyle is a roll in each hand and zero regrets in your heart.",
+  },
+  {
+    category: "Motivation",
+    emoji: "🫖",
+    headline: "Sip of peace",
+    quote: "Keep calm, breathe deep, and let the aroma of fresh cardamom chai reset your whole mood.",
+  },
+  {
+    category: "Motivation",
+    emoji: "🍪",
+    headline: "You got this",
+    quote: "You're working hard this semester. Treat yourself to something delicious—you earned every bite.",
+  },
+  {
+    category: "Motivation",
+    emoji: "👑",
+    headline: "Campus royalty",
+    quote: "Eat well, walk to the counter with your head held high, and never apologize for second helpings.",
+  },
+];
 
 function getTimeGreetingConfig(hour: number): TimeGreetingConfig {
   if (hour >= 5 && hour < 12) {
@@ -44,140 +286,153 @@ function getTimeGreetingConfig(hour: number): TimeGreetingConfig {
   };
 }
 
-export function StudentGreetingHeader({ fullName, initialHour }: StudentGreetingHeaderProps) {
-  const [isWaving, setIsWaving] = useState(false);
-  const [clickCount, setClickCount] = useState(0);
+/**
+ * Creates a randomized permutation of array indices using Fisher-Yates,
+ * ensuring the first item of a new shuffle does not repeat the last item of the previous deck.
+ */
+function createShuffledIndices(length: number, previousLastIndex: number = -1): number[] {
+  const indices = Array.from({ length }, (_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  if (previousLastIndex >= 0 && indices[0] === previousLastIndex && indices.length > 1) {
+    [indices[0], indices[indices.length - 1]] = [indices[indices.length - 1], indices[0]];
+  }
+  return indices;
+}
 
-  // Compute greeting directly from initialHour / current time without needing useEffect setState
+export function StudentGreetingHeader({ fullName, initialHour }: StudentGreetingHeaderProps) {
+  // Compute contextual greeting directly without useEffect
   const effectiveHour = initialHour ?? (typeof window !== "undefined" ? new Date().getHours() : 12);
   const greetingConfig = getTimeGreetingConfig(effectiveHour);
 
-  // Extract first name for a warm, personalized greeting
+  // Extract clean first name
   const firstName = fullName?.trim() ? fullName.trim().split(" ")[0] : "Student";
-  const userInitial = firstName.charAt(0).toUpperCase() || "S";
 
-  const handleWaveClick = useCallback(() => {
-    setIsWaving(true);
-    setClickCount((prev) => prev + 1);
+  // Non-repeating randomized quote deck: guarantees a different message on every single click
+  const deckRef = useRef<number[]>([]);
+  const deckPointerRef = useRef<number>(0);
+  const lastPickedIndexRef = useRef<number>(-1);
+  const triggerRef = useRef<() => void>(() => {});
 
-    const compliments = [
-      `Hope you have an awesome day on campus, ${firstName}! ✨`,
-      `Ready to beat the queue? Kitchen is fired up! 🔥`,
-      `Great to see you! What are you craving today? 😋`,
-      `Zero wait time. 100% freshly cooked goodness! 🚀`,
-    ];
-    const picked = compliments[clickCount % compliments.length];
+  // Initial quote (clean state initialization without touching refs in render)
+  const [currentQuote, setCurrentQuote] = useState<ZomatoQuote>(ZOMATO_FOOD_QUOTES[0]);
+  const [isAnimating, setIsAnimating] = useState(false);
 
-    toast(picked, {
-      id: "greeting-easter-egg",
-      duration: 2500,
-      icon: "👋",
+  // Function to pull the next unique random quote from the shuffle deck
+  const getNextQuote = useCallback((): ZomatoQuote => {
+    if (deckRef.current.length === 0 || deckPointerRef.current >= deckRef.current.length) {
+      deckRef.current = createShuffledIndices(ZOMATO_FOOD_QUOTES.length, lastPickedIndexRef.current);
+      deckPointerRef.current = 0;
+    }
+    const quoteIndex = deckRef.current[deckPointerRef.current];
+    deckPointerRef.current += 1;
+    lastPickedIndexRef.current = quoteIndex;
+    return ZOMATO_FOOD_QUOTES[quoteIndex];
+  }, []);
+
+  // Click handler: fires every time the user taps or clicks the greeting section
+  const handleSectionClick = useCallback(() => {
+    const nextQuote = getNextQuote();
+    setCurrentQuote(nextQuote);
+    setIsAnimating(true);
+
+    // Pop up notification with Zomato-style humor / cheesy / motivating lines
+    toast(nextQuote.headline, {
+      description: nextQuote.quote,
+      icon: nextQuote.emoji,
+      duration: 4500,
+      id: "food-craving-popup",
+      action: {
+        label: "Another 🎲",
+        onClick: (e) => {
+          e?.stopPropagation();
+          triggerRef.current();
+        },
+      },
     });
 
-    const timer = setTimeout(() => setIsWaving(false), 900);
+    const timer = setTimeout(() => setIsAnimating(false), 350);
     return () => clearTimeout(timer);
-  }, [clickCount, firstName]);
+  }, [getNextQuote]);
+
+  useEffect(() => {
+    triggerRef.current = handleSectionClick;
+  }, [handleSectionClick]);
 
   return (
     <header
-      className="group relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card to-muted/30 p-4 sm:p-5 shadow-2xs transition-all hover:border-primary/30"
-      aria-label="Student welcome and campus canteen status"
+      role="button"
+      tabIndex={0}
+      onClick={handleSectionClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleSectionClick();
+        }
+      }}
+      className={`group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs transition-all duration-200 hover:border-foreground/25 hover:shadow-sm active:scale-[0.985] cursor-pointer select-none text-left ${
+        isAnimating ? "ring-2 ring-primary/30" : ""
+      }`}
+      aria-label="Campus greeting section - click for a fresh food mood quote"
     >
-      {/* Top accent gradient bar with subtle shimmer */}
-      <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 via-primary/40 to-transparent" />
+      {/* Top accent border bar */}
+      <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500 via-primary to-emerald-500 opacity-80" />
 
-      {/* Atmospheric Shimmer light sweep */}
-      <div
-        className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-primary/5 to-transparent animate-greeting-shimmer"
-        aria-hidden="true"
-      />
-
-      {/* Ambient background glows */}
-      <div
-        className="pointer-events-none absolute -right-6 -bottom-6 h-28 w-28 rounded-full bg-amber-500/10 blur-2xl transition-all duration-500 group-hover:scale-125 group-hover:bg-amber-500/15"
-        aria-hidden="true"
-      />
-      <div
-        className="pointer-events-none absolute -left-6 -top-6 h-24 w-24 rounded-full bg-primary/5 blur-2xl"
-        aria-hidden="true"
-      />
-
-      {/* Upper Status Row: Live Kitchen Beacon & Campus Canteen Brand */}
-      <div className="relative z-10 flex items-center justify-between gap-2 pb-2.5">
+      {/* Top Row: Live Kitchen Status & Interactive Hint */}
+      <div className="flex items-center justify-between gap-2 pb-2.5">
         <div className="flex items-center gap-2">
-          {/* Pulsing Live Kitchen Indicator */}
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 select-none shadow-2xs">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            </span>
-            <span>Kitchen Live</span>
-          </div>
-
-          {/* Quick Pickup Chip */}
-          <div className="hidden xs:inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full border border-border/50">
-            <Zap className="h-3 w-3 text-amber-500" />
-            <span>~4 min pickup</span>
-          </div>
+          {/* Live indicator dot */}
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          </span>
+          <span className="text-xs font-semibold text-foreground">Kitchen Active</span>
+          <span className="text-muted-foreground/40 font-medium">·</span>
+          <span className="text-xs text-muted-foreground font-medium">Avg ~4m pickup</span>
         </div>
 
-        {/* Canteen Subtitle Tag */}
-        <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground/90 select-none">
-          <UtensilsCrossed className="h-3 w-3 text-primary/70" />
-          <span>Campus Canteen</span>
+        {/* Sleek interactive prompt badge */}
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground group-hover:text-foreground transition-colors bg-muted/60 group-hover:bg-muted px-2.5 py-0.5 rounded-full border border-border/40">
+          <span>Tap for food mood</span>
+          <span className="text-xs select-none">💬</span>
         </div>
       </div>
 
-      {/* Main Greeting Content Row */}
-      <div className="relative z-10 flex items-start justify-between gap-3">
-        <div className="space-y-1.5 flex-1 min-w-0">
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight flex items-center flex-wrap gap-2 text-foreground">
-            <span>
-              {greetingConfig.greeting},{" "}
-              <span className="bg-gradient-to-r from-foreground via-foreground to-foreground/80 bg-clip-text">
-                {firstName}
-              </span>
-              !
-            </span>
+      {/* Main Greeting Typography */}
+      <div className="space-y-1">
+        <p className="text-[10px] sm:text-xs font-bold tracking-widest uppercase text-muted-foreground">
+          Campus Canteen
+        </p>
 
-            {/* Interactive Waving Hand Button */}
-            <button
-              type="button"
-              onClick={handleWaveClick}
-              className="cursor-pointer select-none inline-flex items-center justify-center p-0.5 hover:scale-110 active:scale-95 transition-transform"
-              title="Click to wave back!"
-              aria-label={`Wave at ${firstName}`}
-            >
-              <span
-                className={`text-2xl sm:text-[26px] ${
-                  isWaving ? "inline-block animate-bounce scale-125" : "animate-wave-hand"
-                }`}
-              >
-                👋
-              </span>
-            </button>
-          </h1>
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2 flex-wrap">
+          <span>{greetingConfig.greeting}, {firstName}!</span>
+          <span className="text-2xl select-none">{greetingConfig.emoji}</span>
+        </h1>
 
-          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed line-clamp-2">
-            {greetingConfig.subtext}
+        <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+          {greetingConfig.subtext}
+        </p>
+      </div>
+
+      {/* Interactive Food Mood Quotation Pill (Refreshes on each click) */}
+      <div className="mt-3.5 pt-3 border-t border-border/60 flex items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="shrink-0 px-2 py-0.5 rounded-md bg-muted text-[10px] font-bold tracking-wider uppercase text-muted-foreground border border-border/50">
+            {currentQuote.category}
+          </span>
+          <p
+            key={currentQuote.quote}
+            className="font-medium text-foreground truncate italic animate-in fade-in-50 duration-300"
+          >
+            &ldquo;{currentQuote.quote}&rdquo;
           </p>
         </div>
 
-        {/* Interactive Student Avatar with Gradient Ring */}
-        <button
-          type="button"
-          onClick={handleWaveClick}
-          className="shrink-0 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary/15 via-amber-500/20 to-primary/10 border border-primary/25 shadow-2xs cursor-pointer select-none hover:scale-105 active:scale-95 transition-all group-hover:border-primary/40"
-          title={`Signed in as ${firstName}`}
-          aria-label="Student profile badge"
-        >
-          <span className="text-sm font-black text-foreground tracking-tight">
-            {userInitial}
-          </span>
-          <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/40 text-[9px]">
-            <Sparkles className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400" />
-          </span>
-        </button>
+        <span className="shrink-0 text-[11px] font-semibold text-primary group-hover:underline">
+          Tap card 🎲
+        </span>
       </div>
     </header>
   );
