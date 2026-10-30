@@ -11,6 +11,7 @@ import { getBestSellersAction, type BestSellerItem } from "@/server/actions/best
 import { formatIstTime, getStatusBadgeConfig } from "@/lib/order-status";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
 import { StudentHomeView, type CategoryData } from "@/components/student/student-home-view";
+import { StudentGreetingHeader } from "@/components/student/student-greeting-header";
 import { cn } from "@/lib/utils";
 
 export default async function StudentHomePage() {
@@ -108,20 +109,16 @@ export default async function StudentHomePage() {
     bestSellers = bestSellersRes.data;
   }
 
+  // Compute current hour in Indian Standard Time (UTC+5:30) for contextual student greeting
+  const now = new Date();
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const istMinutes = (utcMinutes + 330) % 1440;
+  const istHour = Math.floor(istMinutes / 60);
+
   return (
     <div className="space-y-6">
-      {/* Welcome Greeting Header */}
-      <header className="space-y-1">
-        <p className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
-          Campus Canteen
-        </p>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-          Welcome, {profile.full_name ?? "Student"}!
-        </h1>
-        <p className="text-xs sm:text-sm text-muted-foreground">
-          Pre-order fresh meals before your break and pick up without waiting.
-        </p>
-      </header>
+      {/* Welcome Greeting Header with Live Kitchen Status & Dynamic Time Greeting */}
+      <StudentGreetingHeader fullName={profile.full_name} initialHour={istHour} />
 
       {/* Active Order In-Flight Banner */}
       {latestActiveOrder && (
