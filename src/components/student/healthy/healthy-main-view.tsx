@@ -8,6 +8,8 @@ import {
   SlidersHorizontal,
   Plus,
   ChevronRight,
+  Info,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,9 +56,17 @@ export function HealthyMainView({
   const addItem = useCartStore((s) => s.addItem);
   const getItemQuantity = useCartStore((s) => s.getItemQuantity);
 
-  // Active items (DB or Sample Data)
+  // Active items (DB or Sample Data, seamlessly matching real photos if available)
   const activeItems = useMemo(() => {
     if (useSampleData) {
+      if (initialItems.length > 0) {
+        return SAMPLE_HEALTHY_ITEMS.map((sample) => {
+          const match = initialItems.find((i) =>
+            i.name.toLowerCase().includes(sample.name.toLowerCase().split(" ")[0])
+          );
+          return match?.image_url ? { ...sample, image_url: match.image_url } : sample;
+        });
+      }
       return SAMPLE_HEALTHY_ITEMS;
     }
     return initialItems;
@@ -104,27 +114,40 @@ export function HealthyMainView({
   const isSheetOpen = isPreferencesOpen || selectedDish !== null;
 
   return (
-    <div className="healthy-theme space-y-6 pb-24 text-emerald-950 dark:text-emerald-50">
+    <div className="space-y-6 pb-24 text-foreground selection:bg-emerald-500 selection:text-white">
       {/* Dev preview sample toggle (compiled out in prod) */}
       <HealthySampleToggle
         useSampleData={useSampleData}
         onToggle={(next) => setUseSampleData(next)}
       />
 
-      {/* Header bar: Back to Menu & Healthy Mode Title */}
+      {/* Header bar: Back to Menu & Healthy Mode Brand Status */}
       <header className="flex items-center justify-between gap-3 pt-1">
         <Link
           href="/menu"
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors p-1 -ml-1 rounded-lg"
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-emerald-100 transition-colors py-1.5 px-3 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20 active:scale-95"
           aria-label="Back to canteen menu"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-3.5 w-3.5" />
           <span>Back to Menu</span>
         </Link>
 
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-600/10 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-xs font-bold">
-          <Leaf className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-          <span>Healthy Mode</span>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/healthy/score"
+            className="text-[11px] font-bold text-muted-foreground hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors hidden xs:inline-flex items-center gap-1"
+          >
+            <Info className="h-3 w-3" />
+            <span>Score Guide</span>
+          </Link>
+
+          <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600/10 dark:bg-emerald-400/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-xs font-extrabold shadow-2xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span>Healthy Mode</span>
+          </div>
         </div>
       </header>
 
@@ -153,10 +176,10 @@ export function HealthyMainView({
         </div>
       ) : (
         <>
-          {/* Sliding Banner Carousel (Auto-advancing 4.5s, pause on hover/focus/touch, swipe) */}
+          {/* Editorial Nutrition Tip Banner (Auto-advancing 4.5s, pause on hover/focus/touch, swipe) */}
           <HealthyCarousel items={activeItems} />
 
-          {/* Preferences Sheet Trigger Banner */}
+          {/* Preferences Sheet Trigger Banner: Fitness Fuel Targeter */}
           <div
             onClick={() => setIsPreferencesOpen(true)}
             role="button"
@@ -167,19 +190,24 @@ export function HealthyMainView({
                 setIsPreferencesOpen(true);
               }
             }}
-            className="group rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-600/10 via-card to-emerald-500/5 p-4 shadow-2xs hover:border-emerald-500/50 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between gap-3 select-none"
+            className="group rounded-3xl border border-emerald-950/10 dark:border-emerald-400/20 bg-gradient-to-r from-emerald-600/10 via-teal-500/5 to-transparent p-4 sm:p-5 shadow-xs hover:border-emerald-500/50 hover:shadow-md transition-all duration-300 cursor-pointer flex items-center justify-between gap-3 select-none"
             aria-label="Open protein and calorie preferences"
           >
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs group-hover:scale-105 transition-transform">
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-sm group-hover:scale-105 transition-transform duration-300">
                 <SlidersHorizontal className="h-5 w-5" />
               </div>
               <div className="space-y-0.5">
-                <h3 className="text-xs font-bold text-foreground">
-                  Customise protein & calorie targets
-                </h3>
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  Get personalized suggestions matching your daily fitness target
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs sm:text-sm font-black text-foreground">
+                    Customise Daily Nutrition Targets
+                  </h3>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-600/10 text-emerald-800 dark:text-emerald-300 hidden xs:inline-block">
+                    Interactive
+                  </span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-muted-foreground leading-snug">
+                  Set target calories & protein to generate instant smart dish matches
                 </p>
               </div>
             </div>
@@ -188,26 +216,33 @@ export function HealthyMainView({
               type="button"
               variant="outline"
               size="sm"
-              className="shrink-0 h-8 px-3 rounded-xl border-emerald-500/40 text-emerald-800 dark:text-emerald-300 font-bold text-xs group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-all pointer-events-none"
+              className="shrink-0 h-9 px-3.5 rounded-2xl border-emerald-500/30 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-all pointer-events-none shadow-2xs"
             >
-              <span>Set</span>
+              <span>Set Goals</span>
               <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
             </Button>
           </div>
 
-          {/* Top Protein Dishes Row */}
+          {/* Top Protein Dishes Row with Animated Transition Slides */}
           <TopProteinRow
             items={activeItems}
             onOpenDish={(dish) => setSelectedDish(dish)}
+            onAddToCart={handleAddToCart}
           />
 
           {/* Protein & Calories Toggle Chips & Range Filter */}
           <section className="space-y-4 pt-1">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold tracking-tight text-foreground flex items-center gap-1.5">
-                <span>Healthy Canteen Menu</span>
-              </h2>
-              <span className="text-[11px] font-semibold text-muted-foreground">
+              <div className="space-y-0.5">
+                <h2 className="text-sm sm:text-base font-black tracking-tight text-foreground flex items-center gap-1.5">
+                  <span>Healthy Canteen Menu</span>
+                </h2>
+                <p className="text-[11px] text-muted-foreground font-medium">
+                  Verified campus dishes with complete macro breakdown
+                </p>
+              </div>
+
+              <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-full bg-muted text-muted-foreground">
                 {filteredDishes.length} {filteredDishes.length === 1 ? "dish" : "dishes"}
               </span>
             </div>
@@ -228,14 +263,19 @@ export function HealthyMainView({
 
             {/* Filtered Dishes Grid */}
             {filteredDishes.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/80 bg-card/60 p-8 text-center space-y-2">
-                <p className="text-xs font-bold text-foreground">
-                  No dishes match this nutrient filter
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  Try tapping the active bubble to clear the filter or explore other ranges.
-                </p>
-                <div className="pt-2">
+              <div className="rounded-3xl border border-dashed border-border/80 bg-card/60 p-8 text-center space-y-3 shadow-2xs">
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                  <Leaf className="h-6 w-6" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-black text-foreground">
+                    No dishes match this nutrient filter
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Try tapping the active capsule above to reset the filter or explore other ranges.
+                  </p>
+                </div>
+                <div className="pt-1">
                   <Button
                     type="button"
                     variant="outline"
@@ -251,76 +291,82 @@ export function HealthyMainView({
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                 {filteredDishes.map((dish) => (
                   <div
                     key={dish.id}
                     onClick={() => setSelectedDish(dish)}
-                      className="group rounded-2xl border border-border/80 bg-card p-3.5 shadow-2xs hover:border-emerald-500/40 hover:shadow-xs transition-all cursor-pointer flex flex-col justify-between gap-3 select-none"
-                    >
-                      <div className="flex gap-3">
-                        <div className="relative h-18 w-18 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-muted/30">
-                          <MenuItemImage
-                            src={dish.image_url}
-                            alt={dish.name}
-                            aspect="square"
-                            sizes="72px"
-                            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            containerClassName="h-full w-full"
-                          />
-                        </div>
+                    className="group rounded-3xl border border-emerald-950/8 dark:border-emerald-400/15 bg-card p-4 shadow-xs hover:border-emerald-500/40 hover:shadow-md transition-all duration-300 cursor-pointer flex flex-col justify-between gap-3 select-none"
+                  >
+                    <div className="flex gap-3.5">
+                      <div className="relative h-22 w-22 sm:h-24 sm:w-24 shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-muted/30">
+                        <MenuItemImage
+                          src={dish.image_url}
+                          alt={dish.name}
+                          aspect="square"
+                          sizes="96px"
+                          className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          containerClassName="h-full w-full"
+                        />
+                      </div>
 
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <VegIndicator isVeg={dish.is_veg} />
-                            {dish.protein_g != null && (
-                              <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20">
-                                {dish.protein_g}g Protein
-                              </span>
-                            )}
-                            {dish.calories_kcal != null && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">
-                                {dish.calories_kcal} kcal
-                              </span>
-                            )}
-                          </div>
-
-                          <h3 className="text-xs font-bold text-foreground truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
-                            {dish.name}
-                          </h3>
-
-                          {dish.description && (
-                            <p className="text-[11px] text-muted-foreground line-clamp-1 leading-snug">
-                              {dish.description}
-                            </p>
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <VegIndicator isVeg={dish.is_veg} />
+                          {dish.protein_g != null && (
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/25">
+                              {dish.protein_g}g Protein
+                            </span>
+                          )}
+                          {dish.calories_kcal != null && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+                              {dish.calories_kcal} kcal
+                            </span>
                           )}
                         </div>
-                      </div>
 
-                      <div className="flex items-center justify-between pt-1 border-t border-border/40">
-                        <span className="text-xs font-extrabold text-foreground">
-                          {formatPaise(dish.price_paise)}
-                        </span>
+                        <h3 className="text-xs sm:text-sm font-black text-foreground truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
+                          {dish.name}
+                        </h3>
 
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold group-hover:underline">
-                            Nutrition details
-                          </span>
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={!dish.is_available}
-                            onClick={(e) => handleAddToCart(e, dish)}
-                            className="h-8 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-2xs active:scale-95 transition-all"
-                            aria-label={`Add ${dish.name} to cart`}
-                          >
-                            <Plus className="h-3.5 w-3.5 mr-1" />
-                            <span>Add</span>
-                          </Button>
-                        </div>
+                        {dish.description ? (
+                          <p className="text-[11px] text-muted-foreground line-clamp-1 leading-snug">
+                            {dish.description}
+                          </p>
+                        ) : (
+                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <Clock className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                            <span>~{dish.prep_minutes} min prep</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
+
+                    <div className="flex items-center justify-between pt-2.5 border-t border-border/50">
+                      <span className="text-sm font-black text-foreground">
+                        {formatPaise(dish.price_paise)}
+                      </span>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-bold group-hover:underline flex items-center gap-0.5">
+                          <span>Nutrition Details</span>
+                          <ChevronRight className="h-3 w-3" />
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={!dish.is_available}
+                          onClick={(e) => handleAddToCart(e, dish)}
+                          className="h-8 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-2xs active:scale-95 transition-all"
+                          aria-label={`Add ${dish.name} to cart`}
+                        >
+                          <Plus className="h-3.5 w-3.5 mr-1" />
+                          <span>Add</span>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </section>

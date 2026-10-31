@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Heart } from "lucide-react";
+import { ChevronLeft, ChevronRight, Leaf } from "lucide-react";
 import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { HEALTHY_CAROUSEL_TIPS } from "@/lib/healthy-constants";
 import { OWNER_LICENSED_BANNER_PHOTOS } from "@/lib/healthy-banner-config";
@@ -24,12 +24,12 @@ interface SlideItem {
   gradient: string;
 }
 
-const GRADIENTS = [
-  "from-emerald-950 via-teal-900 to-emerald-900",
-  "from-teal-950 via-emerald-900 to-green-950",
-  "from-green-950 via-teal-950 to-emerald-900",
-  "from-emerald-900 via-green-950 to-teal-950",
-  "from-teal-900 via-emerald-950 to-green-900",
+const LUXURY_WELLNESS_GRADIENTS = [
+  "from-[#073024] via-[#094132] to-[#042018]",
+  "from-[#06332d] via-[#094236] to-[#03231f]",
+  "from-[#0a382c] via-[#062f25] to-[#042219]",
+  "from-[#083a30] via-[#0b483b] to-[#05261d]",
+  "from-[#093529] via-[#063125] to-[#031d16]",
 ];
 
 export function HealthyCarousel({ items }: HealthyCarouselProps) {
@@ -49,7 +49,7 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
   // Build slides (4 to 5)
   const slides: SlideItem[] = Array.from({ length: 5 }).map((_, idx) => {
     const tip = HEALTHY_CAROUSEL_TIPS[idx % HEALTHY_CAROUSEL_TIPS.length];
-    const gradient = GRADIENTS[idx % GRADIENTS.length];
+    const gradient = LUXURY_WELLNESS_GRADIENTS[idx % LUXURY_WELLNESS_GRADIENTS.length];
 
     // Check owner licensed photos first
     if (OWNER_LICENSED_BANNER_PHOTOS.length > idx) {
@@ -148,7 +148,7 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
       role="region"
       aria-roledescription="carousel"
       aria-label="Healthy eating tips and featured dishes"
-      className="relative overflow-hidden rounded-3xl border border-emerald-500/30 shadow-md bg-card focus:outline-hidden"
+      className="relative overflow-hidden rounded-3xl border border-emerald-500/25 shadow-lg shadow-emerald-950/10 bg-card focus:outline-hidden"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onMouseEnter={() => setIsPaused(true)}
@@ -159,12 +159,12 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Sliding Track */}
+      {/* Sliding Track with GPU acceleration */}
       <div
         className={`flex ${
           prefersReducedMotion
             ? ""
-            : "transition-transform duration-700 ease-out will-change-transform"
+            : "transition-transform duration-700 cubic-bezier(0.2, 0.8, 0.2, 1) will-change-transform"
         }`}
         style={{ transform: `translateX(-${currentSlide * 100}%)` }}
       >
@@ -177,36 +177,36 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
             aria-hidden={currentSlide !== idx}
             className={`w-full shrink-0 min-h-[220px] sm:min-h-[240px] bg-gradient-to-br ${slide.gradient} text-white p-5 sm:p-6 flex flex-col justify-between relative overflow-hidden`}
           >
-            {/* Top row */}
+            {/* Top row: Editorial tag & Mode indicator */}
             <div className="flex items-start justify-between gap-3 relative z-10">
-              <span className="inline-flex items-center px-3 py-1 rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-[11px] font-black uppercase tracking-wider text-emerald-200 shadow-2xs">
+              <span className="inline-flex items-center px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[10px] font-black uppercase tracking-wider text-emerald-300 shadow-2xs">
                 <span>{slide.tag}</span>
               </span>
 
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-200/90 bg-black/20 px-2.5 py-0.5 rounded-lg backdrop-blur-xs">
-                <Heart className="h-3 w-3 text-emerald-400" />
-                <span>Healthy Mode</span>
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-200/90 bg-black/25 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
+                <Leaf className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Wellness Insight</span>
               </span>
             </div>
 
             {/* Slide Body: Headline + Text + Optional Dish Photo */}
-            <div className="my-2 relative z-10 flex items-center justify-between gap-4">
+            <div className="my-2.5 relative z-10 flex items-center justify-between gap-4">
               <div className="space-y-1.5 max-w-sm">
-                <h3 className="text-xl sm:text-2xl font-black tracking-tight text-white drop-shadow-sm leading-tight">
+                <h3 className="text-xl sm:text-2xl font-black tracking-tight text-white drop-shadow-xs leading-tight">
                   {slide.headline}
                 </h3>
-                <p className="text-xs sm:text-sm text-white/90 leading-relaxed line-clamp-3">
+                <p className="text-xs sm:text-sm text-emerald-50/90 leading-relaxed line-clamp-3">
                   {slide.body}
                 </p>
                 {slide.credit && (
-                  <p className="text-[10px] text-emerald-300/80 font-medium">
-                    Featured: {slide.credit}
+                  <p className="text-[10px] text-emerald-300/80 font-bold tracking-wide pt-1">
+                    Featured dish: {slide.credit}
                   </p>
                 )}
               </div>
 
               {slide.imageUrl && (
-                <div className="shrink-0 w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border border-white/20 shadow-md bg-black/20 relative">
+                <div className="shrink-0 w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border border-white/20 shadow-xl bg-black/30 relative">
                   <MenuItemImage
                     src={slide.imageUrl}
                     alt={slide.imageAlt || slide.headline}
@@ -219,10 +219,14 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
               )}
             </div>
 
-            {/* Bottom Row: Slide Indicators and Controls */}
-            <div className="flex items-center justify-between pt-2 border-t border-white/15 relative z-10">
-              {/* Dot Indicators */}
-              <div className="flex items-center gap-1.5" role="tablist" aria-label="Slide dots">
+            {/* Bottom Row: Animated Slide Indicators and Controls */}
+            <div className="flex items-center justify-between pt-2.5 border-t border-white/15 relative z-10">
+              {/* Dynamic Pill Indicators */}
+              <div
+                className="flex items-center gap-1.5"
+                role="tablist"
+                aria-label="Slide dots"
+              >
                 {slides.map((_, dotIdx) => (
                   <button
                     key={dotIdx}
@@ -231,21 +235,21 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
                     aria-selected={currentSlide === dotIdx}
                     aria-label={`Go to slide ${dotIdx + 1}`}
                     onClick={() => setCurrentSlide(dotIdx)}
-                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                    className={`h-1.5 rounded-full transition-all duration-500 cursor-pointer ${
                       currentSlide === dotIdx
-                        ? "w-6 bg-emerald-300"
-                        : "w-2 bg-white/40 hover:bg-white/70"
+                        ? "w-8 bg-emerald-400 shadow-xs"
+                        : "w-2 bg-white/30 hover:bg-white/60"
                     }`}
                   />
                 ))}
               </div>
 
-              {/* Prev / Next Buttons */}
+              {/* Prev / Next Glass Controls */}
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={prevSlide}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white backdrop-blur-md transition-colors cursor-pointer"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white backdrop-blur-md transition-all active:scale-95 cursor-pointer border border-white/10"
                   aria-label="Previous slide"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -253,7 +257,7 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
                 <button
                   type="button"
                   onClick={nextSlide}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white backdrop-blur-md transition-colors cursor-pointer"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white backdrop-blur-md transition-all active:scale-95 cursor-pointer border border-white/10"
                   aria-label="Next slide"
                 >
                   <ChevronRight className="h-4 w-4" />

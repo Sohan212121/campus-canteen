@@ -542,8 +542,16 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
   animation: flip-quote-spin 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
+/* Healthy Mode Smooth Carousel & Slide Utilities */
+.healthy-slide-track {
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Prefers-reduced-motion: instantly settled, no confetti or vibration */
 @media (prefers-reduced-motion: reduce) {
+  .healthy-slide-track,
   .cc-overlay-backdrop,
   .cc-card-3d,
   .cc-circle-path,
