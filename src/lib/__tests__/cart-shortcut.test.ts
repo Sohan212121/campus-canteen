@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   calculateEstimatedCartTotal,
+  calculateEstimatedCartTotalFromRegistry,
+  registerMenuItemPrices,
+  clearRegisteredMenuItemPrices,
   formatCartShortcutVisibleLabel,
   getCartShortcutAriaLabel,
   getCartShortcutAnnouncement,
@@ -144,5 +147,28 @@ describe("shouldShowCartShortcut", () => {
         isDetailSheetOpen: false,
       })
     ).toBe(true);
+  });
+});
+
+describe("In-Memory Menu Item Price Registry", () => {
+  it("computes estimated total from registered prices when menuItems prop is omitted", () => {
+    clearRegisteredMenuItemPrices();
+    registerMenuItemPrices([
+      { id: "samosa-id", price_paise: 4000 },
+      { id: "roll-id", price_paise: 9500 },
+    ]);
+
+    const cart = [
+      { menu_item_id: "samosa-id", quantity: 1 },
+      { menu_item_id: "roll-id", quantity: 2 },
+    ];
+
+    expect(calculateEstimatedCartTotalFromRegistry(cart)).toBe(23000); // 4000 + 2*9500 = 23000 (₹230)
+  });
+
+  it("safely returns 0 when cart item is not in registry", () => {
+    clearRegisteredMenuItemPrices();
+    const cart = [{ menu_item_id: "unregistered-id", quantity: 1 }];
+    expect(calculateEstimatedCartTotalFromRegistry(cart)).toBe(0);
   });
 });

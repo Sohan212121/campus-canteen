@@ -14,6 +14,7 @@ import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
 import { StarRatingDisplay } from "@/components/student/star-rating";
 import { ItemReviewsSection } from "@/components/student/item-reviews-section";
 import { IngredientsPanel } from "@/components/student/ingredients-panel";
+import { registerMenuItemPrices } from "@/lib/cart-shortcut";
 
 export type MenuItemData = {
   id: string;
@@ -109,6 +110,7 @@ function ItemDetailDialogContent({
 
   const handleAddToCart = () => {
     if (isOutOfStock) return;
+    registerMenuItemPrices([{ id: item.id, price_paise: item.price_paise }]);
     addItem(item.id, quantity);
     toast.success(`Added ${quantity} × ${item.name} to cart`, {
       id: "cart-add-feedback",

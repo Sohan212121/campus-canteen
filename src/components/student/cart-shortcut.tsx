@@ -8,6 +8,7 @@ import { ShoppingBag, ArrowRight } from "lucide-react";
 import { useCartStore } from "@/lib/cart-store";
 import {
   calculateEstimatedCartTotal,
+  calculateEstimatedCartTotalFromRegistry,
   formatCartShortcutVisibleLabel,
   getCartShortcutAriaLabel,
   getCartShortcutAnnouncement,
@@ -50,9 +51,13 @@ export function CartShortcut({
     prevCountRef.current = totalCount;
   }, [hasHydrated, totalCount]);
 
-  // Compute estimated total from current menu prices passed as props
+  // Compute estimated total from current menu prices passed as props, with fallback to in-memory registry
   const estimatedTotal = useMemo(() => {
-    return calculateEstimatedCartTotal(items, menuItems);
+    const directTotal = calculateEstimatedCartTotal(items, menuItems);
+    if (directTotal > 0 || menuItems.length > 0) {
+      return directTotal;
+    }
+    return calculateEstimatedCartTotalFromRegistry(items);
   }, [items, menuItems]);
 
   const isVisible = shouldShowCartShortcut({

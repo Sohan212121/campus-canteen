@@ -467,7 +467,11 @@ export function HealthyModeView({ canteenItems = [] }: HealthyModeViewProps) {
       </div>
 
       {/* Floating 1-tap Cart Shortcut */}
-      {hasHydrated && totalItemCount > 0 && <CartShortcut />}
+      {hasHydrated && totalItemCount > 0 && (
+        <CartShortcut
+          menuItems={canteenItems.map((i) => ({ id: i.id, price_paise: i.price_paise }))}
+        />
+      )}
     </div>
   );
 }

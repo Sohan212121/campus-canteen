@@ -10,6 +10,7 @@ import { VegIndicator } from "@/components/student/veg-indicator";
 import { MenuItemImage } from "@/components/student/menu-item-image";
 import { StarRatingDisplay } from "@/components/student/star-rating";
 import { formatPaise } from "@/lib/money";
+import { registerMenuItemPrices } from "@/lib/cart-shortcut";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
 
@@ -36,6 +37,7 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
 
   const handleQuickAdd = () => {
     if (isOutOfStock) return;
+    registerMenuItemPrices([{ id: item.id, price_paise: item.price_paise }]);
     addItem(item.id, 1);
     toast.success(`Added ${item.name} to cart`, {
       id: "cart-add-feedback",
@@ -48,6 +50,7 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
 
   const handleIncrement = () => {
     if (isOutOfStock || currentQuantity >= effectiveMax) return;
+    registerMenuItemPrices([{ id: item.id, price_paise: item.price_paise }]);
     updateQuantity(item.id, currentQuantity + 1);
   };
 

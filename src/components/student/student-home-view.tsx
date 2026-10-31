@@ -19,7 +19,7 @@ import { MenuItemCard } from "@/components/student/menu-item-card";
 import { ItemDetailSheet, type MenuItemData } from "@/components/student/item-detail-sheet";
 import { BestSellersRow } from "@/components/student/best-sellers-row";
 import { CartShortcut } from "@/components/student/cart-shortcut";
-import { useCartStore } from "@/lib/cart-store";
+import { type MenuItemPriceRef, registerMenuItemPrices } from "@/lib/cart-shortcut";
 import type { BestSellerItem } from "@/server/actions/best-sellers";
 
 export type CategoryData = {
@@ -208,11 +208,25 @@ export function StudentHomeView({
 
   // 3. Item detail modal & cart state
   const [selectedItem, setSelectedItem] = useState<MenuItemData | null>(null);
-  const totalItemCount = useCartStore((s) => s.getTotalItemCount());
-  const hasHydrated = useCartStore((s) => s.hasHydrated);
-  const isCartShortcutVisible = hasHydrated && totalItemCount > 0 && !selectedItem;
   const filterSectionRef = useRef<HTMLDivElement>(null);
   const foodItemsSectionRef = useRef<HTMLElement>(null);
+
+  // Memoized price references for CartShortcut calculation
+  const allPriceRefs = useMemo(() => {
+    const list: MenuItemPriceRef[] = initialItems.map((i) => ({
+      id: i.id,
+      price_paise: i.price_paise,
+    }));
+    if (bestSellers) {
+      for (const bs of bestSellers) {
+        if (bs.item && !list.some((i) => i.id === bs.item.id)) {
+          list.push({ id: bs.item.id, price_paise: bs.item.price_paise });
+        }
+      }
+    }
+    registerMenuItemPrices(list);
+    return list;
+  }, [initialItems, bestSellers]);
 
   // Smooth auto-scroll to the filtered food items section when any filter is clicked
   const scrollToFoodSection = useCallback(() => {
@@ -730,7 +744,10 @@ export function StudentHomeView({
       )}
 
       {/* Floating Bottom Cart Shortcut Bar */}
-      {isCartShortcutVisible && <CartShortcut />}
+      <CartShortcut
+        menuItems={allPriceRefs}
+        isDetailSheetOpen={Boolean(selectedItem)}
+      />
     </div>
   );
 }
