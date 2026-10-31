@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Dumbbell,
   Star,
@@ -26,11 +26,11 @@ export function TopProteinRow({
   onOpenDish,
   onAddToCart,
 }: TopProteinRowProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [canScrollPrev, setCanScrollPrev] = useState(false);
-  const [canScrollNext, setCanScrollNext] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
   const prefersReducedMotion = usePrefersReducedMotion();
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
 
   // Filter dishes that have protein_g > 0 and sort descending
   const topProteinDishes = items
@@ -38,56 +38,56 @@ export function TopProteinRow({
     .sort((a, b) => (b.protein_g as number) - (a.protein_g as number))
     .slice(0, 8);
 
-  const updateScrollState = useCallback(() => {
-    if (!scrollRef.current) return;
-    const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
-    const firstChild = scrollRef.current.firstElementChild as HTMLElement | null;
-    const cardStep = (firstChild?.offsetWidth ?? 260) + 14;
-
-    const idx = Math.round(scrollLeft / cardStep);
-    setActiveIndex(Math.min(Math.max(0, idx), Math.max(0, topProteinDishes.length - 1)));
-    setCanScrollPrev(scrollLeft > 10);
-    setCanScrollNext(scrollLeft < scrollWidth - clientWidth - 10);
+  const nextSlide = useCallback(() => {
+    setCurrentIndex((prev) => (prev + 1) % topProteinDishes.length);
   }, [topProteinDishes.length]);
 
+  const prevSlide = useCallback(() => {
+    setCurrentIndex((prev) => (prev - 1 + topProteinDishes.length) % topProteinDishes.length);
+  }, [topProteinDishes.length]);
+
+  // Keep performing transition one by one automatically every 3.8s
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    updateScrollState();
+    if (prefersReducedMotion || isPaused || topProteinDishes.length <= 1) return;
 
-    const handleScroll = () => {
-      requestAnimationFrame(updateScrollState);
-    };
+    const timer = setInterval(() => {
+      nextSlide();
+    }, 3800);
 
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("resize", handleScroll);
-    return () => {
-      el.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", handleScroll);
-    };
-  }, [updateScrollState]);
+    return () => clearInterval(timer);
+  }, [prefersReducedMotion, isPaused, nextSlide, topProteinDishes.length]);
 
-  const scrollByCard = (direction: "prev" | "next") => {
-    if (!scrollRef.current) return;
-    const firstChild = scrollRef.current.firstElementChild as HTMLElement | null;
-    const cardStep = (firstChild?.offsetWidth ?? 260) + 14;
-    const delta = direction === "next" ? cardStep : -cardStep;
-
-    scrollRef.current.scrollBy({
-      left: delta,
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-    });
+  // Touch Swipe Handlers for mobile gestures
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsPaused(true);
+    touchStartX.current = e.targetTouches[0].clientX;
   };
 
-  const scrollToSlide = (index: number) => {
-    if (!scrollRef.current) return;
-    const firstChild = scrollRef.current.firstElementChild as HTMLElement | null;
-    const cardStep = (firstChild?.offsetWidth ?? 260) + 14;
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
 
-    scrollRef.current.scrollTo({
-      left: index * cardStep,
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-    });
+  const handleTouchEnd = () => {
+    setIsPaused(false);
+    if (touchStartX.current === null || touchEndX.current === null) return;
+    const diff = touchStartX.current - touchEndX.current;
+    if (diff > 45) {
+      nextSlide();
+    } else if (diff < -45) {
+      prevSlide();
+    }
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      prevSlide();
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      nextSlide();
+    }
   };
 
   if (topProteinDishes.length === 0) {
@@ -95,8 +95,8 @@ export function TopProteinRow({
   }
 
   return (
-    <section className="space-y-3.5" aria-label="Top Protein Fuel carousel">
-      {/* Header with Title & Animated Slide Navigation Controls */}
+    <section className="space-y-3.5" aria-label="Top Protein Fuel transition window">
+      {/* Header with Title & One-by-One Slide Navigation Controls */}
       <div className="flex items-center justify-between gap-2">
         <div className="space-y-0.5">
           <div className="flex items-center gap-2">
@@ -112,173 +112,177 @@ export function TopProteinRow({
           </p>
         </div>
 
-        {/* Carousel Prev/Next Slide Transition Controls */}
+        {/* Previous / Next One-by-One Controls */}
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            onClick={() => scrollByCard("prev")}
-            disabled={!canScrollPrev}
+            onClick={prevSlide}
             aria-label="Previous protein slide"
-            className={`flex h-8 w-8 items-center justify-center rounded-full border border-border/80 bg-card text-foreground transition-all cursor-pointer ${
-              canScrollPrev
-                ? "hover:bg-emerald-600 hover:text-white hover:border-emerald-600 shadow-2xs active:scale-95"
-                : "opacity-35 cursor-not-allowed text-muted-foreground"
-            }`}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-border/80 bg-card text-foreground transition-all cursor-pointer hover:bg-emerald-600 hover:text-white hover:border-emerald-600 shadow-2xs active:scale-95"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             type="button"
-            onClick={() => scrollByCard("next")}
-            disabled={!canScrollNext}
+            onClick={nextSlide}
             aria-label="Next protein slide"
-            className={`flex h-8 w-8 items-center justify-center rounded-full border border-border/80 bg-card text-foreground transition-all cursor-pointer ${
-              canScrollNext
-                ? "hover:bg-emerald-600 hover:text-white hover:border-emerald-600 shadow-2xs active:scale-95"
-                : "opacity-35 cursor-not-allowed text-muted-foreground"
-            }`}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-border/80 bg-card text-foreground transition-all cursor-pointer hover:bg-emerald-600 hover:text-white hover:border-emerald-600 shadow-2xs active:scale-95"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Smooth Transition Slides Container */}
+      {/* Transition Window (Showcases 1 dish card at a time with smooth sliding transition) */}
       <div
-        ref={scrollRef}
         role="region"
         aria-roledescription="carousel"
         aria-label="Top protein dishes"
         tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowLeft") {
-            e.preventDefault();
-            scrollByCard("prev");
-          } else if (e.key === "ArrowRight") {
-            e.preventDefault();
-            scrollByCard("next");
-          }
-        }}
-        className="flex gap-3.5 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-none snap-x snap-mandatory focus:outline-hidden healthy-slide-track"
+        onKeyDown={handleKeyDown}
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+        onFocus={() => setIsPaused(true)}
+        onBlur={() => setIsPaused(false)}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="relative overflow-hidden rounded-3xl border border-emerald-950/10 dark:border-emerald-400/20 bg-card shadow-sm focus:outline-hidden"
       >
-        {topProteinDishes.map((dish, idx) => (
-          <div
-            key={dish.id}
-            role="group"
-            aria-roledescription="slide"
-            aria-label={`${idx + 1} of ${topProteinDishes.length}: ${dish.name}, ${dish.protein_g} grams protein`}
-            onClick={() => onOpenDish(dish)}
-            className="w-[250px] sm:w-[275px] shrink-0 snap-start rounded-3xl border border-emerald-950/10 dark:border-emerald-400/15 bg-card overflow-hidden shadow-xs hover:border-emerald-500/50 hover:shadow-md transition-all duration-300 group cursor-pointer flex flex-col justify-between select-none"
-          >
-            {/* Rich Food Image Area with Badges Overlay */}
-            <div className="relative h-36 sm:h-40 w-full overflow-hidden bg-muted/30">
-              <MenuItemImage
-                src={dish.image_url}
-                alt={dish.name}
-                aspect="4/3"
-                sizes="(max-width: 640px) 260px, 280px"
-                className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500 will-change-transform"
-                containerClassName="h-full w-full"
-              />
+        {/* Animated Sliding Track */}
+        <div
+          className={`flex ${
+            prefersReducedMotion
+              ? ""
+              : "transition-transform duration-700 cubic-bezier(0.2, 0.8, 0.2, 1) will-change-transform"
+          }`}
+          style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+        >
+          {topProteinDishes.map((dish, idx) => (
+            <div
+              key={dish.id}
+              role="group"
+              aria-roledescription="slide"
+              aria-label={`${idx + 1} of ${topProteinDishes.length}: ${dish.name}, ${dish.protein_g} grams protein`}
+              aria-hidden={currentIndex !== idx}
+              className="w-full shrink-0 flex flex-col justify-between group cursor-pointer select-none"
+              onClick={() => onOpenDish(dish)}
+            >
+              {/* Full-width Food Image Area with Badges Overlay */}
+              <div className="relative h-44 sm:h-52 w-full overflow-hidden bg-muted/30">
+                <MenuItemImage
+                  src={dish.image_url}
+                  alt={dish.name}
+                  aspect="4/3"
+                  sizes="(max-width: 640px) 100vw, 600px"
+                  className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500 will-change-transform"
+                  containerClassName="h-full w-full"
+                />
 
-              {/* Gradient scrim for high readability */}
-              <div
-                className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent pointer-events-none"
-                aria-hidden="true"
-              />
+                {/* Dark gradient scrim for maximum text legibility */}
+                <div
+                  className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none"
+                  aria-hidden="true"
+                />
 
-              {/* Top badges: Veg indicator & High Protein pill */}
-              <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1 z-10">
-                <div className="p-1 rounded-xl bg-white/95 dark:bg-zinc-950/90 shadow-2xs backdrop-blur-md">
-                  <VegIndicator isVeg={dish.is_veg} />
-                </div>
-
-                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600/95 text-white shadow-xs backdrop-blur-md border border-emerald-400/30 text-[11px] font-black">
-                  <span>{dish.protein_g}g Protein</span>
-                </div>
-              </div>
-
-              {/* Bottom image overlay: Calories & Rating */}
-              <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 z-10 text-[11px]">
-                {dish.calories_kcal != null ? (
-                  <span className="px-2 py-0.5 rounded-lg bg-black/50 backdrop-blur-md text-white font-bold border border-white/10">
-                    {dish.calories_kcal} kcal
-                  </span>
-                ) : <span />}
-
-                {dish.rating_avg != null && dish.rating_avg > 0 && (
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-black/50 backdrop-blur-md text-amber-300 font-bold border border-white/10">
-                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                    <span>{dish.rating_avg.toFixed(1)}</span>
+                {/* Top Badges: Veg indicator & High-Protein pill */}
+                <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-1 z-10">
+                  <div className="p-1.5 rounded-xl bg-white/95 dark:bg-zinc-950/90 shadow-2xs backdrop-blur-md">
+                    <VegIndicator isVeg={dish.is_veg} />
                   </div>
-                )}
-              </div>
-            </div>
 
-            {/* Card Content & Action Row */}
-            <div className="p-3.5 space-y-2.5 flex-1 flex flex-col justify-between">
-              <div className="space-y-1">
-                <h3 className="text-xs sm:text-sm font-black tracking-tight text-foreground line-clamp-1 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
-                  {dish.name}
-                </h3>
-
-                {dish.description ? (
-                  <p className="text-[11px] text-muted-foreground line-clamp-1 leading-snug">
-                    {dish.description}
-                  </p>
-                ) : (
-                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <Clock className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                    <span>~{dish.prep_minutes} min pickup</span>
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-600/95 text-white shadow-xs backdrop-blur-md border border-emerald-400/30 text-xs font-black">
+                    <Dumbbell className="h-3.5 w-3.5" />
+                    <span>{dish.protein_g}g Protein</span>
                   </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-border/60">
-                <div className="space-y-0.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                    Price
-                  </span>
-                  <span className="text-sm font-black text-foreground">
-                    {formatPaise(dish.price_paise)}
-                  </span>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenDish(dish);
-                    }}
-                    className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline px-1 py-1"
-                  >
-                    Macros
-                  </button>
+                {/* Bottom of Image Overlay: Calories & Star Rating */}
+                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2 z-10 text-xs">
+                  {dish.calories_kcal != null ? (
+                    <span className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-white font-black border border-white/10">
+                      {dish.calories_kcal} kcal
+                    </span>
+                  ) : <span />}
 
-                  {onAddToCart && (
-                    <button
-                      type="button"
-                      disabled={!dish.is_available}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddToCart(e, dish);
-                      }}
-                      className="inline-flex items-center justify-center min-h-[32px] px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
-                      aria-label={`Add ${dish.name} to cart`}
-                    >
-                      <Plus className="h-3.5 w-3.5 mr-0.5" />
-                      <span>Add</span>
-                    </button>
+                  {dish.rating_avg != null && dish.rating_avg > 0 && (
+                    <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-amber-300 font-bold border border-white/10">
+                      <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                      <span>{dish.rating_avg.toFixed(1)}</span>
+                    </div>
                   )}
                 </div>
               </div>
+
+              {/* Card Body & Footer Details */}
+              <div className="p-4 sm:p-5 space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-base sm:text-lg font-black tracking-tight text-foreground group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors line-clamp-1">
+                      {dish.name}
+                    </h3>
+
+                    {dish.prep_minutes > 0 && (
+                      <span className="text-[11px] font-semibold text-muted-foreground shrink-0 flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span>~{dish.prep_minutes} min</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {dish.description && (
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                      {dish.description}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t border-border/60">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                      PRICE
+                    </span>
+                    <span className="text-base sm:text-lg font-black text-foreground">
+                      {formatPaise(dish.price_paise)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenDish(dish);
+                      }}
+                      className="text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline px-2 py-1 cursor-pointer"
+                    >
+                      Macros
+                    </button>
+
+                    {onAddToCart && (
+                      <button
+                        type="button"
+                        disabled={!dish.is_available}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddToCart(e, dish);
+                        }}
+                        className="inline-flex items-center justify-center min-h-[36px] px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-xs active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                        aria-label={`Add ${dish.name} to cart`}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        <span>Add</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      {/* Slide Indicators: Interactive Pagination Dots */}
+      {/* Slide Indicators: Real-time Pagination Pills */}
       {topProteinDishes.length > 1 && (
         <div
           className="flex items-center justify-center gap-1.5 pt-0.5"
@@ -290,13 +294,13 @@ export function TopProteinRow({
               key={dotIdx}
               type="button"
               role="tab"
-              aria-selected={activeIndex === dotIdx}
+              aria-selected={currentIndex === dotIdx}
               aria-label={`Go to slide ${dotIdx + 1}`}
-              onClick={() => scrollToSlide(dotIdx)}
-              className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-                activeIndex === dotIdx
-                  ? "w-7 bg-emerald-600 dark:bg-emerald-400"
-                  : "w-2 bg-emerald-950/15 dark:bg-emerald-400/20 hover:bg-emerald-950/30"
+              onClick={() => setCurrentIndex(dotIdx)}
+              className={`h-1.5 rounded-full transition-all duration-500 cursor-pointer ${
+                currentIndex === dotIdx
+                  ? "w-8 bg-emerald-600 dark:bg-emerald-400 shadow-xs"
+                  : "w-2 bg-emerald-950/20 dark:bg-emerald-400/25 hover:bg-emerald-950/40"
               }`}
             />
           ))}
