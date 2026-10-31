@@ -446,6 +446,13 @@ export type AdminMenuItem = {
   is_active: boolean;
   calories_kcal: number | null;
   ingredients: string[];
+  protein_g?: number | null;
+  fat_g?: number | null;
+  carbs_g?: number | null;
+  fibre_g?: number | null;
+  sugar_g?: number | null;
+  sat_fat_g?: number | null;
+  key_minerals?: string[];
 };
 
 export async function getAdminMenuDataAction(
@@ -642,6 +649,13 @@ export interface MenuItemInput {
   prep_minutes: number;
   calories_kcal?: number | null;
   ingredients?: string[] | null;
+  protein_g?: number | null;
+  fat_g?: number | null;
+  carbs_g?: number | null;
+  fibre_g?: number | null;
+  sugar_g?: number | null;
+  sat_fat_g?: number | null;
+  key_minerals?: string[] | null;
 }
 
 export async function adminCreateMenuItemAction(
@@ -672,6 +686,13 @@ export async function adminCreateMenuItemAction(
   const nutritionValidation = validateAndNormalizeNutrition({
     calories_kcal: item.calories_kcal,
     ingredients: item.ingredients,
+    protein_g: item.protein_g,
+    fat_g: item.fat_g,
+    carbs_g: item.carbs_g,
+    fibre_g: item.fibre_g,
+    sugar_g: item.sugar_g,
+    sat_fat_g: item.sat_fat_g,
+    key_minerals: item.key_minerals,
   });
   if (!nutritionValidation.success) {
     return { success: false, error: nutritionValidation.error || "Invalid nutrition data." };
@@ -679,6 +700,13 @@ export async function adminCreateMenuItemAction(
 
   const caloriesVal = nutritionValidation.calories_kcal ?? null;
   const ingredientsVal = nutritionValidation.ingredients ?? [];
+  const proteinVal = nutritionValidation.protein_g ?? null;
+  const fatVal = nutritionValidation.fat_g ?? null;
+  const carbsVal = nutritionValidation.carbs_g ?? null;
+  const fibreVal = nutritionValidation.fibre_g ?? null;
+  const sugarVal = nutritionValidation.sugar_g ?? null;
+  const satFatVal = nutritionValidation.sat_fat_g ?? null;
+  const mineralsVal = nutritionValidation.key_minerals ?? [];
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -697,6 +725,13 @@ export async function adminCreateMenuItemAction(
       is_active: true,
       calories_kcal: caloriesVal,
       ingredients: ingredientsVal,
+      protein_g: proteinVal,
+      fat_g: fatVal,
+      carbs_g: carbsVal,
+      fibre_g: fibreVal,
+      sugar_g: sugarVal,
+      sat_fat_g: satFatVal,
+      key_minerals: mineralsVal,
     })
     .select(
       "id, canteen_id, category_id, name, description, price_paise, image_url, is_veg, is_available, stock, prep_minutes, is_active, calories_kcal, ingredients"
@@ -749,6 +784,13 @@ export async function adminUpdateMenuItemAction(
   const nutritionValidation = validateAndNormalizeNutrition({
     calories_kcal: item.calories_kcal,
     ingredients: item.ingredients,
+    protein_g: item.protein_g,
+    fat_g: item.fat_g,
+    carbs_g: item.carbs_g,
+    fibre_g: item.fibre_g,
+    sugar_g: item.sugar_g,
+    sat_fat_g: item.sat_fat_g,
+    key_minerals: item.key_minerals,
   });
   if (!nutritionValidation.success) {
     return { success: false, error: nutritionValidation.error || "Invalid nutrition data." };
@@ -782,6 +824,34 @@ export async function adminUpdateMenuItemAction(
 
   if ("ingredients" in item && item.ingredients !== undefined) {
     updatePayload.ingredients = nutritionValidation.ingredients ?? [];
+  }
+
+  if ("protein_g" in item && item.protein_g !== undefined) {
+    updatePayload.protein_g = nutritionValidation.protein_g ?? null;
+  }
+
+  if ("fat_g" in item && item.fat_g !== undefined) {
+    updatePayload.fat_g = nutritionValidation.fat_g ?? null;
+  }
+
+  if ("carbs_g" in item && item.carbs_g !== undefined) {
+    updatePayload.carbs_g = nutritionValidation.carbs_g ?? null;
+  }
+
+  if ("fibre_g" in item && item.fibre_g !== undefined) {
+    updatePayload.fibre_g = nutritionValidation.fibre_g ?? null;
+  }
+
+  if ("sugar_g" in item && item.sugar_g !== undefined) {
+    updatePayload.sugar_g = nutritionValidation.sugar_g ?? null;
+  }
+
+  if ("sat_fat_g" in item && item.sat_fat_g !== undefined) {
+    updatePayload.sat_fat_g = nutritionValidation.sat_fat_g ?? null;
+  }
+
+  if ("key_minerals" in item && item.key_minerals !== undefined) {
+    updatePayload.key_minerals = nutritionValidation.key_minerals ?? [];
   }
 
   const { error } = await supabase

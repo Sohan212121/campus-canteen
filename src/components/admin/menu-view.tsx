@@ -50,6 +50,7 @@ export function MenuView({
   const [search, setSearch] = useState("");
   const [selectedCatId, setSelectedCatId] = useState<string>("ALL");
   const [filterMissingDetailsOnly, setFilterMissingDetailsOnly] = useState(false);
+  const [filterNutritionIncompleteOnly, setFilterNutritionIncompleteOnly] = useState(false);
 
   // Category Modal State
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
@@ -73,6 +74,14 @@ export function MenuView({
   const [itemCalories, setItemCalories] = useState("");
   const [itemIngredients, setItemIngredients] = useState<string[]>([]);
   const [ingredientInput, setIngredientInput] = useState("");
+  const [itemProtein, setItemProtein] = useState("");
+  const [itemFat, setItemFat] = useState("");
+  const [itemCarbs, setItemCarbs] = useState("");
+  const [itemFibre, setItemFibre] = useState("");
+  const [itemSugar, setItemSugar] = useState("");
+  const [itemSatFat, setItemSatFat] = useState("");
+  const [itemMinerals, setItemMinerals] = useState<string[]>([]);
+  const [mineralInput, setMineralInput] = useState("");
   const [itemSubmitting, setItemSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
@@ -93,7 +102,14 @@ export function MenuView({
     const isMissingDetails =
       item.calories_kcal == null || !item.ingredients || item.ingredients.length === 0;
     const matchesMissingFilter = !filterMissingDetailsOnly || isMissingDetails;
-    return matchesSearch && matchesCategory && matchesMissingFilter;
+    const isNutritionIncomplete =
+      item.calories_kcal == null ||
+      item.protein_g == null ||
+      item.fat_g == null ||
+      item.carbs_g == null;
+    const matchesNutritionFilter =
+      !filterNutritionIncompleteOnly || isNutritionIncomplete;
+    return matchesSearch && matchesCategory && matchesMissingFilter && matchesNutritionFilter;
   });
 
   // -------------------------------------------------------------------------
@@ -194,6 +210,14 @@ export function MenuView({
       setItemCalories(item.calories_kcal != null ? String(item.calories_kcal) : "");
       setItemIngredients(item.ingredients ? [...item.ingredients] : []);
       setIngredientInput("");
+      setItemProtein(item.protein_g != null ? String(item.protein_g) : "");
+      setItemFat(item.fat_g != null ? String(item.fat_g) : "");
+      setItemCarbs(item.carbs_g != null ? String(item.carbs_g) : "");
+      setItemFibre(item.fibre_g != null ? String(item.fibre_g) : "");
+      setItemSugar(item.sugar_g != null ? String(item.sugar_g) : "");
+      setItemSatFat(item.sat_fat_g != null ? String(item.sat_fat_g) : "");
+      setItemMinerals(item.key_minerals ? [...item.key_minerals] : []);
+      setMineralInput("");
     } else {
       setEditingItem(null);
       setItemName("");
@@ -208,8 +232,48 @@ export function MenuView({
       setItemCalories("");
       setItemIngredients([]);
       setIngredientInput("");
+      setItemProtein("");
+      setItemFat("");
+      setItemCarbs("");
+      setItemFibre("");
+      setItemSugar("");
+      setItemSatFat("");
+      setItemMinerals([]);
+      setMineralInput("");
     }
     setItemModalOpen(true);
+  };
+
+  const handleAddMineral = (rawInput?: string) => {
+    const textToAdd = rawInput !== undefined ? rawInput : mineralInput;
+    if (!textToAdd.trim()) return;
+
+    const candidates = textToAdd
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    const updated = [...itemMinerals];
+    for (const cand of candidates) {
+      if (cand.length > 40) {
+        toast.error(`"${cand.slice(0, 20)}..." exceeds 40 characters.`);
+        continue;
+      }
+      if (updated.length >= 8) {
+        toast.error("Maximum 8 key minerals allowed.");
+        break;
+      }
+      const lower = cand.toLowerCase();
+      if (!updated.some((existing) => existing.toLowerCase() === lower)) {
+        updated.push(cand);
+      }
+    }
+    setItemMinerals(updated);
+    setMineralInput("");
+  };
+
+  const handleRemoveMineral = (index: number) => {
+    setItemMinerals((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleAddIngredient = (rawInput?: string) => {
@@ -302,6 +366,13 @@ export function MenuView({
     const calTrimmed = itemCalories.trim();
     const caloriesVal = calTrimmed === "" ? null : parseInt(calTrimmed, 10);
 
+    const parseOptionalMacro = (val: string): number | null => {
+      const trimmed = val.trim();
+      if (!trimmed) return null;
+      const num = parseFloat(trimmed);
+      return isNaN(num) ? null : num;
+    };
+
     const payload = {
       canteen_id: canteenId,
       category_id: itemCategory,
@@ -315,6 +386,13 @@ export function MenuView({
       prep_minutes: prepMins,
       calories_kcal: caloriesVal,
       ingredients: itemIngredients,
+      protein_g: parseOptionalMacro(itemProtein),
+      fat_g: parseOptionalMacro(itemFat),
+      carbs_g: parseOptionalMacro(itemCarbs),
+      fibre_g: parseOptionalMacro(itemFibre),
+      sugar_g: parseOptionalMacro(itemSugar),
+      sat_fat_g: parseOptionalMacro(itemSatFat),
+      key_minerals: itemMinerals,
     };
 
     try {
@@ -338,6 +416,13 @@ export function MenuView({
                     description: payload.description,
                     calories_kcal: caloriesVal,
                     ingredients: itemIngredients,
+                    protein_g: payload.protein_g,
+                    fat_g: payload.fat_g,
+                    carbs_g: payload.carbs_g,
+                    fibre_g: payload.fibre_g,
+                    sugar_g: payload.sugar_g,
+                    sat_fat_g: payload.sat_fat_g,
+                    key_minerals: payload.key_minerals,
                   }
                 : i
             )
@@ -454,6 +539,17 @@ export function MenuView({
           >
             Missing Details Only ({items.filter((i) => i.is_active && (i.calories_kcal == null || !i.ingredients || i.ingredients.length === 0)).length})
           </button>
+          <button
+            type="button"
+            onClick={() => setFilterNutritionIncompleteOnly((prev) => !prev)}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors border ${
+              filterNutritionIncompleteOnly
+                ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                : "bg-card text-rose-700 dark:text-rose-400 border-rose-500/40 hover:bg-rose-500/10"
+            }`}
+          >
+            Nutrition Incomplete ({items.filter((i) => i.is_active && (i.calories_kcal == null || i.protein_g == null || i.fat_g == null || i.carbs_g == null)).length})
+          </button>
           {activeCategories.map((cat) => (
             <div key={cat.id} className="inline-flex items-center group">
               <button
@@ -545,9 +641,22 @@ export function MenuView({
                               Details missing
                             </Badge>
                           )}
+                          {(item.calories_kcal == null || item.protein_g == null || item.fat_g == null || item.carbs_g == null) && (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 font-medium"
+                            >
+                              Nutrition incomplete
+                            </Badge>
+                          )}
                           {item.calories_kcal != null && (
                             <Badge variant="outline" className="text-[10px] text-muted-foreground">
                               {item.calories_kcal} kcal
+                            </Badge>
+                          )}
+                          {item.protein_g != null && (
+                            <Badge variant="outline" className="text-[10px] text-emerald-700 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/5">
+                              {item.protein_g}g P
                             </Badge>
                           )}
                         </div>
@@ -874,6 +983,155 @@ export function MenuView({
                               onClick={() => handleRemoveIngredient(idx)}
                               className="text-muted-foreground hover:text-destructive rounded-full p-0.5"
                               aria-label={`Remove ingredient ${ing}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Macronutrients & Key Minerals Section */}
+                <div className="space-y-3 pt-3 border-t">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-bold text-foreground">Macronutrients & Minerals (Healthy Mode)</span>
+                    <p className="text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded-lg border">
+                      Use the canteen&apos;s recipe or a published nutrition table. Values are shown to students as approximate.
+                    </p>
+                  </div>
+
+                  {/* 6 Macros Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold">Protein (g)</label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="500"
+                        placeholder="e.g. 25.0"
+                        value={itemProtein}
+                        onChange={(e) => setItemProtein(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold">Total Fat (g)</label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="500"
+                        placeholder="e.g. 12.0"
+                        value={itemFat}
+                        onChange={(e) => setItemFat(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold">Carbohydrates (g)</label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="500"
+                        placeholder="e.g. 45.0"
+                        value={itemCarbs}
+                        onChange={(e) => setItemCarbs(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold">Dietary Fibre (g)</label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="500"
+                        placeholder="e.g. 6.0"
+                        value={itemFibre}
+                        onChange={(e) => setItemFibre(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold">Sugar (g)</label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="500"
+                        placeholder="e.g. 3.5"
+                        value={itemSugar}
+                        onChange={(e) => setItemSugar(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold">Saturated Fat (g)</label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="500"
+                        placeholder="e.g. 2.0"
+                        value={itemSatFat}
+                        onChange={(e) => setItemSatFat(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Key Minerals Chip Editor */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold">Key Minerals / Micronutrients</label>
+                      <span className="text-[11px] text-muted-foreground">
+                        {itemMinerals.length}/8 items (max 40 chars each)
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="e.g. Iron, Calcium, Zinc..."
+                        value={mineralInput}
+                        onChange={(e) => setMineralInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddMineral();
+                          }
+                        }}
+                        disabled={itemMinerals.length >= 8}
+                        className="h-9 text-xs"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleAddMineral()}
+                        disabled={!mineralInput.trim() || itemMinerals.length >= 8}
+                        className="h-9 text-xs"
+                      >
+                        Add
+                      </Button>
+                    </div>
+
+                    {itemMinerals.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1.5 max-h-28 overflow-y-auto p-1.5 bg-muted/30 rounded-lg border">
+                        {itemMinerals.map((min, idx) => (
+                          <span
+                            key={`${min}-${idx}`}
+                            className="inline-flex items-center gap-1 rounded-md bg-background px-2.5 py-1 text-xs font-medium border text-foreground shadow-2xs"
+                          >
+                            <span>{min}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMineral(idx)}
+                              className="text-muted-foreground hover:text-destructive rounded-full p-0.5"
+                              aria-label={`Remove mineral ${min}`}
                             >
                               <X className="h-3 w-3" />
                             </button>

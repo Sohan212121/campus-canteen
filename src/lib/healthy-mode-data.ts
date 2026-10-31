@@ -298,3 +298,4 @@ export function calculateMacroPercentages(macros: MacroBreakdown): {
 
   return { proteinPercent, carbsPercent, fatsPercent };
 }
+

@@ -989,3 +989,105 @@ Admin updates via `adminUpdateMenuItemAction` follow precise partial update sema
   - Ingredients rendered as compact chips with `motion-reduce:transition-none`.
   - Returns nothing if the ingredient list is empty.
   - Accompanied by a disclaimer note: *"Calorie and ingredient details are provided by the canteen and are approximate."*
+
+---
+
+## 19. Order Pickup Reminders & Notification Architecture
+
+### 19.1 Schema Additions on `public.orders`
+Migration `0019_pickup_reminders.sql` introduces two nullable timestamp columns on `public.orders` to ensure that 5-minute and 2-minute counter collection warnings are strictly idempotent:
+- **`reminder_5_sent_at` (`timestamptz DEFAULT NULL`)**: Records the exact instant the 5-minute counter collection warning notification was dispatched to the student.
+- **`reminder_2_sent_at` (`timestamptz DEFAULT NULL`)**: Records the exact instant the 2-minute final call notification was dispatched to the student. When a 2-minute reminder is sent, `reminder_5_sent_at` is automatically populated (if not already set) to prevent out-of-order 5-minute warnings from ever re-firing.
+
+### 19.2 Partial Performance Index
+To ensure high-throughput execution during periodic sweeps without scanning the entire orders table:
+```sql
+CREATE INDEX IF NOT EXISTS idx_orders_ready_reminders
+  ON public.orders (canteen_id, status, ready_at)
+  WHERE status = 'READY';
+```
+This partial index covers only orders currently in `READY` status, filtering out completed, cancelled, or in-prep records and maintaining rapid seek times under heavy order volume.
+
+### 19.3 Canteen & Admin Sweep Routine (`public.send_pickup_reminders`)
+```sql
+public.send_pickup_reminders(p_canteen_id uuid DEFAULT NULL) RETURNS jsonb
+```
+- **Execution Privileges**: `SECURITY DEFINER`, `SET search_path = ''`. Granted to `authenticated` and `service_role`; revoked from `PUBLIC` and `anon`.
+- **Role Enforcement**:
+  - `staff`: Permitted only for their assigned canteen (`canteen_id = v_caller_canteen`). Passing an unassigned canteen throws `FORBIDDEN`.
+  - `admin`: Permitted to sweep any specific canteen or all canteens simultaneously (`p_canteen_id IS NULL`).
+  - `service_role` / database background cron: Permitted to sweep all or specific canteens.
+- **Concurrency & Concurrency Locking**:
+  - Uses `FOR UPDATE OF o SKIP LOCKED` with a hard batch cap of `LIMIT 200` to prevent deadlocks and ensure that concurrent kitchen board polling requests process independent slices of active orders.
+- **Deadlines & Notification Copy**:
+  - **Expiry Boundary**: `(ready_at + hold_minutes * interval '1 minute')`. Orders that have already surpassed this deadline are strictly excluded (handled by `mark_no_shows` instead).
+  - **2-Minute Threshold**: If `v_remaining <= interval '2 minutes'` and `reminder_2_sent_at IS NULL`:
+    - Title: `'Final Call: 2 Minutes Left'`
+    - Body: `'Order #' || o.order_code || ' will expire in 2 minutes. Please collect it from the counter now!'`
+    - Sets `reminder_2_sent_at = clock_timestamp()` and `reminder_5_sent_at = coalesce(reminder_5_sent_at, clock_timestamp())`.
+  - **5-Minute Threshold**: If `v_remaining <= interval '5 minutes'` and `reminder_5_sent_at IS NULL`:
+    - Title: `'Pickup Reminder: 5 Minutes Left'`
+    - Body: `'Your order #' || o.order_code || ' is ready at the counter. Please collect it within the next 5 minutes.'`
+    - Sets `reminder_5_sent_at = clock_timestamp()`.
+
+### 19.4 Student Self-Sweep Routine (`public.send_my_pickup_reminders`)
+```sql
+public.send_my_pickup_reminders() RETURNS jsonb
+```
+- **Caller Isolation**: Strictly scoped to orders where `o.user_id = auth.uid()`.
+- **Opportunistic Polling**: Allows an active student tracking page to evaluate hold deadlines and dispatch notifications without needing elevated staff or service-role permissions.
+- **Zero Browser Secrets**: Requires no API tokens or service keys in client code; strictly gated by standard Supabase session authentication.
+
+### 19.5 Student UI & Alert System Integration
+- **State-Driven Hero Card**:
+  - In-progress orders (`PLACED`, `ACCEPTED`, `PREPARING`): Displays a prominent $\ge 40$px estimated ready time with dynamic relative countdown badges (*"in ~6 min"*, *"any moment now"*).
+  - Ready orders (`READY`): Features an interactive circular SVG hold window countdown ring that turns from emerald to amber at $\le 5$ minutes and red at $\le 2$ minutes.
+- **In-App Warning Banners**:
+  - Warning Alert ($\le 5$ min remaining): Renders a yellow/amber banner advising the student to head to the counter.
+  - Final Call Alert ($\le 2$ min remaining): Renders a prominent, pulsing red banner highlighting the remaining minutes and seconds before the order lapses to `NO_SHOW`.
+- **Copy Order Reference**:
+  - Provides a one-tap copy button for `#order_code` with an animated checkmark indicator and clipboard fallback.
+- **Progress Stepper**:
+  - Interactive stepper with timestamps for completed steps and `aria-current="step"` on the active stage.
+
+
+
+---
+
+## 20. Menu Item Macronutrients & Healthy Mode Data Architecture
+
+### 20.1 Schema Additions on `public.menu_items`
+Migration `0020_menu_item_macros.sql` introduces six numeric macronutrient columns and an array of key minerals to support high-protein tracking, macronutrient breakdowns, and nutritional transparency:
+- **`protein_g` (`numeric(5,1) DEFAULT NULL`)**: Protein in grams per serving ($0.0$ to $500.0$).
+- **`fat_g` (`numeric(5,1) DEFAULT NULL`)**: Total fat in grams per serving ($0.0$ to $500.0$).
+- **`carbs_g` (`numeric(5,1) DEFAULT NULL`)**: Total carbohydrates in grams per serving ($0.0$ to $500.0$).
+- **`fibre_g` (`numeric(5,1) DEFAULT NULL`)**: Dietary fibre in grams per serving ($0.0$ to $500.0$).
+- **`sugar_g` (`numeric(5,1) DEFAULT NULL`)**: Sugars in grams per serving ($0.0$ to $500.0$).
+- **`sat_fat_g` (`numeric(5,1) DEFAULT NULL`)**: Saturated fatty acids in grams per serving ($0.0$ to $500.0$).
+- **`key_minerals` (`text[] NOT NULL DEFAULT '{}'::text[]`)**: Array of micronutrients/minerals (e.g., `ARRAY['Iron', 'Calcium', 'Zinc']`).
+
+### 20.2 Validation Helper & Constraint Bounds
+- **`public.validate_menu_item_minerals(p_minerals text[]) RETURNS boolean`**:
+  - `IMMUTABLE PARALLEL SAFE SET search_path = ''`.
+  - Permissions: Revoked from `PUBLIC` and `anon`; granted to `authenticated` and `service_role`.
+  - Ensures `cardinality <= 8`, non-null, and each mineral is 1 to 40 characters trimmed.
+- **Constraints**:
+  - `chk_menu_items_protein`: `protein_g IS NULL OR (protein_g >= 0 AND protein_g <= 500)`
+  - `chk_menu_items_fat`: `fat_g IS NULL OR (fat_g >= 0 AND fat_g <= 500)`
+  - `chk_menu_items_carbs`: `carbs_g IS NULL OR (carbs_g >= 0 AND carbs_g <= 500)`
+  - `chk_menu_items_fibre`: `fibre_g IS NULL OR (fibre_g >= 0 AND fibre_g <= 500)`
+  - `chk_menu_items_sugar`: `sugar_g IS NULL OR (sugar_g >= 0 AND sugar_g <= 500)`
+  - `chk_menu_items_sat_fat`: `sat_fat_g IS NULL OR (sat_fat_g >= 0 AND sat_fat_g <= 500)`
+  - `chk_menu_items_minerals`: Validates via `public.validate_menu_item_minerals(key_minerals)`.
+  - `chk_menu_items_macro_sanity`: Enforces that if protein, carbs, and fat are all present, $(protein \times 4 + carbs \times 4 + fat \times 9)$ must fall within $[0, 7500]$ kcal.
+
+### 20.3 RLS & Update Protection Guard
+The `prevent_menu_item_unauthorized_update` trigger function is replaced to lock all six macro columns and `key_minerals` from being modified by `staff` accounts. Staff remain strictly permitted to modify only `is_available` and `stock`. Students and anonymous callers are completely blocked from updates. Rating columns (`rating_avg`, `rating_count`) remain strictly protected against all callers.
+
+### 20.4 Partial Update Semantics
+- **Omission**: Omitting any macro field in `adminUpdateMenuItemAction` preserves the existing database value.
+- **Clearing**: Explicitly passing `null` (or blank strings in the UI form) clears the column to `NULL` (or `{}` for minerals). Empty string inputs never coerce to `0`.
+- **Validation**: Server-side parsing trims strings, validates ranges $[0, 500]$ with at most one decimal place, and rejects NaN or invalid inputs.
+
+### 20.5 Student Healthy Mode Data Isolation
+- Queries in `/healthy` select the new macro columns. If migration `0020` has not yet been applied, error code `42703` (column does not exist) is caught, logged as `"migration 0020 not applied"`, and gracefully degraded to display a friendly unavailable notice without breaking standard canteen operations.

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { X, Plus, Minus, Clock, ShoppingBag, ChevronDown } from "lucide-react";
+import { X, Plus, Minus, Clock, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { formatPaise } from "@/lib/money";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
 import { StarRatingDisplay } from "@/components/student/star-rating";
 import { ItemReviewsSection } from "@/components/student/item-reviews-section";
+import { IngredientsPanel } from "@/components/student/ingredients-panel";
 
 export type MenuItemData = {
   id: string;
@@ -31,6 +32,13 @@ export type MenuItemData = {
   rating_count?: number;
   calories_kcal?: number | null;
   ingredients?: string[];
+  protein_g?: number | null;
+  fat_g?: number | null;
+  carbs_g?: number | null;
+  fibre_g?: number | null;
+  sugar_g?: number | null;
+  sat_fat_g?: number | null;
+  key_minerals?: string[];
 };
 
 interface ItemDetailSheetProps {
@@ -74,7 +82,6 @@ function ItemDetailDialogContent({
 }) {
   const router = useRouter();
   const [quantity, setQuantity] = useState(1);
-  const [isIngredientsOpen, setIsIngredientsOpen] = useState(false);
   const addItem = useCartStore((s) => s.addItem);
   const currentInCart = useCartStore((s) => s.getItemQuantity(item.id));
 
@@ -198,43 +205,11 @@ function ItemDetailDialogContent({
             </p>
           )}
 
-          {item.ingredients && item.ingredients.length > 0 && (
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => setIsIngredientsOpen((prev) => !prev)}
-                className="flex items-center justify-between w-full py-2 text-sm font-semibold text-foreground hover:text-foreground/80 transition-colors"
-                aria-expanded={isIngredientsOpen}
-                aria-controls="ingredients-panel"
-              >
-                <span>Ingredients ({item.ingredients.length})</span>
-                <ChevronDown
-                  className={`h-4 w-4 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none ${
-                    isIngredientsOpen ? "rotate-180" : ""
-                  }`}
-                  aria-hidden="true"
-                />
-              </button>
+          {/* Ingredients Panel */}
+          <IngredientsPanel ingredients={item.ingredients} itemName={item.name} />
 
-              {isIngredientsOpen && (
-                <div
-                  id="ingredients-panel"
-                  className="flex flex-wrap gap-1.5 pt-2 pb-1"
-                >
-                  {item.ingredients.map((ing, idx) => (
-                    <span
-                      key={`${ing}-${idx}`}
-                      className="inline-flex items-center rounded-md bg-muted px-2.5 py-1 text-xs text-muted-foreground"
-                    >
-                      {ing}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {(item.calories_kcal != null || (item.ingredients && item.ingredients.length > 0)) && (
+          {/* If calories are shown but there are no ingredients, show disclaimer once */}
+          {item.calories_kcal != null && (!item.ingredients || item.ingredients.length === 0) && (
             <p className="text-[11px] text-muted-foreground/80 italic">
               Calorie and ingredient details are provided by the canteen and are approximate.
             </p>
