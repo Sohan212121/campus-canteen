@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Info,
   Clock,
+  Dumbbell,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,6 +21,7 @@ import { MenuItemImage } from "@/components/student/menu-item-image";
 import { CartShortcut } from "@/components/student/cart-shortcut";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
 import { formatPaise } from "@/lib/money";
+import { isValidMenuImageUrl } from "@/lib/image-utils";
 import { HealthyCarousel } from "@/components/student/healthy/healthy-carousel";
 import {
   HealthyRangeChips,
@@ -56,19 +59,39 @@ export function HealthyMainView({
   const addItem = useCartStore((s) => s.addItem);
   const getItemQuantity = useCartStore((s) => s.getItemQuantity);
 
-  // Active items (DB or Sample Data, seamlessly matching real photos if available)
+  // Active items (DB or Sample Data, ensuring every dish gets a real food image from available canteen photos)
   const activeItems = useMemo(() => {
+    // Collect all valid photos from real canteen dishes
+    const availableCanteenImages = initialItems
+      .map((i) => i.image_url)
+      .filter((url): url is string => Boolean(url && isValidMenuImageUrl(url)));
+
     if (useSampleData) {
-      if (initialItems.length > 0) {
-        return SAMPLE_HEALTHY_ITEMS.map((sample) => {
-          const match = initialItems.find((i) =>
-            i.name.toLowerCase().includes(sample.name.toLowerCase().split(" ")[0])
-          );
-          return match?.image_url ? { ...sample, image_url: match.image_url } : sample;
+      return SAMPLE_HEALTHY_ITEMS.map((sample, idx) => {
+        // 1. Try keyword match with real dishes (e.g. "chicken", "paneer", "egg")
+        const sampleWords = sample.name.toLowerCase().split(/[\s()]+/);
+        const match = initialItems.find((i) => {
+          if (!i.image_url || !isValidMenuImageUrl(i.image_url)) return false;
+          const itemWords = i.name.toLowerCase().split(/[\s()]+/);
+          return sampleWords.some((w) => w.length > 3 && itemWords.includes(w));
         });
-      }
-      return SAMPLE_HEALTHY_ITEMS;
+
+        if (match?.image_url) {
+          return { ...sample, image_url: match.image_url };
+        }
+
+        // 2. If no direct keyword match, rotate through available canteen dish images
+        if (availableCanteenImages.length > 0) {
+          return {
+            ...sample,
+            image_url: availableCanteenImages[idx % availableCanteenImages.length],
+          };
+        }
+
+        return sample;
+      });
     }
+
     return initialItems;
   }, [useSampleData, initialItems]);
 
@@ -261,7 +284,7 @@ export function HealthyMainView({
               onSelectCalorieRange={(r) => setCalorieRange(r)}
             />
 
-            {/* Filtered Dishes Grid */}
+            {/* Filtered Dishes Properly Formatted List */}
             {filteredDishes.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-border/80 bg-card/60 p-8 text-center space-y-3 shadow-2xs">
                 <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
@@ -291,79 +314,110 @@ export function HealthyMainView({
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+              <div className="space-y-3.5 pt-1">
                 {filteredDishes.map((dish) => (
                   <div
                     key={dish.id}
-                    onClick={() => setSelectedDish(dish)}
-                    className="group rounded-3xl border border-emerald-950/8 dark:border-emerald-400/15 bg-card p-4 shadow-xs hover:border-emerald-500/40 hover:shadow-md transition-all duration-300 cursor-pointer flex flex-col justify-between gap-3 select-none"
+                    className="group relative flex w-full gap-3 sm:gap-4 rounded-2xl border border-emerald-950/10 dark:border-emerald-400/15 bg-card p-4 shadow-xs hover:border-emerald-500/40 hover:shadow-md transition-all duration-300 text-left select-none"
                   >
-                    <div className="flex gap-3.5">
-                      <div className="relative h-22 w-22 sm:h-24 sm:w-24 shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-muted/30">
+                    {/* Left: Information Area (generous width, no truncations) */}
+                    <div
+                      className="flex flex-1 flex-col justify-between min-w-0 pr-1 cursor-pointer"
+                      onClick={() => setSelectedDish(dish)}
+                    >
+                      <div className="space-y-1.5">
+                        {/* Top Meta Badges Row */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <VegIndicator isVeg={dish.is_veg} />
+
+                          {dish.protein_g != null && (
+                            <span className="text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/25 flex items-center gap-1">
+                              <Dumbbell className="h-3 w-3" />
+                              <span>{dish.protein_g}g Protein</span>
+                            </span>
+                          )}
+
+                          {dish.calories_kcal != null && (
+                            <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                              {dish.calories_kcal} kcal
+                            </span>
+                          )}
+
+                          {dish.prep_minutes > 0 && (
+                            <span className="text-[11px] text-muted-foreground flex items-center gap-1 font-medium">
+                              <Clock className="h-3 w-3 text-muted-foreground" />
+                              <span>~{dish.prep_minutes} min</span>
+                            </span>
+                          )}
+
+                          {dish.rating_avg != null && dish.rating_avg > 0 && (
+                            <div className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-bold px-1.5 py-0.5 rounded-md bg-amber-500/10">
+                              <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+                              <span>{dish.rating_avg.toFixed(1)}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Dish Name: Full, readable bold title */}
+                        <h3 className="text-sm sm:text-base font-black text-foreground group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors leading-snug line-clamp-2 pt-0.5">
+                          {dish.name}
+                        </h3>
+
+                        {/* Description: Readable text */}
+                        {dish.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                            {dish.description}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Bottom Info Row: Price & Nutrition Details Link */}
+                      <div className="mt-3 flex items-center justify-between pt-2 border-t border-border/50">
+                        <span className="text-base sm:text-lg font-black text-foreground tracking-tight">
+                          {formatPaise(dish.price_paise)}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDish(dish);
+                          }}
+                          className="text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-0.5 cursor-pointer py-1 px-1"
+                        >
+                          <span>Nutrition details</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Right: Generous Food Image + Add Button */}
+                    <div className="relative flex flex-col items-center justify-between shrink-0 w-26 sm:w-32">
+                      <div
+                        onClick={() => setSelectedDish(dish)}
+                        className="relative h-20 w-26 sm:h-24 sm:w-32 overflow-hidden rounded-2xl bg-muted/40 shadow-2xs group-hover:scale-105 transition-transform duration-300 cursor-pointer border border-border/60"
+                      >
                         <MenuItemImage
                           src={dish.image_url}
                           alt={dish.name}
-                          aspect="square"
-                          sizes="96px"
-                          className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          aspect="4/3"
+                          sizes="(max-width: 640px) 110px, 130px"
+                          className="h-full w-full object-cover"
                           containerClassName="h-full w-full"
                         />
                       </div>
 
-                      <div className="flex-1 min-w-0 space-y-1.5">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <VegIndicator isVeg={dish.is_veg} />
-                          {dish.protein_g != null && (
-                            <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/25">
-                              {dish.protein_g}g Protein
-                            </span>
-                          )}
-                          {dish.calories_kcal != null && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
-                              {dish.calories_kcal} kcal
-                            </span>
-                          )}
-                        </div>
-
-                        <h3 className="text-xs sm:text-sm font-black text-foreground truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
-                          {dish.name}
-                        </h3>
-
-                        {dish.description ? (
-                          <p className="text-[11px] text-muted-foreground line-clamp-1 leading-snug">
-                            {dish.description}
-                          </p>
-                        ) : (
-                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <Clock className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                            <span>~{dish.prep_minutes} min prep</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2.5 border-t border-border/50">
-                      <span className="text-sm font-black text-foreground">
-                        {formatPaise(dish.price_paise)}
-                      </span>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-bold group-hover:underline flex items-center gap-0.5">
-                          <span>Nutrition Details</span>
-                          <ChevronRight className="h-3 w-3" />
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={!dish.is_available}
-                          onClick={(e) => handleAddToCart(e, dish)}
-                          className="h-8 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-2xs active:scale-95 transition-all"
-                          aria-label={`Add ${dish.name} to cart`}
-                        >
-                          <Plus className="h-3.5 w-3.5 mr-1" />
-                          <span>Add</span>
-                        </Button>
-                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!dish.is_available}
+                        onClick={(e) => handleAddToCart(e, dish)}
+                        className="w-full mt-2 h-8.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                        aria-label={`Add ${dish.name} to cart`}
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-0.5" />
+                        <span>Add</span>
+                      </Button>
                     </div>
                   </div>
                 ))}
