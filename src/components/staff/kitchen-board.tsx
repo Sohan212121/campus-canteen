@@ -6,7 +6,7 @@ import {
   Volume2,
   VolumeX,
   Clock,
-  Sparkles,
+  Bell,
   CookingPot,
   CheckCircle2,
   CheckCheck,
@@ -336,7 +336,7 @@ export function KitchenBoard({ initialData }: KitchenBoardProps) {
         {/* Column 1: New (PLACED) */}
         <KanbanColumn
           title="New Orders"
-          icon={<Sparkles className="h-4 w-4 text-blue-500" />}
+          icon={<Bell className="h-4 w-4 text-blue-500" />}
           count={board.newOrders.length}
           badgeClass="bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30"
           orders={board.newOrders}

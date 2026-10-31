@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { X, Plus, Heart, Sparkles, AlertCircle, Info, Clock } from "lucide-react";
+import { X, Plus, Heart, AlertCircle, Info, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -418,9 +418,9 @@ export function HealthyNutritionSheet({
                   {insights.highlights.map((h, i) => (
                     <div
                       key={i}
-                      className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold"
+                      className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-semibold"
                     >
-                      <Sparkles className="h-3 w-3 shrink-0" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400 shrink-0" />
                       <span>{h}</span>
                     </div>
                   ))}

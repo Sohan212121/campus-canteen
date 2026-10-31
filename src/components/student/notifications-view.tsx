@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck, Clock, ArrowRight, Sparkles, CheckCircle2 } from "lucide-react";
+import { Bell, CheckCheck, Clock, ArrowRight, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
@@ -225,7 +225,7 @@ export function NotificationsView({ userId, initialNotifications }: Notification
                       </h2>
                       {isReady && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/20 px-2 py-0.5 text-[9px] font-bold text-emerald-800 dark:text-emerald-200">
-                          <Sparkles className="h-2.5 w-2.5" /> Ready for Pickup
+                          <CheckCircle2 className="h-2.5 w-2.5" /> Ready for Pickup
                         </span>
                       )}
                     </div>

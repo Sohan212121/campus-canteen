@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, Dumbbell, Wheat, Sparkles, Heart, Scale, Info, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Dumbbell, Wheat, Leaf, Heart, Scale, Info, CheckCircle2 } from "lucide-react";
 import { requireRole } from "@/server/auth";
 import { HEALTHY_SCORE_CRITERIA } from "@/lib/healthy-constants";
 
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 const CRITERION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   protein_density: Dumbbell,
   fibre: Wheat,
-  carb_quality: Sparkles,
+  carb_quality: Leaf,
   fat_quality: Heart,
   calorie_balance: Scale,
 };
@@ -79,7 +79,7 @@ export default async function HealthyScoreExplainerPage() {
 
         <div className="space-y-3">
           {HEALTHY_SCORE_CRITERIA.map((criterion) => {
-            const Icon = CRITERION_ICONS[criterion.id] || Sparkles;
+            const Icon = CRITERION_ICONS[criterion.id] || Leaf;
 
             return (
               <div

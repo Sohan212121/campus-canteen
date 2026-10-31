@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { X, SlidersHorizontal, Plus, Star, Clock, Sparkles } from "lucide-react";
+import { X, SlidersHorizontal, Plus, Star, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -246,7 +246,6 @@ export function HealthyPreferencesSheet({
               onClick={() => handleComputeSuggestions()}
               className="w-full min-h-[44px] rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs active:scale-95 transition-all"
             >
-              <Sparkles className="h-4 w-4 mr-1.5" />
               <span>Show Matches</span>
             </Button>
           </div>

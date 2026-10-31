@@ -10,7 +10,6 @@ import {
   Plus,
   Minus,
   Clock,
-  Sparkles,
   Dumbbell,
   Leaf,
   Flame,
@@ -282,8 +281,7 @@ export function HealthyModeView({ canteenItems = [] }: HealthyModeViewProps) {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <VegIndicator isVeg={item.is_veg} />
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-black text-emerald-800 dark:text-emerald-300">
-                      <Sparkles className="h-3 w-3" />
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-black text-emerald-800 dark:text-emerald-300">
                       <span>{item.proteinHighlight}</span>
                     </span>
                   </div>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Clock } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -125,7 +125,7 @@ export default async function StudentHomePage() {
         <section className="overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card p-4 shadow-2xs space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5" /> Active Order
+              <Clock className="h-3.5 w-3.5" /> Active Order
             </span>
             <Badge
               variant={getStatusBadgeConfig(latestActiveOrder.status).variant}

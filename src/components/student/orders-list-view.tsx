@@ -8,7 +8,6 @@ import {
   Clock,
   ArrowRight,
   RotateCcw,
-  Sparkles,
   Loader2,
   ChevronRight,
 } from "lucide-react";
@@ -262,7 +261,7 @@ export function OrdersListView({
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5" /> Active Pre-Orders ({activeOrders.length})
+              <Clock className="h-3.5 w-3.5" /> Active Pre-Orders ({activeOrders.length})
             </h2>
           </div>
 

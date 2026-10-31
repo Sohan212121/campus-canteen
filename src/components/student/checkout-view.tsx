@@ -9,7 +9,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   RefreshCw,
-  Sparkles,
+  Check,
   RotateCcw,
   Zap,
   CalendarClock,
@@ -832,7 +832,7 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
             </>
           ) : (
             <>
-              <Sparkles className="h-4 w-4" />
+              <Check className="h-4 w-4" />
               <span>Place Order &bull; {formatPaise(subtotalPaise)}</span>
             </>
           )}

@@ -33,7 +33,7 @@ export const HEALTHY_SCORE_CRITERIA: ScoreCriterionConfig[] = [
     id: "carb_quality",
     name: "Carbohydrate Quality",
     weightPercent: 15,
-    icon: "Sparkles",
+    icon: "Leaf",
     description: "Assesses the proportion of complex carbohydrates relative to simple sugars. Lower sugar proportion scores higher.",
   },
   {
@@ -137,3 +137,4 @@ export const HEALTHY_CAROUSEL_TIPS = [
     tag: "Campus Nutrition Tip #8",
   },
 ];
+

@@ -7,7 +7,6 @@ import {
   Leaf,
   SlidersHorizontal,
   Plus,
-  Sparkles,
   ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -176,9 +175,8 @@ export function HealthyMainView({
                 <SlidersHorizontal className="h-5 w-5" />
               </div>
               <div className="space-y-0.5">
-                <h3 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <span>Customise protein & calorie targets</span>
-                  <Sparkles className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-xs font-bold text-foreground">
+                  Customise protein & calorie targets
                 </h3>
                 <p className="text-[11px] text-muted-foreground leading-snug">
                   Get personalized suggestions matching your daily fitness target

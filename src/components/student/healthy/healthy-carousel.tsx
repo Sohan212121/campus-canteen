@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Sparkles, Heart } from "lucide-react";
+import { ChevronLeft, ChevronRight, Heart } from "lucide-react";
 import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { HEALTHY_CAROUSEL_TIPS } from "@/lib/healthy-constants";
 import { OWNER_LICENSED_BANNER_PHOTOS } from "@/lib/healthy-banner-config";
@@ -179,8 +179,7 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
           >
             {/* Top row */}
             <div className="flex items-start justify-between gap-3 relative z-10">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-[11px] font-black uppercase tracking-wider text-emerald-200 shadow-2xs">
-                <Sparkles className="h-3 w-3 text-emerald-300" />
+              <span className="inline-flex items-center px-3 py-1 rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-[11px] font-black uppercase tracking-wider text-emerald-200 shadow-2xs">
                 <span>{slide.tag}</span>
               </span>
 

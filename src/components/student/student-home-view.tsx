@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
-  Sparkles,
   Utensils,
   ArrowRight,
   Leaf,
@@ -74,7 +73,7 @@ const PROMO_SLIDES: PromoSlide[] = [
   {
     id: "homely-meals",
     badge: "INTRODUCING",
-    badgeIcon: "✨",
+    badgeIcon: "🍱",
     title: "Homely Meal Subscriptions",
     subtitle: "Pure desi goodness with fresh rotis, fragrant dal & homestyle thalis.",
     highlight: "Made fresh daily for campus students",
@@ -401,8 +400,7 @@ export function StudentHomeView({
                 <p className="text-xs sm:text-sm text-white/85 line-clamp-2 leading-relaxed max-w-md">
                   {slide.subtitle}
                 </p>
-                <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/90 bg-black/20 px-2.5 py-0.5 rounded-lg backdrop-blur-xs">
-                  <Sparkles className="h-3 w-3 text-amber-300" />
+                <div className="inline-flex items-center text-[11px] font-semibold text-white/90 bg-black/20 px-2.5 py-0.5 rounded-lg backdrop-blur-xs">
                   <span>{slide.highlight}</span>
                 </div>
               </div>
