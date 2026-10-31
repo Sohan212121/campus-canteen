@@ -64,7 +64,7 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
     }
 
     const targetPath = destinationHref.split("?")[0].split("#")[0];
-    if (targetPath === currentPathRef.current) return;
+    if (targetPath === currentPathRef.current || targetPath.startsWith("/healthy")) return;
 
     clearAllTimers();
 
@@ -110,7 +110,12 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
       }
 
       const targetPath = href.split("?")[0].split("#")[0];
-      if (targetPath && targetPath !== currentPathRef.current && targetPath.startsWith("/")) {
+      if (
+        targetPath &&
+        targetPath !== currentPathRef.current &&
+        targetPath.startsWith("/") &&
+        !targetPath.startsWith("/healthy")
+      ) {
         startTransition(href);
       }
     };
