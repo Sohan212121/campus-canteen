@@ -12,6 +12,14 @@ export function LogoTransition({
   destinationLabel = "Campus Dining",
   isExiting = false,
 }: LogoTransitionProps) {
+  // Strict failsafe: NEVER render the old cutlery transition if destination is Healthy Mode or on healthy route
+  if (
+    destinationLabel.toLowerCase().includes("healthy") ||
+    (typeof window !== "undefined" && window.location.pathname.startsWith("/healthy"))
+  ) {
+    return null;
+  }
+
   return (
     <div
       key="logo-transition-overlay"

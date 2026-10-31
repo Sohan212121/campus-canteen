@@ -1,3 +1,5 @@
+import { HealthyLogoTransition } from "@/components/ui/healthy-logo-transition";
+
 export default function HealthyLoading() {
-  return null;
+  return <HealthyLogoTransition destinationLabel="Healthy Mode" />;
 }

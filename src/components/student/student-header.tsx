@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { getNotificationsAction } from "@/server/actions/notifications";
 import { NotificationBell } from "@/components/student/notification-bell";
+import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
 
 interface StudentHeaderProps {
   userId: string;
@@ -18,6 +19,7 @@ interface StudentHeaderProps {
 export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { startTransition } = useNavigationTransition();
   const isHealthy = pathname === "/healthy";
   const [unreadCount, setUnreadCount] = useState<number>(initialUnreadCount);
   const toastedNotificationIds = useRef<Set<string>>(new Set());
@@ -115,6 +117,9 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
         <Link
           href={isHealthy ? "/" : "/healthy"}
           prefetch={true}
+          onClick={() => {
+            startTransition(isHealthy ? "/" : "/healthy");
+          }}
           className={`group/healthy h-11 px-3 sm:px-3.5 rounded-xl border font-bold text-xs flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all select-none cursor-pointer ${
             isHealthy
               ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"

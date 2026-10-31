@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { LogoTransition } from "@/components/ui/logo-transition";
+import { HealthyLogoTransition } from "@/components/ui/healthy-logo-transition";
 
 interface NavigationTransitionContextType {
   startTransition: (destinationHref: string, customLabel?: string) => void;
@@ -24,17 +25,22 @@ const SECTION_TITLES: Record<string, string> = {
   "/profile": "Student Profile",
   "/checkout": "Secure Checkout",
   "/notifications": "Notifications",
+  "/healthy": "Healthy Mode",
+  "/healthy/score": "Healthy Score Guide",
 };
 
 export function getSectionTitle(path: string): string {
   if (SECTION_TITLES[path]) return SECTION_TITLES[path];
+  if (path.startsWith("/healthy/score")) return "Healthy Score Guide";
+  if (path.startsWith("/healthy")) return "Healthy Mode";
   if (path.startsWith("/orders/")) return "Order Token Tracker";
   if (path.startsWith("/admin")) return "Staff & Canteen Admin";
   if (path.startsWith("/staff")) return "Canteen Staff Board";
   return "Campus Dining";
 }
 
-const MIN_DISPLAY_MS = 350; // Responsive & fluid: shows pop & light sweep cleanly without sluggish lag
+const MIN_DISPLAY_MS = 350; // Standard routes: responsive & fluid
+const HEALTHY_MIN_DISPLAY_MS = 800; // Healthy Mode: deliberate, premium showcase of botanical badge & light sweep
 const EXIT_FADE_MS = 240;   // Matches cb-backdrop-exit & cb-stage-exit duration
 const MAX_FAILSAFE_MS = 2500; // Failsafe if route change completely stalls
 
@@ -43,8 +49,12 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [destinationLabel, setDestinationLabel] = useState("Campus Dining");
+  const [transitionTheme, setTransitionTheme] = useState<"standard" | "healthy">("standard");
 
   const currentPathRef = useRef(pathname);
+  const pendingTargetRef = useRef<string | null>(null);
+  const transitionThemeRef = useRef<"standard" | "healthy">("standard");
+  const isTransitioningRef = useRef(false);
   const transitionStartRef = useRef<number>(0);
   const exitTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const finishTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -58,17 +68,28 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
 
   // Trigger smooth transition
   const startTransition = useCallback((destinationHref: string, customLabel?: string) => {
-    // Respect user's prefers-reduced-motion
-    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return;
-    }
-
     const targetPath = destinationHref.split("?")[0].split("#")[0];
-    if (targetPath === currentPathRef.current || targetPath.startsWith("/healthy")) return;
+    if (targetPath === currentPathRef.current) return;
+    if (isTransitioningRef.current && targetPath === pendingTargetRef.current) return;
 
     clearAllTimers();
 
-    setDestinationLabel(customLabel || getSectionTitle(targetPath));
+    const isHealthyDest = targetPath.startsWith("/healthy");
+    const theme = isHealthyDest ? "healthy" : "standard";
+    transitionThemeRef.current = theme;
+    pendingTargetRef.current = targetPath;
+    isTransitioningRef.current = true;
+
+    setTransitionTheme(theme);
+    setDestinationLabel(
+      customLabel ||
+        (isHealthyDest
+          ? targetPath === "/healthy/score"
+            ? "Healthy Score Guide"
+            : "Healthy Mode"
+          : getSectionTitle(targetPath))
+    );
+
     transitionStartRef.current = Date.now();
     setIsExiting(false);
     setIsTransitioning(true);
@@ -79,6 +100,8 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
       finishTimeoutRef.current = setTimeout(() => {
         setIsTransitioning(false);
         setIsExiting(false);
+        isTransitioningRef.current = false;
+        pendingTargetRef.current = null;
       }, EXIT_FADE_MS);
     }, MAX_FAILSAFE_MS);
   }, []);
@@ -86,7 +109,8 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
   // Intercept document link clicks for global automatic transitions
   useEffect(() => {
     const handleDocumentClick = (e: MouseEvent) => {
-      const anchor = (e.target as HTMLElement).closest("a");
+      const target = e.target as Element | null;
+      const anchor = target?.closest?.("a");
       if (!anchor) return;
 
       const href = anchor.getAttribute("href");
@@ -110,12 +134,7 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
       }
 
       const targetPath = href.split("?")[0].split("#")[0];
-      if (
-        targetPath &&
-        targetPath !== currentPathRef.current &&
-        targetPath.startsWith("/") &&
-        !targetPath.startsWith("/healthy")
-      ) {
+      if (targetPath && targetPath !== currentPathRef.current && targetPath.startsWith("/")) {
         startTransition(href);
       }
     };
@@ -135,7 +154,8 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
         if (failsafeTimeoutRef.current) clearTimeout(failsafeTimeoutRef.current);
 
         const elapsed = Date.now() - transitionStartRef.current;
-        const remainingHold = Math.max(0, MIN_DISPLAY_MS - elapsed);
+        const minHold = transitionThemeRef.current === "healthy" ? HEALTHY_MIN_DISPLAY_MS : MIN_DISPLAY_MS;
+        const remainingHold = Math.max(0, minHold - elapsed);
 
         // Schedule exit after minimum hold duration
         exitTimeoutRef.current = setTimeout(() => {
@@ -143,6 +163,8 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
           finishTimeoutRef.current = setTimeout(() => {
             setIsTransitioning(false);
             setIsExiting(false);
+            isTransitioningRef.current = false;
+            pendingTargetRef.current = null;
           }, EXIT_FADE_MS);
         }, remainingHold);
       }
@@ -160,10 +182,17 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
     <NavigationTransitionContext.Provider value={{ startTransition, isTransitioning }}>
       {children}
       {isTransitioning && (
-        <LogoTransition
-          destinationLabel={destinationLabel}
-          isExiting={isExiting}
-        />
+        transitionTheme === "healthy" ? (
+          <HealthyLogoTransition
+            destinationLabel={destinationLabel}
+            isExiting={isExiting}
+          />
+        ) : (
+          <LogoTransition
+            destinationLabel={destinationLabel}
+            isExiting={isExiting}
+          />
+        )
       )}
     </NavigationTransitionContext.Provider>
   );

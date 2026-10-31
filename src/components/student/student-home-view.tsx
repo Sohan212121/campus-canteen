@@ -21,6 +21,7 @@ import { BestSellersRow } from "@/components/student/best-sellers-row";
 import { CartShortcut } from "@/components/student/cart-shortcut";
 import { type MenuItemPriceRef, registerMenuItemPrices } from "@/lib/cart-shortcut";
 import type { BestSellerItem } from "@/server/actions/best-sellers";
+import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
 
 export type CategoryData = {
   id: string;
@@ -192,6 +193,7 @@ export function StudentHomeView({
   initialItems,
   bestSellers = [],
 }: StudentHomeViewProps) {
+  const { startTransition } = useNavigationTransition();
   // 1. Carousel state (changes every 2.5s with right-to-left sliding animation)
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -584,6 +586,9 @@ export function StudentHomeView({
           <Link
             href="/healthy"
             prefetch={true}
+            onClick={() => {
+              startTransition("/healthy");
+            }}
             className="min-h-[36px] h-9 px-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs"
             aria-label="Healthy Mode & High-Protein Fuel"
           >
