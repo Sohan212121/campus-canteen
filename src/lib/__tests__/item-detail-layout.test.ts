@@ -31,10 +31,25 @@ describe("ItemDetailSheet 375px Layout & Structure Tests (Amendment 4)", () => {
     expect(fileContent).toContain('item.calories_kcal != null &&');
   });
 
-  it("provides ingredients disclosure with accessible attributes and chevron flip", () => {
-    expect(fileContent).toContain('aria-expanded={isIngredientsOpen}');
-    expect(fileContent).toContain('aria-controls="ingredients-panel"');
-    expect(fileContent).toContain('motion-reduce:transition-none');
+  it("integrates IngredientsPanel with accessible attributes, roving tabindex, and chevron flip", () => {
+    expect(fileContent).toContain('<IngredientsPanel ingredients={item.ingredients} itemName={item.name} />');
     expect(fileContent).toContain('Calorie and ingredient details are provided by the canteen and are approximate.');
+
+    const panelFilePath = path.resolve(
+      __dirname,
+      "../../components/student/ingredients-panel.tsx"
+    );
+    const panelContent = fs.readFileSync(panelFilePath, "utf-8");
+
+    // Accessible attributes and controls
+    expect(panelContent).toContain('aria-expanded={isOpen}');
+    expect(panelContent).toContain('aria-controls={panelId}');
+    expect(panelContent).toContain('role="list"');
+    expect(panelContent).toContain('aria-pressed={isSelected}');
+    expect(panelContent).toContain('tabIndex={focusedIdx === idx ? 0 : -1}');
+    expect(panelContent).toContain('min-h-[44px]');
+    expect(panelContent).toContain('motion-reduce:transition-none');
+    expect(panelContent).toContain('motion-safe:animate-in');
+    expect(panelContent).toContain('Calorie and ingredient details are provided by the canteen and are approximate.');
   });
 });

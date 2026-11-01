@@ -344,14 +344,14 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
               handleFrontClick();
             }
           }}
-          className="flip-card-face rounded-2xl border border-border/80 dark:border-[#352f2a] bg-card dark:bg-[#1e1a17] p-5 shadow-xs dark:shadow-md flex flex-col justify-between cursor-pointer hover:border-foreground/30 dark:hover:border-amber-500/40 hover:shadow-sm transition-all duration-200 select-none text-left min-h-[185px]"
+          className="flip-card-face rounded-2xl border border-border/80 dark:border-[#222533] bg-card dark:bg-[#121319] p-5 shadow-xs dark:shadow-xl flex flex-col justify-between cursor-pointer hover:border-foreground/30 dark:hover:border-[#FBBF24]/50 hover:shadow-sm transition-all duration-200 select-none text-left min-h-[185px]"
           title="Click to flip for food cravings!"
         >
           {/* Top row: Status indicator */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#d9531e] shrink-0"></span>
-              <span className="text-xs font-semibold text-[#635e58] dark:text-stone-300 font-headline uppercase tracking-wider text-[11px]">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#d9531e] dark:bg-[#EF4444] dark:pulse-dot shrink-0"></span>
+              <span className="text-xs font-semibold text-[#635e58] dark:text-slate-300 font-headline uppercase tracking-wider text-[11px]">
                 Ready for lunch rush?
               </span>
             </div>
@@ -360,16 +360,16 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
           {/* Center: Welcome Heading with Smoked & Golden Accent */}
           <div className="my-auto py-2">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#181513] dark:text-white uppercase font-headline truncate">
-                Yo, {firstName}!
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#181513] dark:text-white uppercase font-display truncate">
+                Yo, <span className="dark:text-[#FBBF24]">{firstName}!</span>
               </h1>
-              <span className="w-2 h-2 rounded-full bg-[#d9531e] inline-block shrink-0 shadow-[0_0_8px_rgba(217,83,30,0.6)]" />
+              <span className="w-2 h-2 rounded-full bg-[#d9531e] dark:bg-[#EF4444] inline-block shrink-0 shadow-[0_0_8px_rgba(217,83,30,0.6)]" />
             </div>
           </div>
 
           {/* Bottom row: Call-to-action & Prominent Food Mood Button */}
-          <div className="pt-3 border-t border-[#ded5c4] dark:border-[#352f2a] flex items-center justify-between gap-3">
-            <span className="text-xs font-medium text-[#635e58] dark:text-stone-400">
+          <div className="pt-3 border-t border-[#ded5c4] dark:border-[#1E202B] flex items-center justify-between gap-3">
+            <span className="text-xs font-medium text-[#635e58] dark:text-slate-400">
               What are you craving today?
             </span>
 
@@ -379,11 +379,11 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
                 e.stopPropagation();
                 handleFrontClick();
               }}
-              className="min-h-[38px] h-9 px-4 rounded-xl font-bold text-xs bg-[#1b1917] hover:bg-[#d9531e] text-[#f5efe4] border border-[#36322e] font-headline uppercase tracking-wider active:scale-95 transition-all shadow-sm inline-flex items-center gap-2 group cursor-pointer shrink-0"
+              className="min-h-[38px] h-9 px-4 rounded-xl font-bold text-xs bg-[#1b1917] dark:bg-[#1C1F2B] hover:bg-[#d9531e] dark:hover:bg-[#FBBF24] dark:hover:text-[#090A0F] text-[#f5efe4] dark:text-[#FBBF24] border border-[#36322e] dark:border-[#2D3142] font-headline uppercase tracking-wider active:scale-95 transition-all shadow-sm inline-flex items-center gap-2 group cursor-pointer shrink-0"
               title="Flip for food cravings"
             >
               <span>Food Mood</span>
-              <RotateCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-500 text-[#f5efe4]" />
+              <RotateCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-500 text-[#f5efe4] dark:text-[#FBBF24] group-hover:dark:text-[#090A0F]" />
             </button>
           </div>
         </div>
@@ -401,13 +401,13 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
               handleNextQuote();
             }
           }}
-          className="flip-card-back rounded-2xl border border-[#ded5c4] dark:border-[#352f2a] bg-[#eae2d2] dark:bg-[#1e1a17] p-5 shadow-xs dark:shadow-md flex flex-col justify-between select-none text-left cursor-pointer hover:border-[#181513] dark:hover:border-amber-500/40 transition-all duration-200 min-h-[185px]"
+          className="flip-card-back rounded-2xl border border-[#ded5c4] dark:border-[#222533] bg-[#eae2d2] dark:bg-[#121319] p-5 shadow-xs dark:shadow-xl flex flex-col justify-between select-none text-left cursor-pointer hover:border-[#181513] dark:hover:border-[#FBBF24]/50 transition-all duration-200 min-h-[185px]"
           title="Click to see another quote, or click Back to return"
         >
           {/* Top Row: Category tag, headline & flip back button */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-[#1b1917] text-[#e5891e] text-[10px] font-bold tracking-wider uppercase border border-[#36322e] font-headline">
+              <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-[#1b1917] dark:bg-[#1C1F2B] text-[#e5891e] dark:text-[#FBBF24] text-[10px] font-bold tracking-wider uppercase border border-[#36322e] dark:border-[#2D3142] font-headline">
                 {currentQuote.category}
               </span>
               <span className="text-xs font-bold text-[#181513] dark:text-white flex items-center gap-1.5 truncate">
@@ -422,7 +422,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
                 e.stopPropagation();
                 handleFlipBack();
               }}
-              className="min-h-[32px] px-2.5 rounded-lg text-[11px] font-semibold text-[#635e58] dark:text-stone-300 hover:text-[#181513] dark:hover:text-white hover:bg-black/5 dark:hover:bg-[#25201c] transition-colors flex items-center gap-1 cursor-pointer shrink-0 border border-[#ded5c4] dark:border-[#352f2a]"
+              className="min-h-[32px] px-2.5 rounded-lg text-[11px] font-semibold text-[#635e58] dark:text-slate-300 hover:text-[#181513] dark:hover:text-white hover:bg-black/5 dark:hover:bg-[#1C1F2B] transition-colors flex items-center gap-1 cursor-pointer shrink-0 border border-[#ded5c4] dark:border-[#222533]"
               title="Flip back to greeting"
             >
               <RotateCw className="h-3 w-3" />
@@ -432,14 +432,14 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
 
           {/* Middle Row: Quote Text */}
           <div className="py-2.5 my-auto">
-            <p className="text-sm sm:text-base font-medium text-[#181513] dark:text-[#fbf8f5] leading-snug italic">
+            <p className="text-sm sm:text-base font-medium text-[#181513] dark:text-[#f8fafc] leading-snug italic">
               &ldquo;{currentQuote.quote}&rdquo;
             </p>
           </div>
 
           {/* Bottom Row: Tap hint and Next Quote button */}
-          <div className="pt-2 border-t border-[#ded5c4] dark:border-[#352f2a] flex items-center justify-between gap-2 text-xs">
-            <span className="text-[11px] text-[#635e58] dark:text-stone-400 font-medium truncate">
+          <div className="pt-2 border-t border-[#ded5c4] dark:border-[#1E202B] flex items-center justify-between gap-2 text-xs">
+            <span className="text-[11px] text-[#635e58] dark:text-slate-400 font-medium truncate">
               Tap card for next quote 💬
             </span>
 
@@ -449,7 +449,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
                 e.stopPropagation();
                 handleNextQuote();
               }}
-              className="min-h-[36px] h-9 px-3 rounded-xl bg-[#1b1917] hover:bg-[#d9531e] text-[#f5efe4] border border-[#36322e] font-bold text-xs inline-flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer shrink-0 font-headline uppercase tracking-wider"
+              className="min-h-[36px] h-9 px-3 rounded-xl bg-[#1b1917] dark:bg-[#1C1F2B] hover:bg-[#d9531e] dark:hover:bg-[#FBBF24] text-[#f5efe4] dark:text-[#FBBF24] hover:dark:text-[#090A0F] border border-[#36322e] dark:border-[#2D3142] font-bold text-xs inline-flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer shrink-0 font-headline uppercase tracking-wider"
             >
               <span>Next Quote</span>
               <ArrowRight className="h-3.5 w-3.5" />

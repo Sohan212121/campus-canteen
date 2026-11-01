@@ -163,3 +163,4 @@ REVOKE ALL ON FUNCTION public.prevent_menu_item_unauthorized_update() FROM PUBLI
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;
+

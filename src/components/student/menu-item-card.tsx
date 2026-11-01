@@ -60,7 +60,7 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
 
   return (
     <div
-      className={`group relative flex w-full gap-3 rounded-2xl border border-[#decdb0] dark:border-[#352f2a] bg-[#efe3cb] dark:bg-[#1e1a17] p-3.5 shadow-2xs dark:shadow-sm transition-all hover:border-[#1d1713]/40 dark:hover:border-amber-500/40 hover:shadow-xs text-left ${
+      className={`group relative flex w-full gap-3 rounded-2xl border border-[#decdb0] dark:border-[#222533] bg-[#efe3cb] dark:bg-[#121319] p-3.5 shadow-2xs dark:shadow-lg transition-all hover:border-[#1d1713]/40 dark:hover:border-[#FBBF24]/50 hover:shadow-xs text-left ${
         isOutOfStock ? "opacity-75 bg-[#e8dac0]/40" : ""
       }`}
     >
@@ -75,7 +75,7 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
           <div className="flex items-center gap-1.5 flex-wrap">
             <VegIndicator isVeg={item.is_veg} />
             {item.prep_minutes > 0 && (
-              <span className="inline-flex items-center gap-0.5 text-[11px] text-[#635549] dark:text-stone-400 font-medium">
+              <span className="inline-flex items-center gap-0.5 text-[11px] text-[#635549] dark:text-slate-400 font-medium">
                 <Clock className="h-3 w-3 stroke-[2]" />
                 ~{item.prep_minutes} min
               </span>
@@ -94,19 +94,19 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
             )}
           </div>
 
-          <h3 className="font-bold text-[#1d1713] dark:text-white font-headline text-[15px] sm:text-[16px] uppercase tracking-wide leading-snug line-clamp-1 group-hover:text-[#d96b27] dark:group-hover:text-amber-400 transition-colors">
+          <h3 className="font-bold text-[#1d1713] dark:text-white font-headline dark:font-display text-[15px] sm:text-[18px] uppercase tracking-wide leading-snug line-clamp-1 group-hover:text-[#d96b27] dark:group-hover:text-[#FBBF24] transition-colors">
             {item.name}
           </h3>
 
           {item.description && (
-            <p className="text-[11px] text-[#635549] dark:text-stone-400 line-clamp-1 leading-relaxed font-medium">
+            <p className="text-[11px] text-[#635549] dark:text-slate-400 line-clamp-1 leading-relaxed font-medium">
               {item.description}
             </p>
           )}
         </div>
 
         <div className="mt-2.5 flex items-center justify-between">
-          <span className="font-bold text-[#1d1713] dark:text-white font-headline text-[18px] sm:text-[20px]">
+          <span className="font-bold text-[#1d1713] dark:text-[#FBBF24] font-headline dark:font-display text-[18px] sm:text-[20px]">
             {formatPaise(item.price_paise)}
           </span>
           {isOutOfStock && (
@@ -122,7 +122,7 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
         <button
           type="button"
           onClick={() => onOpenDetail(item)}
-          className="relative h-20 w-24 sm:h-22 sm:w-28 overflow-hidden rounded-xl bg-[#e8dac0] dark:bg-[#25201c] cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+          className="relative h-20 w-24 sm:h-22 sm:w-28 overflow-hidden rounded-xl bg-[#e8dac0] dark:bg-[#090A0F] cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`View ${item.name} image`}
         >
           <MenuItemImage
@@ -130,12 +130,12 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
             alt={item.name}
             aspect="4/3"
             sizes="(max-width: 640px) 100px, 120px"
-            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300 rounded-xl"
             containerClassName="h-full w-full"
             placeholderClassName="h-full w-full"
           />
           {isOutOfStock && (
-            <div className="absolute inset-0 bg-[#181615]/70 backdrop-blur-[1px] flex items-center justify-center p-1 text-center">
+            <div className="absolute inset-0 bg-[#181615]/70 dark:bg-black/80 backdrop-blur-[1px] flex items-center justify-center p-1 text-center">
               <span className="text-[10px] font-bold text-red-400 leading-tight uppercase font-headline">
                 Unavailable
               </span>
@@ -151,30 +151,30 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
               variant="outline"
               size="sm"
               disabled
-              className="min-h-[44px] w-full text-xs font-medium opacity-50 cursor-not-allowed font-headline uppercase"
+              className="min-h-[44px] w-full text-xs font-medium opacity-50 cursor-not-allowed font-headline uppercase dark:bg-[#121319] dark:border-[#222533] dark:text-slate-500"
             >
               Add
             </Button>
           ) : currentQuantity > 0 ? (
             <div
-              className="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-[#362f2b] bg-[#181615] text-[#ffb94e] px-1 shadow-sm"
+              className="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-[#362f2b] dark:border-[#2D3142] bg-[#181615] dark:bg-[#1C1F2B] text-[#ffb94e] dark:text-[#FBBF24] px-1 shadow-sm"
             >
               <button
                 type="button"
                 onClick={handleDecrement}
-                className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-white/10 text-[#ffb94e] transition-colors cursor-pointer"
+                className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-white/10 text-[#ffb94e] dark:text-[#FBBF24] transition-colors cursor-pointer"
                 aria-label={`Decrease ${item.name} quantity`}
               >
                 <Minus className="h-4 w-4" />
               </button>
-              <span className="text-xs font-bold px-1 select-none font-headline text-base text-[#f6eedb]">
+              <span className="text-xs font-bold px-1 select-none font-headline dark:font-display text-base text-[#f6eedb] dark:text-white">
                 {currentQuantity}
               </span>
               <button
                 type="button"
                 onClick={handleIncrement}
                 disabled={currentQuantity >= effectiveMax}
-                className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-white/10 text-[#ffb94e] disabled:opacity-40 transition-colors cursor-pointer"
+                className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-white/10 text-[#ffb94e] dark:text-[#FBBF24] disabled:opacity-40 transition-colors cursor-pointer"
                 aria-label={`Increase ${item.name} quantity`}
               >
                 <Plus className="h-4 w-4" />
@@ -184,7 +184,7 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
             <button
               type="button"
               onClick={handleQuickAdd}
-              className="min-h-[44px] w-full bg-[#181615] hover:bg-[#d96b27] text-[#ffb94e] hover:text-[#f6eedb] border border-[#362f2b] font-headline uppercase tracking-wider rounded-lg shadow-sm transition-all active:scale-95 text-xs font-bold cursor-pointer flex items-center justify-center gap-1"
+              className="min-h-[44px] w-full bg-[#181615] hover:bg-[#d96b27] dark:bg-[#1C1F2B] hover:dark:bg-[#FBBF24] text-[#ffb94e] hover:text-[#f6eedb] dark:text-white hover:dark:text-[#090A0F] border border-[#362f2b] dark:border-[#2D3142] hover:dark:border-transparent font-headline dark:font-sans uppercase tracking-wider rounded-lg shadow-sm transition-all active:scale-95 text-xs font-bold cursor-pointer flex items-center justify-center gap-1"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Add +</span>

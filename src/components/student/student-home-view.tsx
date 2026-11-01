@@ -400,18 +400,21 @@ export function StudentHomeView({
             >
               <div
                 className={cn(
-                  "w-14 h-14 rounded-2xl bg-[#1b1917] flex items-center justify-center p-2 text-2xl transition-all shadow-sm",
+                  "w-14 h-14 rounded-2xl bg-[#1b1917] dark:bg-[#121319] flex items-center justify-center p-2 text-2xl transition-all shadow-sm relative",
                   isSelected
-                    ? "border-2 border-[#d9531e] text-[#d9531e] shadow-md shadow-[#1b1917]/25"
-                    : "border border-[#36322e] hover:border-[#c2630d] text-[#f5efe4]"
+                    ? "border-2 border-[#d9531e] dark:border-[#FBBF24] text-[#d9531e] dark:text-[#FBBF24] shadow-md dark:shadow-lg dark:shadow-[#FBBF24]/20"
+                    : "border border-[#36322e] dark:border-[#222533] hover:border-[#c2630d] dark:hover:border-[#FBBF24]/50 text-[#f5efe4] dark:text-slate-300"
                 )}
               >
                 <span className="filter drop-shadow">{tab.icon}</span>
+                {isSelected && (
+                  <span className="hidden dark:block absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#EF4444] border-2 border-[#090A0F]" />
+                )}
               </div>
               <span
                 className={cn(
                   "font-headline text-[11px] uppercase tracking-wider font-bold transition-colors",
-                  isSelected ? "text-[#d9531e]" : "text-[#181513] dark:text-stone-300"
+                  isSelected ? "text-[#d9531e] dark:text-[#FBBF24]" : "text-[#181513] dark:text-slate-300"
                 )}
               >
                 {tab.id === "all" ? "All" : tab.label}
@@ -425,7 +428,7 @@ export function StudentHomeView({
           SECTION 1: HIGH-IMPACT FAST-CASUAL HERO BANNER (Smoked & Golden Style)
           ========================================================================= */}
       <section
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1b1917] via-[#231f1d] to-[#141210] border border-[#36322e] text-[#f5efe4] shadow-md p-5 select-none"
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1b1917] via-[#231f1d] to-[#141210] dark:from-[#16171E] dark:via-[#101117] dark:to-[#0A0A0E] border border-[#36322e] dark:border-[#262836] text-[#f5efe4] shadow-md dark:shadow-2xl p-5 select-none"
         aria-label="Campus food highlights and subscriptions"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
@@ -435,7 +438,7 @@ export function StudentHomeView({
       >
         {/* Ambient Radial Glow */}
         <div
-          className="absolute -top-16 -left-16 w-48 h-48 bg-[#d9531e]/20 rounded-full blur-3xl pointer-events-none"
+          className="absolute -top-16 -left-16 w-48 h-48 bg-[#d9531e]/20 dark:bg-[#F59E0B]/10 rounded-full blur-3xl pointer-events-none"
           aria-hidden="true"
         />
 
@@ -443,17 +446,17 @@ export function StudentHomeView({
         <div className="relative z-10 flex flex-col justify-between min-h-[175px] space-y-3">
           <div className="max-w-[62%] sm:max-w-[68%] space-y-2">
             {/* Eyebrow badge */}
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#36322e] border border-[#e5891e]/40 text-[#e5891e] font-headline text-[11px] tracking-widest uppercase font-bold">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#36322e] dark:bg-[#1A1C24] border border-[#e5891e]/40 dark:border-[#F59E0B]/40 text-[#e5891e] dark:text-[#FBBF24] font-headline text-[11px] tracking-widest uppercase font-bold">
               <span>⚡</span>
               <span>{PROMO_SLIDES[currentSlide].badge}</span>
             </div>
 
             {/* Main headline */}
-            <h3 className="font-headline text-2xl sm:text-[30px] font-bold text-[#f5efe4] uppercase leading-[0.95] tracking-tight">
+            <h3 className="font-headline text-2xl sm:text-[30px] font-bold text-[#f5efe4] dark:text-white uppercase leading-[0.95] tracking-tight font-display">
               {PROMO_SLIDES[currentSlide].id === "homely-meals" ? (
                 <>
                   FOOD THAT <br />
-                  <span className="text-[#d9531e]">HITS THE SPOT</span>
+                  <span className="text-[#d9531e] dark:text-[#FBBF24] dark:drop-shadow-sm">HITS THE SPOT</span>
                 </>
               ) : (
                 PROMO_SLIDES[currentSlide].title
@@ -461,7 +464,7 @@ export function StudentHomeView({
             </h3>
 
             {/* Subtitle */}
-            <p className="font-body text-[12px] text-[#ded5c4]/80 line-clamp-2 pt-0.5 font-medium leading-snug">
+            <p className="font-body text-[12px] text-[#ded5c4]/80 dark:text-slate-300 line-clamp-2 pt-0.5 font-medium leading-snug">
               {PROMO_SLIDES[currentSlide].subtitle}
             </p>
           </div>
@@ -471,7 +474,7 @@ export function StudentHomeView({
             <button
               type="button"
               onClick={() => handleSlideCta(PROMO_SLIDES[currentSlide].mealTarget)}
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#d9531e] to-[#ea642d] hover:from-[#bf4414] hover:to-[#d9531e] text-[#f5efe4] font-headline text-[13px] tracking-wider uppercase font-bold shadow-[0_4px_16px_rgba(217,83,30,0.45)] active:scale-95 transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#d9531e] to-[#ea642d] dark:from-[#FBBF24] dark:to-[#F59E0B] hover:from-[#bf4414] hover:to-[#d9531e] dark:hover:brightness-110 text-[#f5efe4] dark:text-[#090A0F] font-headline text-[13px] tracking-wider uppercase font-bold dark:font-black shadow-[0_4px_16px_rgba(217,83,30,0.45)] dark:shadow-[#FBBF24]/25 active:scale-95 transition-all cursor-pointer"
             >
               <span>{PROMO_SLIDES[currentSlide].ctaText}</span>
               <ArrowRight className="h-3.5 w-3.5 font-bold" />
@@ -480,7 +483,7 @@ export function StudentHomeView({
         </div>
 
         {/* Spotlight Decorative Circular Dish Frame on the Right */}
-        <div className="absolute -right-6 -bottom-6 w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden shadow-2xl border-2 border-[#d9531e]/40 bg-[#1b1917] shrink-0 pointer-events-none">
+        <div className="absolute -right-6 -bottom-6 w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden shadow-2xl border-2 border-[#d9531e]/40 dark:border-[#F59E0B]/50 bg-[#1b1917] dark:bg-[#090A0F] shrink-0 pointer-events-none">
           {slideImages[currentSlide] ? (
             <img
               src={slideImages[currentSlide]}
@@ -495,14 +498,16 @@ export function StudentHomeView({
         </div>
 
         {/* Dynamic Dot Indicators */}
-        <div className="absolute top-3 right-3 flex items-center gap-1 z-20 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
+        <div className="absolute top-3 right-3 flex items-center gap-1 z-20 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10 dark:bg-[#090A0F]/90 dark:border-[#262836]">
           {PROMO_SLIDES.map((_, idx) => (
             <button
               key={idx}
               type="button"
               onClick={() => setCurrentSlide(idx)}
               className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-                idx === currentSlide ? "w-4 bg-[#ffb94e] shadow-xs" : "w-1.5 bg-white/40 hover:bg-white/70"
+                idx === currentSlide
+                  ? "w-4 bg-[#ffb94e] dark:bg-[#FBBF24] shadow-xs"
+                  : "w-1.5 bg-white/40 dark:bg-slate-600 hover:bg-white/70"
               }`}
               aria-label={`Go to slide ${idx + 1}`}
             />
@@ -517,13 +522,13 @@ export function StudentHomeView({
         <div className="flex items-center gap-2.5">
           {/* Search Box */}
           <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#635e58] dark:text-stone-400 pointer-events-none" />
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#635e58] dark:text-slate-400 pointer-events-none" />
             <Input
               type="text"
               placeholder='Search "dosa, biryani, samosa, meals..."'
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-12 pl-10 pr-9 text-sm font-medium bg-[#eae2d2] dark:bg-[#1e1a17] border-[#ded5c4] dark:border-[#352f2a] text-[#181513] dark:text-white placeholder:text-[#635e58]/80 dark:placeholder:text-stone-400 rounded-2xl shadow-2xs focus-visible:ring-[#d9531e]"
+              className="h-12 pl-10 pr-9 text-sm font-medium bg-[#eae2d2] dark:bg-[#121319] border-[#ded5c4] dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#635e58]/80 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#d9531e] focus-visible:dark:ring-[#FBBF24]"
             />
             {searchQuery && (
               <button
@@ -550,7 +555,7 @@ export function StudentHomeView({
               className={`min-h-[48px] h-12 px-3 rounded-2xl border transition-all duration-200 flex items-center gap-2 shadow-2xs cursor-pointer active:scale-95 select-none ${
                 isVegOnly
                   ? "bg-emerald-500/15 border-emerald-500 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30"
-                  : "bg-[#eae2d2] dark:bg-[#1e1a17] border-[#ded5c4] dark:border-[#352f2a] text-[#635e58] dark:text-stone-400 hover:border-[#181513]/40"
+                  : "bg-[#eae2d2] dark:bg-[#121319] border-[#ded5c4] dark:border-[#222533] text-[#635e58] dark:text-slate-300 hover:border-[#181513]/40 hover:dark:border-[#FBBF24]/40"
               }`}
               aria-label="Toggle pure vegetarian filter"
             >
@@ -562,7 +567,7 @@ export function StudentHomeView({
               {/* Sliding Track & Thumb */}
               <div
                 className={`relative h-6 w-11 rounded-full transition-colors duration-200 p-0.5 flex items-center ${
-                  isVegOnly ? "bg-emerald-600" : "bg-[#ded5c4] dark:bg-stone-700"
+                  isVegOnly ? "bg-emerald-600" : "bg-[#ded5c4] dark:bg-[#1A1C24]"
                 }`}
               >
                 <div
@@ -572,7 +577,7 @@ export function StudentHomeView({
                 >
                   <span
                     className={`h-2 w-2 rounded-full transition-colors ${
-                      isVegOnly ? "bg-emerald-600" : "bg-[#635e58]/50 dark:bg-stone-500"
+                      isVegOnly ? "bg-emerald-600" : "bg-[#635e58]/50 dark:bg-slate-500"
                     }`}
                   />
                 </div>
@@ -604,11 +609,11 @@ export function StudentHomeView({
             }}
             className={`min-h-[36px] h-9 px-3.5 rounded-xl border text-xs font-headline uppercase tracking-wider font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               inStockOnly
-                ? "bg-[#1b1917] border-[#36322e] text-[#e5891e] shadow-2xs"
-                : "bg-[#eae2d2] dark:bg-[#1e1a17] border-[#ded5c4] dark:border-[#352f2a] text-[#635e58] dark:text-stone-300 hover:border-[#181513]/40"
+                ? "bg-[#1b1917] dark:bg-[#1C1F2B] border-[#36322e] dark:border-[#FBBF24] text-[#e5891e] dark:text-[#FBBF24] shadow-2xs"
+                : "bg-[#eae2d2] dark:bg-[#121319] border-[#ded5c4] dark:border-[#222533] text-[#635e58] dark:text-slate-300 hover:border-[#181513]/40 hover:dark:border-[#FBBF24]/40"
             }`}
           >
-            <span className={`h-2 w-2 rounded-full ${inStockOnly ? "bg-[#d9531e]" : "bg-emerald-500"}`} />
+            <span className={`h-2 w-2 rounded-full ${inStockOnly ? "bg-[#d9531e] dark:bg-[#FBBF24]" : "bg-emerald-500"}`} />
             <span>In Stock Only</span>
           </button>
 
@@ -620,8 +625,8 @@ export function StudentHomeView({
             }}
             className={`min-h-[36px] h-9 px-3.5 rounded-xl border text-xs font-headline uppercase tracking-wider font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               under100Only
-                ? "bg-[#1b1917] border-[#36322e] text-[#e5891e] shadow-2xs"
-                : "bg-[#eae2d2] dark:bg-[#1e1a17] border-[#ded5c4] dark:border-[#352f2a] text-[#635e58] dark:text-stone-300 hover:border-[#181513]/40"
+                ? "bg-[#1b1917] dark:bg-[#1C1F2B] border-[#36322e] dark:border-[#FBBF24] text-[#e5891e] dark:text-[#FBBF24] shadow-2xs"
+                : "bg-[#eae2d2] dark:bg-[#121319] border-[#ded5c4] dark:border-[#222533] text-[#635e58] dark:text-slate-300 hover:border-[#181513]/40 hover:dark:border-[#FBBF24]/40"
             }`}
           >
             <span>💰</span>
@@ -668,10 +673,10 @@ export function StudentHomeView({
       >
         <div className="flex items-center justify-between">
           <div>
-            <span className="font-headline text-[11px] uppercase tracking-widest text-[#a86822] dark:text-amber-500 font-bold block">
+            <span className="font-headline text-[10px] uppercase tracking-widest text-[#a86822] dark:text-[#FBBF24] font-black block font-sans">
               CHEF SELECTION
             </span>
-            <h2 className="text-xl sm:text-2xl font-bold uppercase tracking-tight text-foreground dark:text-white font-headline">
+            <h2 className="text-xl sm:text-2xl font-bold uppercase tracking-tight text-foreground dark:text-white font-headline dark:font-display">
               {selectedMeal === "all"
                 ? "Today's Campus Picks"
                 : `${MEAL_TABS.find((m) => m.id === selectedMeal)?.label} Menu`}

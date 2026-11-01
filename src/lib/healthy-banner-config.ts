@@ -14,3 +14,4 @@ export interface LicensedBannerPhoto {
 }
 
 export const OWNER_LICENSED_BANNER_PHOTOS: LicensedBannerPhoto[] = [];
+

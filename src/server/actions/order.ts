@@ -569,3 +569,26 @@ export async function getMyAccountStatusAction(): Promise<{
     data: data as StudentAccountStatus,
   };
 }
+
+/**
+ * Triggers opportunistic student pickup reminders for active READY orders.
+ * Safe to call periodically; strictly idempotent on the server.
+ */
+export async function sendMyPickupRemindersAction(): Promise<{
+  success: boolean;
+  sent_count?: number;
+}> {
+  try {
+    await requireRole(["student"]);
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("send_my_pickup_reminders");
+    if (error) {
+      return { success: false, sent_count: 0 };
+    }
+    const res = data as { ok?: boolean; sent_count?: number } | null;
+    return { success: Boolean(res?.ok), sent_count: res?.sent_count ?? 0 };
+  } catch {
+    return { success: false, sent_count: 0 };
+  }
+}
+

@@ -23,9 +23,9 @@ export default async function StudentLayout({
 
   return (
     <NavigationTransitionProvider>
-      <div className="flex min-h-screen flex-col bg-background overflow-x-hidden">
+      <div className="flex min-h-screen flex-col bg-background dark:bg-[#050507] overflow-x-hidden selection:bg-[#F59E0B] selection:text-black">
         <CartUserSync userId={profile.id} />
-        <main className="mx-auto w-full max-w-md flex-1 px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+        <main className="mx-auto w-full max-w-md flex-1 px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[calc(6rem+env(safe-area-inset-bottom,0px))] dark:bg-[#090A0F] dark:border-x dark:border-[#1A1C24] dark:shadow-2xl">
           <StudentHeader userId={profile.id} initialUnreadCount={count ?? 0} />
           {children}
         </main>

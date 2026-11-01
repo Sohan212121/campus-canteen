@@ -175,3 +175,4 @@ export const SAMPLE_HEALTHY_ITEMS: MenuItemData[] = [
     key_minerals: ["Vitamin C", "Potassium", "Magnesium", "Folate"],
   },
 ];
+

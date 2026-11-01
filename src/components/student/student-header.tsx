@@ -99,16 +99,16 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
   }, [userId, router, refreshUnread]);
 
   return (
-    <header className="flex items-center justify-between pb-3.5 mb-2 border-b border-[#ded5c4] dark:border-[#36322e]">
+    <header className="flex items-center justify-between pb-3.5 mb-2 border-b border-[#ded5c4] dark:border-[#1E202B]">
       <Link href="/" prefetch={true} className="flex items-center gap-2.5 group min-h-[44px] py-1 select-none">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1b1917] text-[#f5efe4] border border-[#36322e] shadow-sm group-hover:scale-105 transition-all">
-          <UtensilsCrossed className="h-5 w-5 text-[#d9531e] dark:text-[#e5891e]" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1b1917] dark:bg-gradient-to-br dark:from-[#1F1408] dark:to-[#0A0A0C] text-[#f5efe4] border border-[#36322e] dark:border-[#F59E0B]/40 shadow-sm dark:shadow-inner group-hover:scale-105 transition-all">
+          <UtensilsCrossed className="h-5 w-5 text-[#d9531e] dark:text-[#FBBF24]" />
         </div>
         <div className="flex flex-col">
-          <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase text-[#c2630d] dark:text-[#e5891e] font-headline leading-tight">
+          <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase text-[#c2630d] dark:text-[#FBBF24] font-headline leading-tight">
             Good Food. Fast Vibes.
           </span>
-          <h1 className="text-base sm:text-lg font-extrabold tracking-wide uppercase leading-tight text-[#181513] dark:text-[#f5efe4] font-headline">
+          <h1 className="text-base sm:text-lg font-extrabold tracking-wide uppercase leading-tight text-[#181513] dark:text-white font-display">
             Campus Canteen
           </h1>
         </div>

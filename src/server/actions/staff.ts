@@ -541,6 +541,16 @@ export async function getStaffBoardDataAction(): Promise<StaffBoardData> {
 
   const supabase = await createClient();
 
+  // Opportunistic background sweep for staff canteen (reminders & no-shows)
+  try {
+    await Promise.allSettled([
+      supabase.rpc("send_pickup_reminders", { p_canteen_id: canteenId }),
+      supabase.rpc("mark_no_shows", { p_canteen_id: canteenId }),
+    ]);
+  } catch {
+    // Non-blocking background sweep
+  }
+
   // Fetch canteen name
   const { data: canteenData } = await supabase
     .from("canteens")

@@ -167,3 +167,4 @@ export function generateNutritionalInsights(
 
   return { highlights, considerations };
 }
+
