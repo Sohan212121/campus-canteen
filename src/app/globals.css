@@ -646,9 +646,8 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
   display: inline-block;
   color: #181513;
   transform: translateY(0);
-  animation: yo-rise-mount 0.3s cubic-bezier(0.25, 1, 0.5, 1) both;
-  animation-delay: calc(var(--yo-index, 0) * 0.08s);
-  transition: transform 0.35s ease-out;
+  opacity: 1;
+  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
   will-change: transform, opacity;
 }
 
@@ -658,23 +657,8 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 
 .tilt-card-wrapper:hover .greeting-yo-letter,
 .tilt-card-wrapper[data-hovered="true"] .greeting-yo-letter {
-  animation: yo-rise-hover 0.3s cubic-bezier(0.25, 1, 0.5, 1) both;
+  animation: yo-rise-hover 0.28s cubic-bezier(0.25, 1, 0.5, 1) both;
   animation-delay: calc(var(--yo-index, 0) * 0.08s);
-}
-
-@keyframes yo-rise-mount {
-  0% {
-    transform: translateY(22px);
-    opacity: 0;
-  }
-  65% {
-    transform: translateY(-2px);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
 }
 
 @keyframes yo-rise-hover {
@@ -692,7 +676,7 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
   }
 }
 
-/* Student Name Individual Letter Falling Sequentially (Next character drops ONLY after previous reaches final position) */
+/* Student Name Individual Letter Falling Sequentially */
 .greeting-student-name {
   display: inline-flex;
   align-items: center;
@@ -702,29 +686,13 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
   display: inline-block;
   color: #dc2626;
   transform: translateY(0);
-  animation: letter-fall-mount 0.14s cubic-bezier(0.25, 1, 0.5, 1) both;
-  animation-delay: calc(var(--char-index, 0) * 0.14s);
-  transition: transform 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+  opacity: 1;
+  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
   will-change: transform, opacity;
 }
 
 .dark .greeting-letter {
   color: #ef4444;
-}
-
-@keyframes letter-fall-mount {
-  0% {
-    transform: translateY(-22px);
-    opacity: 0;
-  }
-  65% {
-    transform: translateY(2px);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
 }
 
 /* Hover: Sequential falling transition where character (i) starts ONLY after (i-1) takes final position */
