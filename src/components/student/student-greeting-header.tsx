@@ -496,16 +496,24 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
               </div>
             </div>
 
-            {/* Center: Welcome Heading with Black 'Yo' and Dynamic Red-to-Shimmer Name */}
+            {/* Center: Welcome Heading with Black 'Yo' and Falling Letter Cascade Name */}
             <div className="my-auto py-2 relative z-10">
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#181513] dark:text-white uppercase font-display truncate">
                   Yo,{" "}
-                  <span className="greeting-student-name font-extrabold">
-                    {firstName}!
+                  <span className="greeting-student-name font-extrabold inline-flex items-center">
+                    {Array.from(`${firstName}!`).map((char, index) => (
+                      <span
+                        key={`${char}-${index}`}
+                        className="greeting-letter inline-block"
+                        style={{ "--char-index": index } as React.CSSProperties}
+                      >
+                        {char === " " ? "\u00A0" : char}
+                      </span>
+                    ))}
                   </span>
                 </h1>
-                <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] dark:bg-[#EF4444] inline-block shrink-0 shadow-[0_0_10px_rgba(220,38,38,0.7)]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] dark:bg-[#EF4444] inline-block shrink-0 shadow-[0_0_8px_rgba(220,38,38,0.5)]" />
               </div>
             </div>
 
