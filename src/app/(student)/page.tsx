@@ -122,9 +122,9 @@ export default async function StudentHomePage() {
 
       {/* Active Order In-Flight Banner */}
       {latestActiveOrder && (
-        <section className="overflow-hidden rounded-2xl border border-primary/30 dark:border-amber-500/40 bg-gradient-to-br from-primary/10 via-card to-card dark:from-[#261705] dark:via-[#1a1410] dark:to-[#14100d] p-4 shadow-2xs dark:shadow-[0_12px_36px_rgba(0,0,0,0.65)] space-y-3">
+        <section className="overflow-hidden rounded-2xl border border-[#decdb0] dark:border-amber-500/40 bg-[#efe3cb] dark:bg-gradient-to-br dark:from-[#261705] dark:via-[#1a1410] dark:to-[#14100d] p-4 shadow-sm dark:shadow-[0_12px_36px_rgba(0,0,0,0.65)] space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-primary dark:text-amber-400 font-headline flex items-center gap-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#d96b27] dark:text-amber-400 font-headline flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" /> Active Order
             </span>
             <Badge
@@ -137,10 +137,10 @@ export default async function StudentHomePage() {
 
           <div className="flex items-baseline justify-between">
             <div>
-              <span className="font-mono text-base sm:text-lg font-bold text-foreground dark:text-white">
+              <span className="font-mono text-base sm:text-lg font-bold text-[#1d1713] dark:text-white">
                 #{latestActiveOrder.order_code}
               </span>
-              <p className="text-xs text-muted-foreground dark:text-stone-400 mt-0.5">
+              <p className="text-xs text-[#635549] dark:text-stone-400 mt-0.5 font-medium">
                 Expected ready at {formatIstTime(latestActiveOrder.estimated_ready_at)}
               </p>
             </div>
@@ -148,7 +148,7 @@ export default async function StudentHomePage() {
               href={`/orders/${latestActiveOrder.id}`}
               className={buttonVariants({
                 size: "sm",
-                className: "min-h-[44px] h-11 px-4 rounded-xl text-xs font-bold gap-1.5 inline-flex items-center dark:bg-gradient-to-r dark:from-[#FF385C] dark:to-[#FF453A] dark:hover:from-[#FF453A] dark:hover:to-[#FF6058] dark:text-white dark:shadow-md dark:shadow-rose-950/40 font-headline uppercase tracking-wider active:scale-95 transition-all",
+                className: "min-h-[44px] h-11 px-4 rounded-xl text-xs font-bold gap-1.5 inline-flex items-center bg-[#181615] hover:bg-[#d96b27] text-[#ffb94e] hover:text-[#f6eedb] border border-[#362f2b] shadow-sm font-headline uppercase tracking-wider active:scale-95 transition-all",
               })}
             >
               <span>View Token</span>

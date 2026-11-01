@@ -30,7 +30,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
       type="button"
       onClick={handleToggle}
       className={cn(
-        "group/theme relative flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full border border-border/80 bg-card text-muted-foreground transition-all duration-200 hover:text-foreground hover:bg-muted dark:bg-[#201c19] dark:border-[#352f2a] dark:text-amber-400 dark:hover:text-amber-300 dark:hover:border-amber-500/50 active:scale-95 cursor-pointer shadow-2xs select-none",
+        "group/theme relative flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-[#181615] border border-[#443b35] text-[#efe3cb] hover:text-[#ffb94e] hover:border-[#fe7543]/70 active:scale-95 cursor-pointer shadow-sm select-none transition-colors",
         className
       )}
       aria-label={mounted ? (isDark ? "Switch to light mode" : "Switch to dark mode") : "Toggle theme"}

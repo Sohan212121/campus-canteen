@@ -12,10 +12,13 @@ export function LogoTransition({
   destinationLabel = "Campus Dining",
   isExiting = false,
 }: LogoTransitionProps) {
-  // Strict failsafe: NEVER render the old cutlery transition if destination is Healthy Mode or on healthy route
+  // Strict failsafe: NEVER render the old cutlery transition if destination is Healthy Mode, on healthy route, or transitioning to healthy
   if (
     destinationLabel.toLowerCase().includes("healthy") ||
-    (typeof window !== "undefined" && window.location.pathname.startsWith("/healthy"))
+    (typeof window !== "undefined" &&
+      (window.location.pathname.startsWith("/healthy") ||
+        document.documentElement.getAttribute("data-transition-theme") === "healthy" ||
+        document.body.getAttribute("data-transition-target")?.startsWith("/healthy")))
   ) {
     return null;
   }

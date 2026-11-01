@@ -80,6 +80,11 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
     pendingTargetRef.current = targetPath;
     isTransitioningRef.current = true;
 
+    if (typeof document !== "undefined") {
+      document.documentElement.setAttribute("data-transition-theme", theme);
+      document.body.setAttribute("data-transition-target", targetPath);
+    }
+
     setTransitionTheme(theme);
     setDestinationLabel(
       customLabel ||
@@ -102,6 +107,10 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
         setIsExiting(false);
         isTransitioningRef.current = false;
         pendingTargetRef.current = null;
+        if (typeof document !== "undefined") {
+          document.documentElement.removeAttribute("data-transition-theme");
+          document.body.removeAttribute("data-transition-target");
+        }
       }, EXIT_FADE_MS);
     }, MAX_FAILSAFE_MS);
   }, []);
@@ -165,6 +174,10 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
             setIsExiting(false);
             isTransitioningRef.current = false;
             pendingTargetRef.current = null;
+            if (typeof document !== "undefined") {
+              document.documentElement.removeAttribute("data-transition-theme");
+              document.body.removeAttribute("data-transition-target");
+            }
           }, EXIT_FADE_MS);
         }, remainingHold);
       }

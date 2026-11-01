@@ -91,27 +91,27 @@ export function CartShortcut({
           <Link
             href="/cart"
             aria-label={getCartShortcutAriaLabel(totalCount, estimatedTotal)}
-            className="flex min-h-[50px] w-full items-center justify-between gap-3 rounded-full bg-primary text-primary-foreground dark:bg-[#1a1614]/95 dark:border dark:border-[#FF385C]/40 dark:backdrop-blur-xl dark:text-white px-3.5 py-2 shadow-lg dark:shadow-[0_16px_36px_rgba(0,0,0,0.85)] transition-transform active:scale-[0.99] hover:bg-primary/95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="flex min-h-[52px] w-full items-center justify-between gap-3 rounded-full bg-[#181615]/95 border border-[#3c342e] backdrop-blur-xl text-[#f6eedb] px-4 py-2 shadow-[0_16px_36px_rgba(24,22,21,0.55)] transition-transform active:scale-[0.99] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#fe7543]"
           >
             {/* Left: Bag Icon badge + Items description */}
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 dark:bg-gradient-to-br dark:from-[#FF385C] dark:to-[#FF453A] text-primary-foreground dark:text-white shadow-2xs dark:shadow-[0_0_14px_rgba(255,56,92,0.6)]">
-                <ShoppingBag className="h-4 w-4" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#fe7543] to-[#d96b27] text-[#181615] shadow-md shadow-black/30">
+                <ShoppingBag className="h-4 w-4 stroke-[2.5]" />
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="text-xs sm:text-sm font-bold font-headline uppercase tracking-wide leading-tight truncate text-primary-foreground dark:text-white">
+                <span className="text-xs sm:text-sm font-bold font-headline uppercase tracking-wide leading-tight truncate text-[#f6eedb]">
                   {totalCount} {totalCount === 1 ? "Item" : "Items"} Added
                 </span>
-                <span className="text-[10px] sm:text-[11px] leading-tight text-primary-foreground/80 dark:text-stone-400 font-medium truncate">
+                <span className="text-[10px] sm:text-[11px] leading-tight text-[#decdb0]/80 font-medium truncate">
                   Express Pickup &bull; Station Ready
                 </span>
               </div>
             </div>
 
             {/* Right: Price tag + Action button pill */}
-            <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/20 dark:bg-gradient-to-r dark:from-[#FF385C] dark:to-[#FF453A] text-primary-foreground dark:text-white font-headline text-xs sm:text-sm font-bold uppercase tracking-wider shrink-0 shadow-2xs dark:shadow-[0_4px_16px_rgba(255,56,92,0.5)]">
+            <div className="flex items-center gap-1.5 px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-[#fe7543] to-[#d96b27] hover:from-[#d96b27] hover:to-[#a84e10] text-[#181615] font-headline text-xs sm:text-sm font-bold uppercase tracking-wider shrink-0 shadow-[0_4px_16px_rgba(254,117,67,0.4)]">
               <span>{formatPaise(estimatedTotal)}</span>
-              <ArrowRight className="h-3.5 w-3.5" />
+              <ArrowRight className="h-3.5 w-3.5 stroke-[2.5]" />
             </div>
           </Link>
         </aside>

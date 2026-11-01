@@ -81,7 +81,7 @@ export function BestSellerCard({
         aria-label={`View details for ${item.name}, ${rankBadgeText}`}
       >
         {/* Card Image with Rank & Rating Badges overlay */}
-        <div className="relative w-full overflow-hidden rounded-xl bg-muted dark:bg-[#25201c]">
+        <div className="relative w-full overflow-hidden rounded-xl bg-[#e8dac0] dark:bg-[#25201c]">
           <MenuItemImage
             src={item.image_url}
             alt={item.name}
@@ -93,38 +93,38 @@ export function BestSellerCard({
           />
 
           {/* Rank Badge: Prominent Fast-Casual Corner Badge */}
-          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-primary/95 dark:bg-[#FF385C] text-white font-headline text-[10px] uppercase font-bold tracking-wider shadow-sm">
+          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-[#181615] text-[#fe7543] font-headline text-[10px] uppercase font-bold tracking-wider shadow-sm border border-[#362f2b]">
             {rankBadgeText}
           </div>
 
           {/* Rating Badge with Golden Star */}
           {item.rating_count !== undefined && item.rating_count !== null && item.rating_count > 0 && item.rating_avg != null ? (
-            <div className="absolute top-2 left-2 flex items-center gap-0.5 rounded-full bg-background/95 dark:bg-black/70 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-foreground dark:text-amber-400 shadow-2xs border border-border/60 dark:border-white/10">
-              <span className="text-amber-500 dark:text-amber-400">★</span>
+            <div className="absolute top-2 left-2 flex items-center gap-0.5 rounded-full bg-[#181615]/90 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-[#f6eedb] shadow-2xs border border-[#362f2b]">
+              <span className="text-[#ffb94e]">★</span>
               <span>{item.rating_avg.toFixed(1)}</span>
             </div>
           ) : (
-            <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-background/95 dark:bg-black/70 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold tracking-tight text-foreground dark:text-amber-400 shadow-2xs border border-border/60 dark:border-white/10">
-              <TrendingUp className="h-3 w-3 text-amber-500" />
+            <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-[#181615]/90 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold tracking-tight text-[#f6eedb] shadow-2xs border border-[#362f2b]">
+              <TrendingUp className="h-3 w-3 text-[#ffb94e]" />
               <span>Hot</span>
             </div>
           )}
 
           {/* Prep time badge */}
           {item.prep_minutes > 0 && (
-            <div className="absolute bottom-2 right-2 rounded-full bg-background/90 dark:bg-black/75 backdrop-blur-sm px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:text-stone-300 shadow-2xs border border-border/40 dark:border-white/10">
+            <div className="absolute bottom-2 right-2 rounded-full bg-[#181615]/80 backdrop-blur-sm px-2 py-0.5 text-[10px] font-semibold text-[#f6eedb] shadow-2xs border border-[#362f2b]">
               ~{item.prep_minutes}m
             </div>
           )}
 
           {/* Units Sold Tag */}
-          <div className="absolute bottom-2 left-2 rounded-md bg-background/90 dark:bg-black/70 backdrop-blur-xs px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:text-stone-300 shadow-2xs">
+          <div className="absolute bottom-2 left-2 rounded-md bg-[#181615]/80 backdrop-blur-xs px-1.5 py-0.5 text-[10px] font-medium text-[#decdb0] border border-[#362f2b]/60 shadow-2xs">
             {unitsSoldText}
           </div>
 
           {isOutOfStock && (
-            <div className="absolute inset-0 bg-background/70 backdrop-blur-[1px] flex items-center justify-center p-1 text-center">
-              <span className="text-[10px] font-bold text-destructive leading-tight uppercase font-headline">
+            <div className="absolute inset-0 bg-[#181615]/75 backdrop-blur-[1px] flex items-center justify-center p-1 text-center">
+              <span className="text-[10px] font-bold text-red-400 leading-tight uppercase font-headline">
                 Unavailable
               </span>
             </div>
@@ -136,24 +136,24 @@ export function BestSellerCard({
           <div className="flex items-center justify-between gap-1.5">
             <div className="flex items-center gap-1.5">
               <VegIndicator isVeg={item.is_veg} />
-              <span className="text-xs font-bold text-foreground dark:text-stone-300">
+              <span className="text-xs font-bold text-[#1d1713] dark:text-stone-300">
                 {item.is_veg ? "Veg" : "Non-Veg"}
               </span>
             </div>
           </div>
 
-          <h3 className="font-bold text-foreground dark:text-white font-headline text-sm sm:text-base uppercase tracking-wide leading-snug line-clamp-1 group-hover:text-primary transition-colors">
+          <h3 className="font-bold text-[#1d1713] dark:text-white font-headline text-[15px] sm:text-[16px] uppercase tracking-wide leading-snug line-clamp-1 group-hover:text-[#d96b27] dark:group-hover:text-amber-400 transition-colors">
             {item.name}
           </h3>
 
           {item.description && (
-            <p className="text-[11px] text-muted-foreground dark:text-stone-400 line-clamp-1 leading-relaxed">
+            <p className="text-[11px] text-[#635549] dark:text-stone-400 line-clamp-1 leading-relaxed font-medium">
               {item.description}
             </p>
           )}
 
           <div className="pt-1">
-            <span className="font-headline text-[18px] sm:text-[20px] font-bold text-foreground dark:text-white">
+            <span className="font-headline text-[18px] sm:text-[20px] font-bold text-[#1d1713] dark:text-white">
               {formatPaise(item.price_paise)}
             </span>
           </div>
@@ -173,39 +173,37 @@ export function BestSellerCard({
             Unavailable
           </Button>
         ) : currentQuantity > 0 ? (
-          <div className="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-primary dark:border-[#FF385C]/60 bg-primary dark:bg-[#241f1c] text-primary-foreground dark:text-white px-1 shadow-2xs">
+          <div className="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-[#362f2b] bg-[#181615] text-[#ffb94e] px-1 shadow-sm">
             <button
               type="button"
               onClick={handleDecrement}
-              className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-primary-foreground/20 dark:hover:bg-white/10 text-primary-foreground dark:text-white transition-colors cursor-pointer"
+              className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-white/10 text-[#ffb94e] transition-colors cursor-pointer"
               aria-label={`Decrease ${item.name} quantity`}
             >
               <Minus className="h-4 w-4" />
             </button>
-            <span className="text-xs font-bold px-1 select-none font-headline text-base">
+            <span className="text-xs font-bold px-1 select-none font-headline text-base text-[#f6eedb]">
               {currentQuantity}
             </span>
             <button
               type="button"
               onClick={handleIncrement}
               disabled={currentQuantity >= effectiveMax}
-              className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-primary-foreground/20 dark:hover:bg-white/10 text-primary-foreground dark:text-white disabled:opacity-40 transition-colors cursor-pointer"
+              className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-white/10 text-[#ffb94e] disabled:opacity-40 transition-colors cursor-pointer"
               aria-label={`Increase ${item.name} quantity`}
             >
               <Plus className="h-4 w-4" />
             </button>
           </div>
         ) : (
-          <Button
+          <button
             type="button"
             onClick={handleQuickAdd}
-            variant="outline"
-            size="sm"
-            className="min-h-[44px] w-full text-xs font-bold rounded-xl border-primary/40 text-primary dark:bg-[#FF385C] dark:hover:bg-[#FF453A] dark:text-white dark:border-none font-headline uppercase tracking-wider shadow-md dark:shadow-rose-950/40 hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 cursor-pointer"
+            className="min-h-[44px] w-full text-xs font-bold rounded-xl bg-[#181615] hover:bg-[#d96b27] text-[#ffb94e] hover:text-[#f6eedb] border border-[#362f2b] font-headline uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
           >
-            <Plus className="h-3.5 w-3.5 mr-1" />
+            <Plus className="h-3.5 w-3.5" />
             <span>Add +</span>
-          </Button>
+          </button>
         )}
       </div>
     </div>

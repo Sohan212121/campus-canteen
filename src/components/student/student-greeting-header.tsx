@@ -347,14 +347,19 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
           className="flip-card-face rounded-2xl border border-border/80 dark:border-[#352f2a] bg-card dark:bg-[#1e1a17] p-5 shadow-xs dark:shadow-md flex flex-col justify-between cursor-pointer hover:border-foreground/30 dark:hover:border-amber-500/40 hover:shadow-sm transition-all duration-200 select-none text-left min-h-[185px]"
           title="Click to flip for food cravings!"
         >
-          {/* Top row: Status indicator */}
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-            </span>
-            <span className="text-xs font-semibold text-muted-foreground dark:text-stone-300 font-headline uppercase tracking-wider text-[11px]">
-              Smart Pickup Active
+          {/* Top row: Status indicator & Student Pass badge */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#d96b27] opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#d96b27]" />
+              </span>
+              <span className="text-xs font-semibold text-muted-foreground dark:text-stone-300 font-headline uppercase tracking-wider text-[11px]">
+                Station B &bull; Lunch Rush Active
+              </span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-[#181615] text-[#ffb94e] font-headline text-[10px] tracking-wider uppercase font-bold border border-[#362f2b] shadow-2xs">
+              Student Pass
             </span>
           </div>
 
@@ -364,7 +369,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground dark:text-white uppercase font-headline truncate">
                 Yo, {firstName}!
               </h1>
-              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block shrink-0 shadow-[0_0_8px_rgba(245,158,11,0.6)]" />
+              <span className="w-2 h-2 rounded-full bg-[#ffb94e] inline-block shrink-0 shadow-[0_0_8px_rgba(255,185,78,0.7)]" />
             </div>
           </div>
 
@@ -380,11 +385,11 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
                 e.stopPropagation();
                 handleFrontClick();
               }}
-              className="min-h-[38px] h-9 px-4 rounded-xl font-bold text-xs bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-gradient-to-r dark:from-[#FF385C] dark:to-[#FF453A] dark:hover:from-[#FF453A] dark:hover:to-[#FF6058] dark:text-white dark:shadow-md dark:shadow-rose-950/40 font-headline uppercase tracking-wider active:scale-95 transition-all shadow-xs inline-flex items-center gap-2 group cursor-pointer shrink-0"
+              className="min-h-[38px] h-9 px-4 rounded-xl font-bold text-xs bg-[#181615] hover:bg-[#d96b27] text-[#ffb94e] hover:text-[#f6eedb] border border-[#362f2b] font-headline uppercase tracking-wider active:scale-95 transition-all shadow-sm inline-flex items-center gap-2 group cursor-pointer shrink-0"
               title="Flip for food cravings"
             >
               <span>Food Mood</span>
-              <RotateCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-500 text-primary-foreground/90 dark:text-white" />
+              <RotateCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-500 text-[#ffb94e] group-hover:text-[#f6eedb]" />
             </button>
           </div>
         </div>
@@ -408,7 +413,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
           {/* Top Row: Category tag, headline & flip back button */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-muted dark:bg-[#201c19] text-[10px] font-bold tracking-wider uppercase text-muted-foreground dark:text-amber-400 border border-border/50 dark:border-amber-500/30 font-headline">
+              <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-[#181615] text-[#ffb94e] text-[10px] font-bold tracking-wider uppercase border border-[#362f2b] font-headline">
                 {currentQuote.category}
               </span>
               <span className="text-xs font-bold text-foreground dark:text-white flex items-center gap-1.5 truncate">
@@ -450,7 +455,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
                 e.stopPropagation();
                 handleNextQuote();
               }}
-              className="min-h-[36px] h-9 px-3 rounded-xl bg-primary text-primary-foreground font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs hover:bg-primary/90 dark:bg-gradient-to-r dark:from-[#FF385C] dark:to-[#FF453A] dark:hover:from-[#FF453A] dark:hover:to-[#FF6058] dark:text-white dark:shadow-md dark:shadow-rose-950/40 font-headline uppercase tracking-wider active:scale-95 transition-all cursor-pointer shrink-0"
+              className="min-h-[36px] h-9 px-3 rounded-xl bg-[#181615] hover:bg-[#d96b27] text-[#ffb94e] hover:text-[#f6eedb] border border-[#362f2b] font-bold text-xs inline-flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer shrink-0 font-headline uppercase tracking-wider"
             >
               <span>Next Quote</span>
               <ArrowRight className="h-3.5 w-3.5" />

@@ -111,7 +111,7 @@ export function BestSellersRow({
     <section className="space-y-3" aria-labelledby="best-sellers-heading">
       <div className="flex items-center justify-between px-0.5">
         <div>
-          <span className="font-headline text-[11px] uppercase tracking-widest text-amber-500 font-bold block">
+          <span className="font-headline text-[11px] uppercase tracking-widest text-[#a86822] dark:text-amber-500 font-bold block">
             CUSTOMER FAVOURITES
           </span>
           <h2 id="best-sellers-heading" className="text-xl sm:text-2xl font-bold uppercase tracking-tight text-foreground dark:text-white font-headline">
@@ -133,7 +133,7 @@ export function BestSellersRow({
                 }}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
                   idx === currentIndex
-                    ? "w-4 bg-[#FF385C] dark:bg-[#FF385C]"
+                    ? "w-4 bg-[#d96b27] dark:bg-[#fe7543]"
                     : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60"
                 }`}
                 aria-label={`Jump to food item ${idx + 1}`}
@@ -149,7 +149,7 @@ export function BestSellersRow({
                 pauseTemporarily(5000);
                 handlePrev();
               }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/80 dark:border-[#352f2a] bg-card dark:bg-[#201c19] text-muted-foreground hover:text-foreground dark:hover:text-white hover:bg-muted dark:hover:bg-[#25201c] transition-colors active:scale-95 cursor-pointer"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#decdb0] dark:border-[#352f2a] bg-[#efe3cb] dark:bg-[#201c19] text-[#1d1713] dark:text-white hover:border-[#1d1713]/50 dark:hover:border-amber-500/50 transition-colors active:scale-95 cursor-pointer shadow-2xs"
               aria-label="Previous food item"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
@@ -160,7 +160,7 @@ export function BestSellersRow({
                 pauseTemporarily(5000);
                 handleNext();
               }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/80 dark:border-[#352f2a] bg-card dark:bg-[#201c19] text-muted-foreground hover:text-foreground dark:hover:text-white hover:bg-muted dark:hover:bg-[#25201c] transition-colors active:scale-95 cursor-pointer"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#decdb0] dark:border-[#352f2a] bg-[#efe3cb] dark:bg-[#201c19] text-[#1d1713] dark:text-white hover:border-[#1d1713]/50 dark:hover:border-amber-500/50 transition-colors active:scale-95 cursor-pointer shadow-2xs"
               aria-label="Next food item"
             >
               <ChevronRight className="h-3.5 w-3.5" />
