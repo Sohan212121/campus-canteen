@@ -9,8 +9,6 @@ import {
   Plus,
   Minus,
   ChevronRight,
-  Sparkles,
-  ShieldCheck,
   ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -511,84 +509,6 @@ export function HealthyMainView({
                 })}
               </div>
             )}
-          </section>
-
-          {/* =========================================================================
-              SECTION 5: 'CLEAN KITCHEN PROMISE' VERIFICATION BOX
-              ========================================================================= */}
-          <section className="rounded-2xl bg-gradient-to-br from-card via-card to-card dark:from-[#1c281a] dark:via-[#181d17] dark:to-[#161311] border border-border/80 dark:border-[#3b533a] p-4 sm:p-5 shadow-lg relative overflow-hidden flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-emerald-500/10 dark:bg-[#2E7D32]/30 border border-emerald-500/30 dark:border-[#4CAF50]/40 flex items-center justify-center text-[#4CAF50] dark:text-[#81c784]">
-                  <ShieldCheck className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="text-[15px] text-foreground dark:text-[#ede7e1] font-bold tracking-tight">
-                    Clean Kitchen Promise
-                  </h4>
-                  <span className="text-[10px] text-emerald-700 dark:text-[#81c784] tracking-wider uppercase font-bold">
-                    Campus Lab Audited Daily
-                  </span>
-                </div>
-              </div>
-              <Sparkles className="h-5 w-5 text-emerald-500/60 dark:text-[#4CAF50]/60" />
-            </div>
-            <p className="text-xs text-muted-foreground dark:text-[#c4bdb3] leading-relaxed">
-              Every dish prepared in our wellness kitchen follows stringent organic sourcing and cold-extraction principles.
-            </p>
-            {/* Verification Trust Badges */}
-            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-border/40 dark:border-[#3b533a]/30">
-              <div className="flex flex-col items-center text-center p-2 rounded-xl bg-muted/30 dark:bg-[#141813] border border-border/60 dark:border-[#3b533a]/40">
-                <span className="text-amber-500 dark:text-[#ffb74d] text-base mb-0.5">🚫</span>
-                <span className="text-[10px] text-foreground dark:text-[#ede7e1] font-bold leading-tight">
-                  Zero Palm Oil
-                </span>
-                <span className="text-[9px] text-muted-foreground dark:text-[#c4bdb3] mt-0.5">
-                  Strictly Banned
-                </span>
-              </div>
-              <div className="flex flex-col items-center text-center p-2 rounded-xl bg-muted/30 dark:bg-[#141813] border border-border/60 dark:border-[#3b533a]/40">
-                <span className="text-emerald-500 dark:text-[#81c784] text-base mb-0.5">💧</span>
-                <span className="text-[10px] text-foreground dark:text-[#ede7e1] font-bold leading-tight">
-                  Cold-Pressed
-                </span>
-                <span className="text-[9px] text-muted-foreground dark:text-[#c4bdb3] mt-0.5">
-                  Mustard &amp; Sesame
-                </span>
-              </div>
-              <div className="flex flex-col items-center text-center p-2 rounded-xl bg-muted/30 dark:bg-[#141813] border border-border/60 dark:border-[#3b533a]/40">
-                <span className="text-green-500 dark:text-[#4CAF50] text-base mb-0.5">🌱</span>
-                <span className="text-[10px] text-foreground dark:text-[#ede7e1] font-bold leading-tight">
-                  Local Sprouts
-                </span>
-                <span className="text-[9px] text-muted-foreground dark:text-[#c4bdb3] mt-0.5">
-                  Fresh 24h Batches
-                </span>
-              </div>
-            </div>
-          </section>
-
-          {/* =========================================================================
-              SECTION 6: DIETITIAN WISDOM QUOTE BLOCK
-              ========================================================================= */}
-          <section className="rounded-2xl bg-card/60 dark:bg-[#1e291c]/50 border border-border/60 dark:border-[#3b533a]/40 p-3.5 shadow-sm relative overflow-hidden flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full overflow-hidden shrink-0 border border-emerald-500/40 dark:border-[#4CAF50]/40 shadow-sm bg-muted">
-              {/* Using standard img for external CDN portrait */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDRaeuRnLULie8kKwtFQbu7AzdH4ktXjbP8luItLXJgkL1JUZ1VKpeakc9JDKLpeYHO3R7DpYyud6_NUd7jOx94ajn7l5i3bFOzYq5Yil0cbt6_6UqLD1Df-zCHCEUeqGwgP5SB9Nj4SNOP0gl0_rhslQ59-V02v8_p6lAagkBXcL0GNj3mYmwvR5s-gcCtyuZ8eex4La-p0d5nLIi9BiT0kx5M2Xem0aGagBOxiRHH"
-                alt="Dr. Ananya Ray, Ph.D. • Lead Campus Nutritionist"
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="flex flex-col min-w-0">
-              <p className="font-script text-xs sm:text-[13px] text-foreground dark:text-[#ede7e1] italic leading-snug">
-                &ldquo;Cold-pressed mustard keeps good lipids intact while steamed millets fuel steady lecture focus.&rdquo;
-              </p>
-              <span className="text-[10px] text-emerald-700 dark:text-[#81c784] font-bold mt-0.5">
-                Dr. Ananya Ray, Ph.D. &bull; Lead Campus Dietitian
-              </span>
-            </div>
           </section>
 
           {/* Preferences Bottom Sheet with 2 Range Sliders */}
