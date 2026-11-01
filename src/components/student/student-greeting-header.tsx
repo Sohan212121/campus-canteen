@@ -345,16 +345,17 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
 
     rafRef.current = requestAnimationFrame(() => {
       if (!tiltRef.current) return;
-      const rotateX = -percentY * 8.5;
-      const rotateY = percentX * 8.5;
-      const shadowX = -percentX * 16;
-      const shadowY = -percentY * 16 + 20;
+      // Increased sensitivity: dynamic 3D wobble angle and responsive cursor leaning
+      const rotateX = -percentY * 14.5;
+      const rotateY = percentX * 14.5;
+      const shadowX = -percentX * 24;
+      const shadowY = -percentY * 24 + 22;
       const glareX = Math.max(0, Math.min(100, (x / rect.width) * 100));
       const glareY = Math.max(0, Math.min(100, (y / rect.height) * 100));
 
       tiltRef.current.style.setProperty("--tilt-rx", `${rotateX.toFixed(2)}deg`);
       tiltRef.current.style.setProperty("--tilt-ry", `${rotateY.toFixed(2)}deg`);
-      tiltRef.current.style.setProperty("--tilt-scale", "1.018");
+      tiltRef.current.style.setProperty("--tilt-scale", "1.025");
       tiltRef.current.style.setProperty("--shadow-x", `${shadowX.toFixed(1)}px`);
       tiltRef.current.style.setProperty("--shadow-y", `${shadowY.toFixed(1)}px`);
       tiltRef.current.style.setProperty("--glare-x", `${glareX.toFixed(1)}%`);
@@ -403,16 +404,16 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
     }
     rafRef.current = requestAnimationFrame(() => {
       if (!tiltRef.current) return;
-      const rotateX = -percentY * 6;
-      const rotateY = percentX * 6;
-      const shadowX = -percentX * 12;
-      const shadowY = -percentY * 12 + 16;
+      const rotateX = -percentY * 10;
+      const rotateY = percentX * 10;
+      const shadowX = -percentX * 18;
+      const shadowY = -percentY * 18 + 18;
       const glareX = Math.max(0, Math.min(100, (x / rect.width) * 100));
       const glareY = Math.max(0, Math.min(100, (y / rect.height) * 100));
 
       tiltRef.current.style.setProperty("--tilt-rx", `${rotateX.toFixed(2)}deg`);
       tiltRef.current.style.setProperty("--tilt-ry", `${rotateY.toFixed(2)}deg`);
-      tiltRef.current.style.setProperty("--tilt-scale", "1.012");
+      tiltRef.current.style.setProperty("--tilt-scale", "1.018");
       tiltRef.current.style.setProperty("--shadow-x", `${shadowX.toFixed(1)}px`);
       tiltRef.current.style.setProperty("--shadow-y", `${shadowY.toFixed(1)}px`);
       tiltRef.current.style.setProperty("--glare-x", `${glareX.toFixed(1)}%`);
