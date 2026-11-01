@@ -167,21 +167,21 @@ export function VoiceSearchButton({
           : "Voice search not supported in this browser"
       }
       className={cn(
-        "relative flex items-center justify-center rounded-full transition-all cursor-pointer active:scale-95 select-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 shadow-xs",
+        "relative flex items-center justify-center rounded-full transition-all cursor-pointer active:scale-95 select-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-red-500 shadow-xs",
         isSmall ? "h-6 w-6" : "h-7 w-7 sm:h-8 sm:w-8",
         isListening
-          ? "bg-black text-[#FBBF24] border border-[#FBBF24] shadow-[0_0_12px_rgba(251,191,36,0.6)]"
-          : "bg-black text-[#FBBF24] hover:bg-black/85 hover:scale-105 border border-black/80 dark:border-[#222533]",
+          ? "bg-black text-red-500 border border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]"
+          : "bg-black text-red-500 hover:bg-black/85 hover:scale-105 border border-black/80 dark:border-[#222533]",
         className
       )}
     >
       {isListening ? (
         <>
-          <span className="absolute inset-0 rounded-full bg-[#FBBF24]/30 animate-ping" />
-          <Mic className={isSmall ? "h-3.5 w-3.5 text-[#FBBF24]" : "h-4 w-4 text-[#FBBF24]"} />
+          <span className="absolute inset-0 rounded-full bg-red-500/30 animate-ping" />
+          <Mic className={isSmall ? "h-3.5 w-3.5 text-red-500" : "h-4 w-4 text-red-500"} />
         </>
       ) : (
-        <Mic className={isSmall ? "h-3.5 w-3.5 text-[#FBBF24]" : "h-4 w-4 text-[#FBBF24]"} />
+        <Mic className={isSmall ? "h-3.5 w-3.5 text-red-500" : "h-4 w-4 text-red-500"} />
       )}
     </button>
   );

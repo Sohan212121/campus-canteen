@@ -563,30 +563,34 @@ export function StudentHomeView({
               }}
               className={`min-h-[48px] h-12 px-3 rounded-2xl border transition-all duration-200 flex items-center gap-2 shadow-2xs cursor-pointer active:scale-95 select-none ${
                 isVegOnly
-                  ? "bg-emerald-500/15 border-emerald-500 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30"
-                  : "bg-[#eae2d2] dark:bg-[#121319] border-[#ded5c4] dark:border-[#222533] text-[#635e58] dark:text-slate-300 hover:border-[#181513]/40 hover:dark:border-[#FBBF24]/40"
+                  ? "bg-black border-red-500 text-white ring-1 ring-red-500/40 shadow-sm shadow-red-500/30"
+                  : "bg-black border-[#222533] text-slate-300 hover:border-red-500/50"
               }`}
               aria-label="Toggle pure vegetarian filter"
             >
               <div className="flex flex-col text-left font-headline">
-                <span className="text-[11px] font-bold tracking-wider leading-none">VEG</span>
-                <span className="text-[9px] opacity-75 leading-tight">ONLY</span>
+                <span className={`text-[11px] font-bold tracking-wider leading-none transition-colors ${isVegOnly ? "text-red-500 font-black" : "text-white"}`}>
+                  VEG
+                </span>
+                <span className={`text-[9px] leading-tight transition-colors ${isVegOnly ? "text-red-400 font-bold" : "text-red-500"}`}>
+                  ONLY
+                </span>
               </div>
 
               {/* Sliding Track & Thumb */}
               <div
                 className={`relative h-6 w-11 rounded-full transition-colors duration-200 p-0.5 flex items-center ${
-                  isVegOnly ? "bg-emerald-600" : "bg-[#ded5c4] dark:bg-[#1A1C24]"
+                  isVegOnly ? "bg-red-600 shadow-inner" : "bg-[#222533] border border-[#333]"
                 }`}
               >
                 <div
-                  className={`h-5 w-5 rounded-full bg-white shadow-xs transition-transform duration-200 ease-out flex items-center justify-center ${
+                  className={`h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ease-out flex items-center justify-center ${
                     isVegOnly ? "translate-x-5" : "translate-x-0"
                   }`}
                 >
                   <span
                     className={`h-2 w-2 rounded-full transition-colors ${
-                      isVegOnly ? "bg-emerald-600" : "bg-[#635e58]/50 dark:bg-slate-500"
+                      isVegOnly ? "bg-red-600" : "bg-neutral-600"
                     }`}
                   />
                 </div>
