@@ -8,7 +8,6 @@ import {
   Utensils,
   ArrowRight,
   Leaf,
-  Flame,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -659,32 +658,7 @@ export function StudentHomeView({
       )}
 
       {/* =========================================================================
-          SECTION 4: COMBO IT BETTER PROMO BANNER (Fast-Casual Style from Redesign)
-          ========================================================================= */}
-      <Link
-        href="/menu"
-        prefetch={true}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#1b1917] via-[#231f1d] to-[#141210] border border-[#36322e] p-4 sm:p-5 flex items-center justify-between shadow-lg shadow-black/15 transition-all select-none group block"
-      >
-        <div className="space-y-1 max-w-[72%] z-10">
-          <div className="inline-flex items-center gap-1.5 text-[#e5891e] font-headline text-[11px] uppercase tracking-widest font-bold">
-            <Flame className="h-3.5 w-3.5 text-[#d9531e]" />
-            <span>COMBO IT BETTER</span>
-          </div>
-          <h3 className="font-headline text-lg sm:text-xl uppercase text-[#f5efe4] font-bold leading-tight">
-            Meal + Drink = <span className="text-[#d9531e]">Save 20%</span>
-          </h3>
-          <p className="font-body text-[12px] text-[#ded5c4]/80 font-medium line-clamp-2">
-            Pair any hot main dish with iced lemon tea or cold coffee.
-          </p>
-        </div>
-        <div className="w-14 h-14 rounded-full bg-[#231f1d] border border-[#36322e] text-[#d9531e] flex items-center justify-center shrink-0 shadow-md text-2xl group-hover:scale-105 transition-transform">
-          🍱
-        </div>
-      </Link>
-
-      {/* =========================================================================
-          SECTION 5: CATEGORIZED FOOD ITEMS LIST (Breakfast / Lunch / Snacks / etc.)
+          SECTION 4: CATEGORIZED FOOD ITEMS LIST (Breakfast / Lunch / Snacks / etc.)
           ========================================================================= */}
       <section
         id="home-food-section"
@@ -704,16 +678,11 @@ export function StudentHomeView({
             </h2>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="font-headline text-[11px] uppercase tracking-wider text-[#ffb94e] font-bold px-2.5 py-1 rounded bg-[#181615] border border-[#362f2b]">
-              Station A &amp; C
-            </span>
-            {isVegOnly && (
-              <Badge variant="outline" className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
-                Veg Only
-              </Badge>
-            )}
-          </div>
+          {isVegOnly && (
+            <Badge variant="outline" className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
+              Veg Only
+            </Badge>
+          )}
         </div>
 
         {/* Items List (Fast-Casual Cards with Smooth Filter Transition) */}
