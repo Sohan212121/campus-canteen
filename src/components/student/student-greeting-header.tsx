@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { RotateCw, ArrowRight } from "lucide-react";
 
 interface StudentGreetingHeaderProps {
@@ -275,6 +275,10 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
   const [isFlipped, setIsFlipped] = useState(false);
   const [isSpinningNext, setIsSpinningNext] = useState(false);
 
+  // 3D Tilt container reference and animation frame tracking
+  const tiltRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
+
   // Non-repeating randomized quote deck: guarantees a different message on every single click
   const deckRef = useRef<number[]>([]);
   const deckPointerRef = useRef<number>(0);
@@ -324,136 +328,273 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
     }, 450);
   }, [getNextQuote, isSpinningNext]);
 
+  // 3D Tilt handlers: Cursor tracking with buttery smooth spring transition and depth shadow
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!tiltRef.current) return;
+    const rect = tiltRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const percentX = Math.max(-1, Math.min(1, (x - centerX) / centerX));
+    const percentY = Math.max(-1, Math.min(1, (y - centerY) / centerY));
+
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+    }
+
+    rafRef.current = requestAnimationFrame(() => {
+      if (!tiltRef.current) return;
+      const rotateX = -percentY * 8.5;
+      const rotateY = percentX * 8.5;
+      const shadowX = -percentX * 16;
+      const shadowY = -percentY * 16 + 20;
+      const glareX = Math.max(0, Math.min(100, (x / rect.width) * 100));
+      const glareY = Math.max(0, Math.min(100, (y / rect.height) * 100));
+
+      tiltRef.current.style.setProperty("--tilt-rx", `${rotateX.toFixed(2)}deg`);
+      tiltRef.current.style.setProperty("--tilt-ry", `${rotateY.toFixed(2)}deg`);
+      tiltRef.current.style.setProperty("--tilt-scale", "1.018");
+      tiltRef.current.style.setProperty("--shadow-x", `${shadowX.toFixed(1)}px`);
+      tiltRef.current.style.setProperty("--shadow-y", `${shadowY.toFixed(1)}px`);
+      tiltRef.current.style.setProperty("--glare-x", `${glareX.toFixed(1)}%`);
+      tiltRef.current.style.setProperty("--glare-y", `${glareY.toFixed(1)}%`);
+      tiltRef.current.style.setProperty("--glare-opacity", "1");
+    });
+  }, []);
+
+  const handleMouseEnter = useCallback(() => {
+    if (!tiltRef.current) return;
+    tiltRef.current.setAttribute("data-hovered", "true");
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+    }
+    if (!tiltRef.current) return;
+    tiltRef.current.removeAttribute("data-hovered");
+    tiltRef.current.style.setProperty("--tilt-rx", "0deg");
+    tiltRef.current.style.setProperty("--tilt-ry", "0deg");
+    tiltRef.current.style.setProperty("--tilt-scale", "1");
+    tiltRef.current.style.setProperty("--shadow-x", "0px");
+    tiltRef.current.style.setProperty("--shadow-y", "6px");
+    tiltRef.current.style.setProperty("--glare-opacity", "0");
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!tiltRef.current || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    const rect = tiltRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
+      handleMouseLeave();
+      return;
+    }
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const percentX = Math.max(-1, Math.min(1, (x - centerX) / centerX));
+    const percentY = Math.max(-1, Math.min(1, (y - centerY) / centerY));
+
+    tiltRef.current.setAttribute("data-hovered", "true");
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+    }
+    rafRef.current = requestAnimationFrame(() => {
+      if (!tiltRef.current) return;
+      const rotateX = -percentY * 6;
+      const rotateY = percentX * 6;
+      const shadowX = -percentX * 12;
+      const shadowY = -percentY * 12 + 16;
+      const glareX = Math.max(0, Math.min(100, (x / rect.width) * 100));
+      const glareY = Math.max(0, Math.min(100, (y / rect.height) * 100));
+
+      tiltRef.current.style.setProperty("--tilt-rx", `${rotateX.toFixed(2)}deg`);
+      tiltRef.current.style.setProperty("--tilt-ry", `${rotateY.toFixed(2)}deg`);
+      tiltRef.current.style.setProperty("--tilt-scale", "1.012");
+      tiltRef.current.style.setProperty("--shadow-x", `${shadowX.toFixed(1)}px`);
+      tiltRef.current.style.setProperty("--shadow-y", `${shadowY.toFixed(1)}px`);
+      tiltRef.current.style.setProperty("--glare-x", `${glareX.toFixed(1)}%`);
+      tiltRef.current.style.setProperty("--glare-y", `${glareY.toFixed(1)}%`);
+      tiltRef.current.style.setProperty("--glare-opacity", "1");
+    });
+  }, [handleMouseLeave]);
+
+  const handleTouchEnd = useCallback(() => {
+    handleMouseLeave();
+  }, [handleMouseLeave]);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, []);
+
   return (
-    <div className="flip-card-container w-full" aria-label="Interactive campus greeting and food cravings card">
+    <div
+      ref={tiltRef}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className="tilt-card-wrapper relative w-full rounded-2xl select-none"
+      aria-label="Interactive campus greeting and food cravings card"
+    >
+      {/* Dynamic 3D Glare Lighting Sheen (Light Mode) */}
       <div
-        className={`flip-card-inner ${isFlipped ? "flip-card-flipped" : ""} ${
-          isSpinningNext ? "animate-flip-quote-spin" : ""
-        }`}
-      >
-        {/* =========================================================================
-            FRONT FACE: CLEAN, PROFESSIONAL GREETING WITH COOL FOOD MOOD BUTTON
-            ========================================================================= */}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-20 rounded-2xl overflow-hidden transition-opacity duration-300 dark:hidden"
+        style={{
+          opacity: "var(--glare-opacity, 0)",
+          background:
+            "radial-gradient(circle 380px at var(--glare-x, 50%) var(--glare-y, 50%), rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.05) 45%, transparent 80%)",
+        }}
+      />
+      {/* Dynamic 3D Glare Lighting Sheen (Dark Mode - Gold Sheen) */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-20 rounded-2xl overflow-hidden transition-opacity duration-300 hidden dark:block"
+        style={{
+          opacity: "var(--glare-opacity, 0)",
+          background:
+            "radial-gradient(circle 380px at var(--glare-x, 50%) var(--glare-y, 50%), rgba(251, 191, 36, 0.16) 0%, rgba(255, 255, 255, 0.04) 45%, transparent 80%)",
+        }}
+      />
+
+      <div className="flip-card-container w-full">
         <div
-          role="button"
-          tabIndex={0}
-          onClick={handleFrontClick}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              handleFrontClick();
-            }
-          }}
-          className="flip-card-face rounded-2xl border border-border/80 dark:border-[#222533] bg-card dark:bg-[#121319] p-5 shadow-xs dark:shadow-xl flex flex-col justify-between cursor-pointer hover:border-foreground/30 dark:hover:border-[#FBBF24]/50 hover:shadow-sm transition-all duration-200 select-none text-left min-h-[185px]"
-          title="Click to flip for food cravings!"
+          className={`flip-card-inner ${isFlipped ? "flip-card-flipped" : ""} ${
+            isSpinningNext ? "animate-flip-quote-spin" : ""
+          }`}
         >
-          {/* Top row: Status indicator */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#d9531e] dark:bg-[#EF4444] dark:pulse-dot shrink-0"></span>
-              <span className="text-xs font-semibold text-[#635e58] dark:text-slate-300 font-headline uppercase tracking-wider text-[11px]">
-                Ready for lunch rush?
-              </span>
-            </div>
-          </div>
-
-          {/* Center: Welcome Heading with Smoked & Golden Accent */}
-          <div className="my-auto py-2">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#181513] dark:text-white uppercase font-display truncate">
-                Yo, <span className="dark:text-[#FBBF24]">{firstName}!</span>
-              </h1>
-              <span className="w-2 h-2 rounded-full bg-[#d9531e] dark:bg-[#EF4444] inline-block shrink-0 shadow-[0_0_8px_rgba(217,83,30,0.6)]" />
-            </div>
-          </div>
-
-          {/* Bottom row: Call-to-action & Prominent Food Mood Button */}
-          <div className="pt-3 border-t border-[#ded5c4] dark:border-[#1E202B] flex items-center justify-between gap-3">
-            <span className="text-xs font-medium text-[#635e58] dark:text-slate-400">
-              What are you craving today?
-            </span>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
+          {/* =========================================================================
+              FRONT FACE: CLEAN, PROFESSIONAL GREETING WITH COOL FOOD MOOD BUTTON
+              ========================================================================= */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={handleFrontClick}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
                 handleFrontClick();
-              }}
-              className="min-h-[38px] h-9 px-4 rounded-xl font-bold text-xs bg-[#1b1917] dark:bg-[#1C1F2B] hover:bg-[#d9531e] dark:hover:bg-[#FBBF24] dark:hover:text-[#090A0F] text-[#f5efe4] dark:text-[#FBBF24] border border-[#36322e] dark:border-[#2D3142] font-headline uppercase tracking-wider active:scale-95 transition-all shadow-sm inline-flex items-center gap-2 group cursor-pointer shrink-0"
-              title="Flip for food cravings"
-            >
-              <span>Food Mood</span>
-              <RotateCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-500 text-[#f5efe4] dark:text-[#FBBF24] group-hover:dark:text-[#090A0F]" />
-            </button>
-          </div>
-        </div>
-
-        {/* =========================================================================
-            BACK FACE: 3D FLIPPED FOOD MOOD / ZOMATO QUOTE CARD
-            ========================================================================= */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={handleNextQuote}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              handleNextQuote();
-            }
-          }}
-          className="flip-card-back rounded-2xl border border-[#ded5c4] dark:border-[#222533] bg-[#eae2d2] dark:bg-[#121319] p-5 shadow-xs dark:shadow-xl flex flex-col justify-between select-none text-left cursor-pointer hover:border-[#181513] dark:hover:border-[#FBBF24]/50 transition-all duration-200 min-h-[185px]"
-          title="Click to see another quote, or click Back to return"
-        >
-          {/* Top Row: Category tag, headline & flip back button */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-[#1b1917] dark:bg-[#1C1F2B] text-[#e5891e] dark:text-[#FBBF24] text-[10px] font-bold tracking-wider uppercase border border-[#36322e] dark:border-[#2D3142] font-headline">
-                {currentQuote.category}
-              </span>
-              <span className="text-xs font-bold text-[#181513] dark:text-white flex items-center gap-1.5 truncate">
-                <span className="text-sm select-none">{currentQuote.emoji}</span>
-                <span className="truncate">{currentQuote.headline}</span>
-              </span>
+              }
+            }}
+            className="flip-card-face rounded-2xl border border-border/80 dark:border-[#222533] bg-card dark:bg-[#121319] p-5 flex flex-col justify-between cursor-pointer hover:border-foreground/30 dark:hover:border-[#FBBF24]/50 transition-colors duration-200 select-none text-left min-h-[185px]"
+            title="Click to flip for food cravings!"
+          >
+            {/* Top row: Status indicator */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#d9531e] dark:bg-[#EF4444] dark:pulse-dot shrink-0"></span>
+                <span className="text-xs font-semibold text-[#635e58] dark:text-slate-300 font-headline uppercase tracking-wider text-[11px]">
+                  Ready for lunch rush?
+                </span>
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleFlipBack();
-              }}
-              className="min-h-[32px] px-2.5 rounded-lg text-[11px] font-semibold text-[#635e58] dark:text-slate-300 hover:text-[#181513] dark:hover:text-white hover:bg-black/5 dark:hover:bg-[#1C1F2B] transition-colors flex items-center gap-1 cursor-pointer shrink-0 border border-[#ded5c4] dark:border-[#222533]"
-              title="Flip back to greeting"
-            >
-              <RotateCw className="h-3 w-3" />
-              <span>Back</span>
-            </button>
+            {/* Center: Welcome Heading with Smoked & Golden Accent */}
+            <div className="my-auto py-2">
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#181513] dark:text-white uppercase font-display truncate">
+                  Yo, <span className="dark:text-[#FBBF24]">{firstName}!</span>
+                </h1>
+                <span className="w-2 h-2 rounded-full bg-[#d9531e] dark:bg-[#EF4444] inline-block shrink-0 shadow-[0_0_8px_rgba(217,83,30,0.6)]" />
+              </div>
+            </div>
+
+            {/* Bottom row: Call-to-action & Prominent Food Mood Button */}
+            <div className="pt-3 border-t border-[#ded5c4] dark:border-[#1E202B] flex items-center justify-between gap-3">
+              <span className="text-xs font-medium text-[#635e58] dark:text-slate-400">
+                What are you craving today?
+              </span>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleFrontClick();
+                }}
+                className="min-h-[38px] h-9 px-4 rounded-xl font-bold text-xs bg-[#1b1917] dark:bg-[#1C1F2B] hover:bg-[#d9531e] dark:hover:bg-[#FBBF24] dark:hover:text-[#090A0F] text-[#f5efe4] dark:text-[#FBBF24] border border-[#36322e] dark:border-[#2D3142] font-headline uppercase tracking-wider active:scale-95 transition-all shadow-sm inline-flex items-center gap-2 group cursor-pointer shrink-0"
+                title="Flip for food cravings"
+              >
+                <span>Food Mood</span>
+                <RotateCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-500 text-[#f5efe4] dark:text-[#FBBF24] group-hover:dark:text-[#090A0F]" />
+              </button>
+            </div>
           </div>
 
-          {/* Middle Row: Quote Text */}
-          <div className="py-2.5 my-auto">
-            <p className="text-sm sm:text-base font-medium text-[#181513] dark:text-[#f8fafc] leading-snug italic">
-              &ldquo;{currentQuote.quote}&rdquo;
-            </p>
-          </div>
-
-          {/* Bottom Row: Tap hint and Next Quote button */}
-          <div className="pt-2 border-t border-[#ded5c4] dark:border-[#1E202B] flex items-center justify-between gap-2 text-xs">
-            <span className="text-[11px] text-[#635e58] dark:text-slate-400 font-medium truncate">
-              Tap card for next quote 💬
-            </span>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
+          {/* =========================================================================
+              BACK FACE: 3D FLIPPED FOOD MOOD / ZOMATO QUOTE CARD
+              ========================================================================= */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={handleNextQuote}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
                 handleNextQuote();
-              }}
-              className="min-h-[36px] h-9 px-3 rounded-xl bg-[#1b1917] dark:bg-[#1C1F2B] hover:bg-[#d9531e] dark:hover:bg-[#FBBF24] text-[#f5efe4] dark:text-[#FBBF24] hover:dark:text-[#090A0F] border border-[#36322e] dark:border-[#2D3142] font-bold text-xs inline-flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer shrink-0 font-headline uppercase tracking-wider"
-            >
-              <span>Next Quote</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
+              }
+            }}
+            className="flip-card-back rounded-2xl border border-[#ded5c4] dark:border-[#222533] bg-[#eae2d2] dark:bg-[#121319] p-5 flex flex-col justify-between select-none text-left cursor-pointer hover:border-[#181513] dark:hover:border-[#FBBF24]/50 transition-colors duration-200 min-h-[185px]"
+            title="Click to see another quote, or click Back to return"
+          >
+            {/* Top Row: Category tag, headline & flip back button */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-[#1b1917] dark:bg-[#1C1F2B] text-[#e5891e] dark:text-[#FBBF24] text-[10px] font-bold tracking-wider uppercase border border-[#36322e] dark:border-[#2D3142] font-headline">
+                  {currentQuote.category}
+                </span>
+                <span className="text-xs font-bold text-[#181513] dark:text-white flex items-center gap-1.5 truncate">
+                  <span className="text-sm select-none">{currentQuote.emoji}</span>
+                  <span className="truncate">{currentQuote.headline}</span>
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleFlipBack();
+                }}
+                className="min-h-[32px] px-2.5 rounded-lg text-[11px] font-semibold text-[#635e58] dark:text-slate-300 hover:text-[#181513] dark:hover:text-white hover:bg-black/5 dark:hover:bg-[#1C1F2B] transition-colors flex items-center gap-1 cursor-pointer shrink-0 border border-[#ded5c4] dark:border-[#222533]"
+                title="Flip back to greeting"
+              >
+                <RotateCw className="h-3 w-3" />
+                <span>Back</span>
+              </button>
+            </div>
+
+            {/* Middle Row: Quote Text */}
+            <div className="py-2.5 my-auto">
+              <p className="text-sm sm:text-base font-medium text-[#181513] dark:text-[#f8fafc] leading-snug italic">
+                &ldquo;{currentQuote.quote}&rdquo;
+              </p>
+            </div>
+
+            {/* Bottom Row: Tap hint and Next Quote button */}
+            <div className="pt-2 border-t border-[#ded5c4] dark:border-[#1E202B] flex items-center justify-between gap-2 text-xs">
+              <span className="text-[11px] text-[#635e58] dark:text-slate-400 font-medium truncate">
+                Tap card for next quote 💬
+              </span>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNextQuote();
+                }}
+                className="min-h-[36px] h-9 px-3 rounded-xl bg-[#1b1917] dark:bg-[#1C1F2B] hover:bg-[#d9531e] dark:hover:bg-[#FBBF24] text-[#f5efe4] dark:text-[#FBBF24] hover:dark:text-[#090A0F] border border-[#36322e] dark:border-[#2D3142] font-bold text-xs inline-flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer shrink-0 font-headline uppercase tracking-wider"
+              >
+                <span>Next Quote</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

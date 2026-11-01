@@ -529,6 +529,56 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
   animation: cb-mote-2 850ms ease-out 320ms infinite;
 }
 
+/* 3D Interactive Cursor-Tracking Tilt & Dynamic Depth Shadow */
+.tilt-card-wrapper {
+  --tilt-rx: 0deg;
+  --tilt-ry: 0deg;
+  --tilt-scale: 1;
+  --shadow-x: 0px;
+  --shadow-y: 6px;
+  --glare-x: 50%;
+  --glare-y: 50%;
+  --glare-opacity: 0;
+
+  transform: perspective(1000px) rotateX(var(--tilt-rx)) rotateY(var(--tilt-ry)) scale3d(var(--tilt-scale), var(--tilt-scale), 1);
+  transform-style: preserve-3d;
+  will-change: transform, box-shadow;
+  transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+  box-shadow:
+    0 4px 14px -2px rgba(24, 21, 19, 0.08),
+    0 2px 6px -1px rgba(24, 21, 19, 0.04);
+}
+
+.tilt-card-wrapper[data-hovered="true"] {
+  transition: transform 0.08s ease-out, box-shadow 0.12s ease-out;
+  box-shadow:
+    0 14px 28px -6px rgba(24, 21, 19, 0.16),
+    var(--shadow-x) var(--shadow-y) 32px -4px rgba(24, 21, 19, 0.22),
+    0 24px 48px -12px rgba(24, 21, 19, 0.14);
+}
+
+/* Dark mode 3D depth shadows & gold ambient aura */
+.dark .tilt-card-wrapper {
+  box-shadow:
+    0 4px 20px -2px rgba(0, 0, 0, 0.5),
+    0 2px 8px -1px rgba(0, 0, 0, 0.3);
+}
+
+.dark .tilt-card-wrapper[data-hovered="true"] {
+  box-shadow:
+    0 14px 32px -6px rgba(0, 0, 0, 0.75),
+    var(--shadow-x) var(--shadow-y) 38px -4px rgba(0, 0, 0, 0.85),
+    0 28px 56px -12px rgba(0, 0, 0, 0.95),
+    0 0 25px -4px rgba(251, 191, 36, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tilt-card-wrapper {
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
 /* 3D Flip Card Transition Utilities for Student Greeting */
 .flip-card-container {
   perspective: 1200px;
