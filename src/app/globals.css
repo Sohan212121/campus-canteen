@@ -702,9 +702,9 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
   display: inline-block;
   color: #dc2626;
   transform: translateY(0);
-  animation: letter-fall-mount 0.24s cubic-bezier(0.25, 1, 0.5, 1) both;
-  animation-delay: calc(var(--char-index, 0) * 0.24s);
-  transition: transform 0.35s cubic-bezier(0.23, 1, 0.32, 1);
+  animation: letter-fall-mount 0.14s cubic-bezier(0.25, 1, 0.5, 1) both;
+  animation-delay: calc(var(--char-index, 0) * 0.14s);
+  transition: transform 0.25s cubic-bezier(0.23, 1, 0.32, 1);
   will-change: transform, opacity;
 }
 
@@ -714,15 +714,11 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 
 @keyframes letter-fall-mount {
   0% {
-    transform: translateY(-26px);
+    transform: translateY(-22px);
     opacity: 0;
   }
   65% {
-    transform: translateY(2.5px);
-    opacity: 1;
-  }
-  85% {
-    transform: translateY(-0.8px);
+    transform: translateY(2px);
     opacity: 1;
   }
   100% {
@@ -734,8 +730,8 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 /* Hover: Sequential falling transition where character (i) starts ONLY after (i-1) takes final position */
 .tilt-card-wrapper:hover .greeting-letter,
 .tilt-card-wrapper[data-hovered="true"] .greeting-letter {
-  animation: letter-fall-hover 0.24s cubic-bezier(0.25, 1, 0.5, 1) both;
-  animation-delay: calc(var(--char-index, 0) * 0.24s);
+  animation: letter-fall-hover 0.14s cubic-bezier(0.25, 1, 0.5, 1) both;
+  animation-delay: calc(var(--char-index, 0) * 0.14s);
   color: #dc2626;
 }
 
@@ -746,15 +742,11 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 
 @keyframes letter-fall-hover {
   0% {
-    transform: translateY(-26px);
+    transform: translateY(-22px);
     opacity: 0;
   }
   65% {
-    transform: translateY(2.5px);
-    opacity: 1;
-  }
-  85% {
-    transform: translateY(-0.8px);
+    transform: translateY(2px);
     opacity: 1;
   }
   100% {
