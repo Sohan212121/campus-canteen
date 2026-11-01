@@ -12,6 +12,7 @@ import {
 
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { VoiceSearchButton } from "@/components/ui/voice-search-button";
 import { cn } from "@/lib/utils";
 import { MenuItemCard } from "@/components/student/menu-item-card";
 import { ItemDetailSheet, type MenuItemData } from "@/components/student/item-detail-sheet";
@@ -528,18 +529,26 @@ export function StudentHomeView({
               placeholder='Search "dosa, biryani, samosa, meals..."'
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-12 pl-10 pr-9 text-sm font-medium bg-[#eae2d2] dark:bg-[#121319] border-[#ded5c4] dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#635e58]/80 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#d9531e] focus-visible:dark:ring-[#FBBF24]"
+              className="h-12 pl-10 pr-16 text-sm font-medium bg-[#eae2d2] dark:bg-[#121319] border-[#ded5c4] dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#635e58]/80 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#d9531e] focus-visible:dark:ring-[#FBBF24]"
             />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
-                aria-label="Clear search"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <VoiceSearchButton
+                onSearch={(transcript) => {
+                  setSearchQuery(transcript);
+                  scrollToFoodSection();
+                }}
+              />
+            </div>
           </div>
 
           {/* Smooth Sliding VEG Switch Toggle */}

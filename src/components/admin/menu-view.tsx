@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { VoiceSearchButton } from "@/components/ui/voice-search-button";
 import { formatPaise, parseRupeesToPaise } from "@/lib/money";
 import {
   type AdminCategory,
@@ -511,8 +512,11 @@ export function MenuView({
             placeholder="Search items by name or description..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-10"
+            className="pl-9 pr-10 h-10"
           />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+            <VoiceSearchButton size="sm" onSearch={(transcript) => setSearch(transcript)} />
+          </div>
         </div>
 
         {/* Categories scrollable pill list */}

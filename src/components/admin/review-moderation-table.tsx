@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { VoiceSearchButton } from "@/components/ui/voice-search-button";
 import {
   adminListReviewsAction,
   adminSetReviewHiddenAction,
@@ -138,8 +139,11 @@ export function ReviewModerationTable() {
             placeholder="Search items, comments, reviewers..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-11 text-xs bg-card rounded-xl border-border/80"
+            className="pl-9 pr-10 h-11 text-xs bg-card rounded-xl border-border/80"
           />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+            <VoiceSearchButton size="sm" onSearch={(transcript) => setSearch(transcript)} />
+          </div>
         </div>
       </div>
 

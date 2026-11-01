@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Search, UtensilsCrossed, CheckCircle, Ban, Layers } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { VoiceSearchButton } from "@/components/ui/voice-search-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatPaise } from "@/lib/money";
@@ -123,8 +124,11 @@ export function InventoryView({ initialItems }: InventoryViewProps) {
             aria-label="Search items by name"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-11 text-sm rounded-xl"
+            className="pl-9 pr-10 h-11 text-sm rounded-xl"
           />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+            <VoiceSearchButton size="sm" onSearch={(transcript) => setSearch(transcript)} />
+          </div>
         </div>
 
         {/* Category Pills */}

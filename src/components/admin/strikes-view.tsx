@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { VoiceSearchButton } from "@/components/ui/voice-search-button";
 import {
   type StudentStrikeRow,
   adminListStudentStrikesAction,
@@ -131,8 +132,11 @@ export function StrikesView({ initialStrikes }: StrikesViewProps) {
             placeholder="Search by student name or ID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 text-xs"
+            className="pl-9 pr-10 text-xs"
           />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+            <VoiceSearchButton size="sm" onSearch={(transcript) => setSearch(transcript)} />
+          </div>
         </div>
       </div>
 

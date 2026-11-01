@@ -5,6 +5,7 @@ import { Search, X, SlidersHorizontal, UtensilsCrossed } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { VoiceSearchButton } from "@/components/ui/voice-search-button";
 import { MenuItemCard } from "@/components/student/menu-item-card";
 import { ItemDetailSheet, type MenuItemData } from "@/components/student/item-detail-sheet";
 import { BestSellersRow } from "@/components/student/best-sellers-row";
@@ -113,18 +114,21 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
           placeholder="Search items, snacks, drinks..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-11 pl-9 pr-9 text-sm bg-card border-border/80 rounded-xl"
+          className="h-11 pl-9 pr-16 text-sm bg-card border-border/80 rounded-xl"
         />
-        {searchQuery && (
-          <button
-            type="button"
-            onClick={() => setSearchQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
-            aria-label="Clear search"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <VoiceSearchButton onSearch={(transcript) => setSearchQuery(transcript)} />
+        </div>
       </div>
 
       {/* Filter Row: Veg / Non-Veg segmented control + Available only toggle */}
