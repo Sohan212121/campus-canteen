@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { TrendingUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { BestSellerCard } from "@/components/student/best-seller-card";
 import type { BestSellerItem } from "@/server/actions/best-sellers";
@@ -108,17 +108,15 @@ export function BestSellersRow({
   }
 
   return (
-    <section className="space-y-2.5" aria-labelledby="best-sellers-heading">
+    <section className="space-y-3" aria-labelledby="best-sellers-heading">
       <div className="flex items-center justify-between px-0.5">
-        <div className="flex items-center gap-1.5">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
-            <TrendingUp className="h-3.5 w-3.5" />
-          </div>
-          <div>
-            <h2 id="best-sellers-heading" className="text-sm font-bold tracking-tight text-foreground">
-              Best Sellers
-            </h2>
-          </div>
+        <div>
+          <span className="font-headline text-[11px] uppercase tracking-widest text-amber-500 font-bold block">
+            CUSTOMER FAVOURITES
+          </span>
+          <h2 id="best-sellers-heading" className="text-xl sm:text-2xl font-bold uppercase tracking-tight text-foreground dark:text-white font-headline">
+            Our Bestsellers
+          </h2>
         </div>
 
         {/* Shifting Carousel Controls & Position Indicator */}
@@ -135,7 +133,7 @@ export function BestSellersRow({
                 }}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
                   idx === currentIndex
-                    ? "w-4 bg-amber-500"
+                    ? "w-4 bg-[#FF385C] dark:bg-[#FF385C]"
                     : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60"
                 }`}
                 aria-label={`Jump to food item ${idx + 1}`}
@@ -151,7 +149,7 @@ export function BestSellersRow({
                 pauseTemporarily(5000);
                 handlePrev();
               }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95 cursor-pointer"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/80 dark:border-[#352f2a] bg-card dark:bg-[#201c19] text-muted-foreground hover:text-foreground dark:hover:text-white hover:bg-muted dark:hover:bg-[#25201c] transition-colors active:scale-95 cursor-pointer"
               aria-label="Previous food item"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
@@ -162,7 +160,7 @@ export function BestSellersRow({
                 pauseTemporarily(5000);
                 handleNext();
               }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95 cursor-pointer"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/80 dark:border-[#352f2a] bg-card dark:bg-[#201c19] text-muted-foreground hover:text-foreground dark:hover:text-white hover:bg-muted dark:hover:bg-[#25201c] transition-colors active:scale-95 cursor-pointer"
               aria-label="Next food item"
             >
               <ChevronRight className="h-3.5 w-3.5" />

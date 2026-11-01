@@ -6,10 +6,10 @@ import { usePathname } from "next/navigation";
 import { ShoppingBag, ArrowRight } from "lucide-react";
 
 import { useCartStore } from "@/lib/cart-store";
+import { formatPaise } from "@/lib/money";
 import {
   calculateEstimatedCartTotal,
   calculateEstimatedCartTotalFromRegistry,
-  formatCartShortcutVisibleLabel,
   getCartShortcutAriaLabel,
   getCartShortcutAnnouncement,
   shouldShowCartShortcut,
@@ -91,18 +91,28 @@ export function CartShortcut({
           <Link
             href="/cart"
             aria-label={getCartShortcutAriaLabel(totalCount, estimatedTotal)}
-            className="flex min-h-[48px] w-full items-center justify-between gap-3 rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground shadow-lg transition-transform active:scale-[0.99] hover:bg-primary/95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="flex min-h-[50px] w-full items-center justify-between gap-3 rounded-full bg-primary text-primary-foreground dark:bg-[#1a1614]/95 dark:border dark:border-[#FF385C]/40 dark:backdrop-blur-xl dark:text-white px-3.5 py-2 shadow-lg dark:shadow-[0_16px_36px_rgba(0,0,0,0.85)] transition-transform active:scale-[0.99] hover:bg-primary/95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
-            {/* Visible label: Go to Cart · {count} items · {total} */}
-            <div className="flex items-center gap-2 min-w-0">
-              <ShoppingBag className="h-4 w-4 shrink-0 opacity-90" />
-              <span className="text-xs sm:text-sm font-bold leading-tight truncate">
-                {formatCartShortcutVisibleLabel(totalCount, estimatedTotal)}
-              </span>
+            {/* Left: Bag Icon badge + Items description */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 dark:bg-gradient-to-br dark:from-[#FF385C] dark:to-[#FF453A] text-primary-foreground dark:text-white shadow-2xs dark:shadow-[0_0_14px_rgba(255,56,92,0.6)]">
+                <ShoppingBag className="h-4 w-4" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs sm:text-sm font-bold font-headline uppercase tracking-wide leading-tight truncate text-primary-foreground dark:text-white">
+                  {totalCount} {totalCount === 1 ? "Item" : "Items"} Added
+                </span>
+                <span className="text-[10px] sm:text-[11px] leading-tight text-primary-foreground/80 dark:text-stone-400 font-medium truncate">
+                  Express Pickup &bull; Station Ready
+                </span>
+              </div>
             </div>
 
-            {/* Right: Action arrow */}
-            <ArrowRight className="h-4 w-4 shrink-0" />
+            {/* Right: Price tag + Action button pill */}
+            <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/20 dark:bg-gradient-to-r dark:from-[#FF385C] dark:to-[#FF453A] text-primary-foreground dark:text-white font-headline text-xs sm:text-sm font-bold uppercase tracking-wider shrink-0 shadow-2xs dark:shadow-[0_4px_16px_rgba(255,56,92,0.5)]">
+              <span>{formatPaise(estimatedTotal)}</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </div>
           </Link>
         </aside>
       )}

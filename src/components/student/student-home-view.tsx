@@ -5,16 +5,15 @@ import Link from "next/link";
 import {
   Search,
   X,
-  ChevronLeft,
-  ChevronRight,
-  TrendingUp,
   Utensils,
   ArrowRight,
   Leaf,
+  Flame,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { MenuItemCard } from "@/components/student/menu-item-card";
 import { ItemDetailSheet, type MenuItemData } from "@/components/student/item-detail-sheet";
 import { BestSellersRow } from "@/components/student/best-sellers-row";
@@ -252,6 +251,16 @@ export function StudentHomeView({
     return map;
   }, [categories]);
 
+  // Pre-resolve representative dish image for each hero slide
+  const slideImages = useMemo(() => {
+    return PROMO_SLIDES.map((slide) => {
+      const match = initialItems.find(
+        (i) => i.image_url && matchesMealType(i, categoryMap, slide.mealTarget)
+      );
+      return match?.image_url || initialItems.find((i) => i.image_url)?.image_url;
+    });
+  }, [initialItems, categoryMap]);
+
   // Auto-transition interval: advances every 2.8 seconds (smooth right-to-left slide)
   useEffect(() => {
     if (isPaused) return;
@@ -366,10 +375,55 @@ export function StudentHomeView({
   return (
     <div className="space-y-6">
       {/* =========================================================================
-          SECTION 1: AUTO-TRANSITIONING PROMO CAROUSEL (Right-to-Left Sliding)
+          CATEGORY CIRCLES BAR ("Something for Every Craving" Style)
+          ========================================================================= */}
+      <div
+        ref={filterSectionRef}
+        className="flex items-center -mx-4 px-4 overflow-x-auto no-scrollbar gap-3.5 pt-1 pb-1 select-none scroll-mt-3"
+        aria-label="Something for Every Craving"
+      >
+        {MEAL_TABS.map((tab) => {
+          const isSelected = selectedMeal === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={(e) => {
+                setSelectedMeal(tab.id);
+                e.currentTarget.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+                scrollToFoodSection();
+              }}
+              className="flex flex-col items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform"
+              aria-label={`Filter by ${tab.label}`}
+            >
+              <div
+                className={cn(
+                  "w-14 h-14 rounded-full flex items-center justify-center p-2 text-2xl transition-all",
+                  isSelected
+                    ? "bg-[#241f1c] border-2 border-[#FF385C] shadow-lg shadow-rose-950/40 text-[#FF385C]"
+                    : "bg-card dark:bg-[#201c19] border border-border/80 dark:border-[#352f2a] hover:border-primary/50 dark:hover:border-amber-500/50"
+                )}
+              >
+                <span>{tab.icon}</span>
+              </div>
+              <span
+                className={cn(
+                  "font-headline text-[11px] uppercase tracking-wider font-bold transition-colors",
+                  isSelected ? "text-[#FF385C]" : "text-muted-foreground dark:text-stone-300"
+                )}
+              >
+                {tab.id === "all" ? "All" : tab.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* =========================================================================
+          SECTION 1: HIGH-IMPACT FAST-CASUAL HERO BANNER (Smoked & Golden Style)
           ========================================================================= */}
       <section
-        className="relative overflow-hidden rounded-3xl shadow-md border border-border/60"
+        className="relative overflow-hidden rounded-2xl shadow-md border border-border/60 dark:border-amber-500/40 bg-gradient-to-br from-[#261705] via-[#1a1410] to-[#14100d] text-white p-5 shadow-[0_12px_36px_rgba(0,0,0,0.65)] select-none"
         aria-label="Campus food highlights and subscriptions"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
@@ -377,92 +431,80 @@ export function StudentHomeView({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* Sliding Slides Track (transform: translateX(-N * 100%)) */}
+        {/* Ambient Radial Glow */}
         <div
-          className="flex transition-transform duration-700 ease-out will-change-transform"
-          style={{ transform: `translateX(-${currentSlide * 100}%)` }}
-        >
-          {PROMO_SLIDES.map((slide) => (
-            <div
-              key={slide.id}
-              className={`w-full shrink-0 min-h-[220px] sm:min-h-[240px] bg-gradient-to-br ${slide.gradient} text-white p-5 sm:p-6 flex flex-col justify-between relative overflow-hidden`}
-            >
-              {/* Background ambient circular glow */}
-              <div
-                className="absolute -right-8 -top-8 h-48 w-48 rounded-full bg-white/10 blur-2xl pointer-events-none"
-                aria-hidden="true"
-              />
-              <div
-                className="absolute -left-12 -bottom-12 h-44 w-44 rounded-full bg-black/20 blur-xl pointer-events-none"
-                aria-hidden="true"
-              />
+          className="absolute -top-20 -left-20 w-52 h-52 bg-amber-500/20 rounded-full blur-3xl pointer-events-none"
+          aria-hidden="true"
+        />
 
-              {/* Slide Top Row: Badge & Large Food Emoji Graphic */}
-              <div className="flex items-start justify-between gap-3 relative z-10">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-[11px] font-black uppercase tracking-wider text-white shadow-2xs">
-                  <span>{slide.badgeIcon}</span>
-                  <span>{slide.badge}</span>
-                </div>
-                <div className="text-4xl sm:text-5xl filter drop-shadow-md animate-bounce duration-1000 select-none">
-                  {slide.emoji}
-                </div>
-              </div>
-
-              {/* Slide Middle: Headline & Tagline */}
-              <div className="space-y-1.5 my-2 relative z-10">
-                <h3 className="text-xl sm:text-2xl font-black tracking-tight text-white drop-shadow-sm leading-tight">
-                  {slide.title}
-                </h3>
-                <p className="text-xs sm:text-sm text-white/85 line-clamp-2 leading-relaxed max-w-md">
-                  {slide.subtitle}
-                </p>
-                <div className="inline-flex items-center text-[11px] font-semibold text-white/90 bg-black/20 px-2.5 py-0.5 rounded-lg backdrop-blur-xs">
-                  <span>{slide.highlight}</span>
-                </div>
-              </div>
-
-              {/* Slide Bottom Row: CTA Button */}
-              <div className="relative z-10 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleSlideCta(slide.mealTarget)}
-                  className="min-h-[44px] h-10 px-4 rounded-xl font-bold text-xs bg-white text-zinc-950 hover:bg-white/90 active:scale-95 transition-all shadow-md inline-flex items-center gap-2 group cursor-pointer"
-                >
-                  <span>{slide.ctaText}</span>
-                  <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-                </button>
-              </div>
+        {/* Sliding Content Container */}
+        <div className="relative z-10 flex flex-col justify-between min-h-[175px] space-y-3">
+          <div className="max-w-[62%] sm:max-w-[68%] space-y-1.5">
+            {/* Eyebrow badge */}
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 backdrop-blur-md text-amber-400 font-headline text-[11px] tracking-widest uppercase font-bold">
+              <span>⚡</span>
+              <span>{PROMO_SLIDES[currentSlide].badge}</span>
             </div>
-          ))}
+
+            {/* Main headline */}
+            <h3 className="font-headline text-2xl sm:text-3xl font-bold text-white uppercase leading-[0.98] tracking-tight">
+              {PROMO_SLIDES[currentSlide].id === "homely-meals" ? (
+                <>
+                  FOOD THAT <br />
+                  <span className="text-[#FF385C]">HITS THE SPOT</span>
+                </>
+              ) : (
+                PROMO_SLIDES[currentSlide].title
+              )}
+            </h3>
+
+            {/* Subtitle */}
+            <p className="font-body text-[12px] text-stone-300 line-clamp-2 pt-0.5 leading-snug">
+              {PROMO_SLIDES[currentSlide].subtitle}
+            </p>
+          </div>
+
+          {/* CTA Button and Readiness badge */}
+          <div className="pt-1 flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => handleSlideCta(PROMO_SLIDES[currentSlide].mealTarget)}
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#FF385C] to-[#FF453A] hover:from-[#FF453A] hover:to-[#FF6058] text-white font-headline text-[13px] tracking-wider uppercase font-bold shadow-[0_4px_18px_rgba(255,56,92,0.5)] active:scale-95 transition-all cursor-pointer"
+            >
+              <span>{PROMO_SLIDES[currentSlide].ctaText}</span>
+              <ArrowRight className="h-3.5 w-3.5 font-bold" />
+            </button>
+
+            <span className="font-headline text-[11px] uppercase tracking-wider text-amber-400 font-bold px-2.5 py-1 rounded-md bg-black/50 border border-amber-500/20">
+              Station 3 Ready
+            </span>
+          </div>
         </div>
 
-        {/* Carousel Navigation Chevron Arrows */}
-        <button
-          type="button"
-          onClick={() => setCurrentSlide((prev) => (prev - 1 + PROMO_SLIDES.length) % PROMO_SLIDES.length)}
-          className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center backdrop-blur-xs border border-white/10 active:scale-90 transition-all z-20 cursor-pointer"
-          aria-label="Previous slide"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setCurrentSlide((prev) => (prev + 1) % PROMO_SLIDES.length)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center backdrop-blur-xs border border-white/10 active:scale-90 transition-all z-20 cursor-pointer"
-          aria-label="Next slide"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
+        {/* Spotlight Decorative Circular Dish Frame on the Right */}
+        <div className="absolute -right-6 -bottom-6 w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.85)] border-2 border-amber-500/40 bg-[#25201c] shrink-0 pointer-events-none">
+          {slideImages[currentSlide] ? (
+            <img
+              src={slideImages[currentSlide]}
+              alt={PROMO_SLIDES[currentSlide].title}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-5xl bg-gradient-to-br from-amber-950/60 to-black/80">
+              {PROMO_SLIDES[currentSlide].emoji}
+            </div>
+          )}
+        </div>
 
-        {/* Dynamic Dot Indicators (Active dot extends smoothly) */}
-        <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 bg-black/30 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10">
+        {/* Dynamic Dot Indicators */}
+        <div className="absolute top-3 right-3 flex items-center gap-1 z-20 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
           {PROMO_SLIDES.map((_, idx) => (
             <button
               key={idx}
               type="button"
               onClick={() => setCurrentSlide(idx)}
-              className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                idx === currentSlide ? "w-6 bg-white shadow-xs" : "w-2 bg-white/40 hover:bg-white/70"
+              className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                idx === currentSlide ? "w-4 bg-amber-400 shadow-xs" : "w-1.5 bg-white/40 hover:bg-white/70"
               }`}
               aria-label={`Go to slide ${idx + 1}`}
             />
@@ -477,13 +519,13 @@ export function StudentHomeView({
         <div className="flex items-center gap-2.5">
           {/* Search Box */}
           <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground dark:text-stone-400 pointer-events-none" />
             <Input
               type="text"
               placeholder='Search "dosa, biryani, samosa, meals..."'
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-12 pl-10 pr-9 text-sm font-medium bg-card border-border/80 rounded-2xl shadow-2xs focus-visible:ring-primary"
+              className="h-12 pl-10 pr-9 text-sm font-medium bg-card dark:bg-[#1e1a17] border-border/80 dark:border-[#352f2a] dark:text-white dark:placeholder:text-stone-400 rounded-2xl shadow-2xs focus-visible:ring-primary dark:focus-visible:ring-amber-500"
             />
             {searchQuery && (
               <button
@@ -497,7 +539,7 @@ export function StudentHomeView({
             )}
           </div>
 
-          {/* Smooth Sliding VEG Switch Toggle (Matching Zomato's Top-Right Toggle) */}
+          {/* Smooth Sliding VEG Switch Toggle */}
           <div className="shrink-0">
             <button
               type="button"
@@ -510,19 +552,19 @@ export function StudentHomeView({
               className={`min-h-[48px] h-12 px-3 rounded-2xl border transition-all duration-200 flex items-center gap-2 shadow-2xs cursor-pointer active:scale-95 select-none ${
                 isVegOnly
                   ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30"
-                  : "bg-card border-border/80 text-muted-foreground hover:border-foreground/30"
+                  : "bg-card dark:bg-[#1e1a17] border-border/80 dark:border-[#352f2a] text-muted-foreground dark:text-stone-400 hover:border-foreground/30"
               }`}
               aria-label="Toggle pure vegetarian filter"
             >
-              <div className="flex flex-col text-left">
-                <span className="text-[11px] font-black tracking-wider leading-none">VEG</span>
+              <div className="flex flex-col text-left font-headline">
+                <span className="text-[11px] font-bold tracking-wider leading-none">VEG</span>
                 <span className="text-[9px] opacity-75 leading-tight">ONLY</span>
               </div>
 
               {/* Sliding Track & Thumb */}
               <div
                 className={`relative h-6 w-11 rounded-full transition-colors duration-200 p-0.5 flex items-center ${
-                  isVegOnly ? "bg-emerald-600" : "bg-muted-foreground/30"
+                  isVegOnly ? "bg-emerald-600" : "bg-muted-foreground/30 dark:bg-stone-700"
                 }`}
               >
                 <div
@@ -532,7 +574,7 @@ export function StudentHomeView({
                 >
                   <span
                     className={`h-2 w-2 rounded-full transition-colors ${
-                      isVegOnly ? "bg-emerald-600" : "bg-muted-foreground/50"
+                      isVegOnly ? "bg-emerald-600" : "bg-muted-foreground/50 dark:bg-stone-500"
                     }`}
                   />
                 </div>
@@ -541,47 +583,7 @@ export function StudentHomeView({
           </div>
         </div>
 
-        {/* =========================================================================
-            SECTION 3: MEAL TABS (Breakfast, Lunch, Snacks, Dinner, All, Beverages)
-            ========================================================================= */}
-        <div
-          ref={filterSectionRef}
-          className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-1 scroll-mt-3"
-        >
-          {MEAL_TABS.map((tab) => {
-            const count = initialItems.filter((i) => i.is_active && matchesMealType(i, categoryMap, tab.id)).length;
-            const isSelected = selectedMeal === tab.id;
-
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={(e) => {
-                  setSelectedMeal(tab.id);
-                  e.currentTarget.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-                  scrollToFoodSection();
-                }}
-                className={`min-h-[44px] shrink-0 rounded-2xl px-3.5 py-2 text-xs font-bold transition-all duration-200 flex items-center gap-2 border cursor-pointer active:scale-95 ${
-                  isSelected
-                    ? "bg-primary text-primary-foreground border-primary shadow-xs ring-1 ring-primary/30"
-                    : "bg-card border-border/80 text-muted-foreground hover:text-foreground hover:border-border"
-                }`}
-              >
-                <span className="text-sm select-none">{tab.icon}</span>
-                <span>{tab.label}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
-                    isSelected ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Smart Quick Filter Chips (In Stock, Under ₹100, Fast Prep, Healthy Mode) */}
+        {/* Smart Quick Filter Chips (In Stock, Under ₹100, Healthy Mode) */}
         <div className="flex items-center gap-2 flex-wrap pt-0.5">
           <Link
             href="/healthy"
@@ -589,7 +591,7 @@ export function StudentHomeView({
             onClick={() => {
               startTransition("/healthy");
             }}
-            className="min-h-[36px] h-9 px-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs"
+            className="min-h-[36px] h-9 px-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs font-headline tracking-wide uppercase"
             aria-label="Healthy Mode & High-Protein Fuel"
           >
             <Leaf className="h-3.5 w-3.5" />
@@ -602,13 +604,13 @@ export function StudentHomeView({
               setInStockOnly((prev) => !prev);
               scrollToFoodSection();
             }}
-            className={`min-h-[36px] h-9 px-3 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+            className={`min-h-[36px] h-9 px-3.5 rounded-xl border text-xs font-headline uppercase tracking-wider font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               inStockOnly
-                ? "bg-primary/10 border-primary text-primary shadow-2xs"
-                : "bg-card border-border/80 text-muted-foreground hover:text-foreground"
+                ? "bg-primary/10 border-primary text-primary dark:bg-amber-500/15 dark:border-amber-500 dark:text-amber-400 shadow-2xs"
+                : "bg-card dark:bg-[#1e1a17] border-border/80 dark:border-[#352f2a] text-muted-foreground dark:text-stone-300 hover:text-foreground"
             }`}
           >
-            <span className={`h-2 w-2 rounded-full ${inStockOnly ? "bg-primary" : "bg-emerald-500"}`} />
+            <span className={`h-2 w-2 rounded-full ${inStockOnly ? "bg-primary dark:bg-amber-400" : "bg-emerald-500"}`} />
             <span>In Stock Only</span>
           </button>
 
@@ -618,10 +620,10 @@ export function StudentHomeView({
               setUnder100Only((prev) => !prev);
               scrollToFoodSection();
             }}
-            className={`min-h-[36px] h-9 px-3 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+            className={`min-h-[36px] h-9 px-3.5 rounded-xl border text-xs font-headline uppercase tracking-wider font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               under100Only
-                ? "bg-primary/10 border-primary text-primary shadow-2xs"
-                : "bg-card border-border/80 text-muted-foreground hover:text-foreground"
+                ? "bg-primary/10 border-primary text-primary dark:bg-amber-500/15 dark:border-amber-500 dark:text-amber-400 shadow-2xs"
+                : "bg-card dark:bg-[#1e1a17] border-border/80 dark:border-[#352f2a] text-muted-foreground dark:text-stone-300 hover:text-foreground"
             }`}
           >
             <span>💰</span>
@@ -636,7 +638,7 @@ export function StudentHomeView({
                 handleResetFilters();
                 scrollToFoodSection();
               }}
-              className="min-h-[36px] h-9 px-3 rounded-xl text-xs font-bold text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1 cursor-pointer"
+              className="min-h-[36px] h-9 px-3 rounded-xl text-xs font-bold text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1 cursor-pointer font-headline uppercase tracking-wider"
             >
               <X className="h-3 w-3" />
               <span>Reset</span>
@@ -646,27 +648,10 @@ export function StudentHomeView({
       </section>
 
       {/* =========================================================================
-          SECTION 4: BEST SELLERS / RECOMMENDED FOR YOU (When no search active)
+          SECTION 3: BEST SELLERS / RECOMMENDED FOR YOU (When no search active)
           ========================================================================= */}
       {!hasActiveFilters && bestSellers.length >= 3 && (
         <section className="space-y-3" aria-labelledby="home-bestsellers-heading">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
-                <TrendingUp className="h-4 w-4" />
-              </div>
-              <h2 id="home-bestsellers-heading" className="text-base font-bold tracking-tight">
-                Recommended For You
-              </h2>
-            </div>
-            <Link
-              href="/menu"
-              className="text-xs font-semibold text-primary hover:underline flex min-h-[44px] items-center gap-1"
-            >
-              View Full Menu <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-
           <BestSellersRow
             bestSellers={bestSellers}
             onOpenDetail={(item) => setSelectedItem(item)}
@@ -675,34 +660,64 @@ export function StudentHomeView({
       )}
 
       {/* =========================================================================
+          SECTION 4: COMBO IT BETTER PROMO BANNER (Fast-Casual Style from Redesign)
+          ========================================================================= */}
+      <Link
+        href="/menu"
+        prefetch={true}
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#20150d] via-[#1a120b] to-[#120e0b] border border-amber-500/30 p-4 sm:p-5 flex items-center justify-between shadow-lg transition-all hover:border-amber-500/50 active:scale-[0.99] select-none group block"
+      >
+        <div className="space-y-1 max-w-[72%] z-10">
+          <div className="inline-flex items-center gap-1.5 text-amber-400 font-headline text-[11px] uppercase tracking-widest font-bold">
+            <Flame className="h-3.5 w-3.5 text-amber-400" />
+            <span>COMBO IT BETTER</span>
+          </div>
+          <h3 className="font-headline text-lg sm:text-xl uppercase text-white font-bold leading-tight group-hover:text-amber-300 transition-colors">
+            Meal + Drink = Save 20%
+          </h3>
+          <p className="font-body text-[12px] text-stone-300 line-clamp-2">
+            Pair any hot main dish with iced lemon tea or cold coffee.
+          </p>
+        </div>
+        <div className="w-14 h-14 rounded-full bg-amber-500/20 border border-amber-500/50 text-amber-400 flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(245,158,11,0.25)] text-2xl group-hover:scale-105 transition-transform">
+          🍱
+        </div>
+      </Link>
+
+      {/* =========================================================================
           SECTION 5: CATEGORIZED FOOD ITEMS LIST (Breakfast / Lunch / Snacks / etc.)
           ========================================================================= */}
       <section
         id="home-food-section"
         ref={foodItemsSectionRef}
-        className="space-y-3 scroll-mt-4"
+        className="space-y-3.5 scroll-mt-4"
         aria-label="Available Food Items"
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold tracking-tight">
+          <div>
+            <span className="font-headline text-[11px] uppercase tracking-widest text-amber-500 font-bold block">
+              CHEF SELECTION
+            </span>
+            <h2 className="text-xl sm:text-2xl font-bold uppercase tracking-tight text-foreground dark:text-white font-headline">
               {selectedMeal === "all"
-                ? "All Canteen Items"
+                ? "Today's Campus Picks"
                 : `${MEAL_TABS.find((m) => m.id === selectedMeal)?.label} Menu`}
             </h2>
-            <span className="text-xs text-muted-foreground font-semibold">
-              ({filteredItems.length})
-            </span>
           </div>
 
-          {isVegOnly && (
-            <Badge variant="outline" className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
-              Veg Only
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            <span className="font-headline text-[11px] uppercase tracking-wider text-muted-foreground dark:text-stone-400 font-semibold px-2 py-0.5 rounded bg-muted dark:bg-[#201c19] border border-border/80 dark:border-[#352f2a]">
+              Station A &amp; C
+            </span>
+            {isVegOnly && (
+              <Badge variant="outline" className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
+                Veg Only
+              </Badge>
+            )}
+          </div>
         </div>
 
-        {/* Items List (Full Width Cards with Smooth Filter Transition) */}
+        {/* Items List (Fast-Casual Cards with Smooth Filter Transition) */}
         {filteredItems.length > 0 ? (
           <div
             key={`${selectedMeal}-${isVegOnly}-${inStockOnly}-${under100Only}-${selectedCategory}`}
@@ -717,26 +732,35 @@ export function StudentHomeView({
             ))}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-border/80 bg-muted/20 p-8 text-center space-y-3">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+          <div className="rounded-2xl border border-dashed border-border/80 dark:border-[#352f2a] bg-muted/20 dark:bg-[#1a1614] p-8 text-center space-y-3">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-muted dark:bg-[#25201c] text-muted-foreground dark:text-stone-400">
               <Utensils className="h-6 w-6" />
             </div>
             <div className="space-y-1">
-              <h3 className="font-bold text-sm">No food items found</h3>
-              <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+              <h3 className="font-bold text-sm text-foreground dark:text-white font-headline uppercase">
+                No food items found
+              </h3>
+              <p className="text-xs text-muted-foreground dark:text-stone-400 max-w-xs mx-auto">
                 No items match your active search or filters. Try resetting or selecting another category.
               </p>
             </div>
             <button
               type="button"
               onClick={handleResetFilters}
-              className="min-h-[44px] px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer"
+              className="min-h-[44px] px-4 py-2 rounded-xl bg-primary text-primary-foreground dark:bg-[#FF385C] dark:hover:bg-[#FF453A] dark:text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer font-headline uppercase tracking-wider"
             >
               <X className="h-3.5 w-3.5" />
               Reset All Filters
             </button>
           </div>
         )}
+
+        {/* Micro-interactive Reassurance Footnote matching redesign */}
+        <div className="pt-3 pb-2 text-center">
+          <p className="font-headline text-[11px] uppercase tracking-wider text-muted-foreground dark:text-stone-500">
+            Freshly Made &bull; Quality Ingredients &bull; Campus Kitchen Curfew 9:30 PM
+          </p>
+        </div>
       </section>
 
       {/* Item Detail Sheet Modal (Calories, Ingredients, Reviews, Add to Cart) */}

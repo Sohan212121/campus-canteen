@@ -98,18 +98,18 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
   }, [userId, router, refreshUnread]);
 
   return (
-    <header className="flex items-center justify-between pb-3 mb-2 border-b border-border/60">
-      <Link href="/" prefetch={true} className="flex items-center gap-2 group min-h-[44px] py-1">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-2xs group-hover:scale-105 transition-transform">
-          <UtensilsCrossed className="h-4 w-4" />
+    <header className="flex items-center justify-between pb-3.5 mb-2 border-b border-border/60 dark:border-[#2d2621]">
+      <Link href="/" prefetch={true} className="flex items-center gap-2.5 group min-h-[44px] py-1 select-none">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-2xs dark:bg-[#231f1c] dark:border dark:border-amber-500/40 dark:shadow-md dark:shadow-amber-950/20 group-hover:scale-105 transition-all">
+          <UtensilsCrossed className="h-5 w-5 dark:text-amber-500" />
         </div>
         <div className="flex flex-col">
-          <span className="text-sm font-bold tracking-tight leading-none text-foreground">
+          <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase text-muted-foreground dark:text-amber-500 font-headline leading-tight">
+            Good Food. Fast Vibes.
+          </span>
+          <h1 className="text-base sm:text-lg font-extrabold tracking-wide uppercase leading-tight text-foreground dark:text-white font-headline">
             Campus Canteen
-          </span>
-          <span className="text-[10px] text-muted-foreground font-medium">
-            Smart Pickup
-          </span>
+          </h1>
         </div>
       </Link>
 
