@@ -279,6 +279,12 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
   const tiltRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
 
+  // Animation state for character falling cascade & 'YO,' bottom-to-top rise
+  const [isLetterAnimating, setIsLetterAnimating] = useState(false);
+  const [animKey, setAnimKey] = useState(0);
+  const animTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const wobbleTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   // Non-repeating randomized quote deck: guarantees a different message on every single click
   const deckRef = useRef<number[]>([]);
   const deckPointerRef = useRef<number>(0);
@@ -299,17 +305,83 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
     return ZOMATO_FOOD_QUOTES[quoteIndex];
   }, []);
 
-  // Handler: Flips to back face and loads a fresh quote
-  const handleFrontClick = useCallback(() => {
+  // Trigger character cascade and 3D transition effect
+  const triggerLetterAnimation = useCallback((withWobble = false) => {
+    if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    if (wobbleTimerRef.current) clearTimeout(wobbleTimerRef.current);
+
+    setAnimKey((prev) => prev + 1);
+    setIsLetterAnimating(true);
+
+    if (tiltRef.current) {
+      tiltRef.current.setAttribute("data-animate-letters", "true");
+
+      if (withWobble) {
+        // Subtle tactile 3D wobble bounce transition on click
+        tiltRef.current.style.setProperty("--tilt-rx", "-6deg");
+        tiltRef.current.style.setProperty("--tilt-ry", "5deg");
+        tiltRef.current.style.setProperty("--tilt-scale", "1.02");
+
+        wobbleTimerRef.current = setTimeout(() => {
+          if (tiltRef.current) {
+            tiltRef.current.style.setProperty("--tilt-rx", "3deg");
+            tiltRef.current.style.setProperty("--tilt-ry", "-3deg");
+          }
+          wobbleTimerRef.current = setTimeout(() => {
+            if (tiltRef.current) {
+              tiltRef.current.style.setProperty("--tilt-rx", "0deg");
+              tiltRef.current.style.setProperty("--tilt-ry", "0deg");
+              tiltRef.current.style.setProperty("--tilt-scale", "1");
+            }
+          }, 140);
+        }, 100);
+      }
+    }
+
+    animTimerRef.current = setTimeout(() => {
+      setIsLetterAnimating(false);
+      if (tiltRef.current) {
+        tiltRef.current.removeAttribute("data-animate-letters");
+      }
+    }, 1200);
+  }, []);
+
+  // For mobile users: automatically play the character falling effect on landing / app refresh
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      triggerLetterAnimation(false);
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
+      if (wobbleTimerRef.current) clearTimeout(wobbleTimerRef.current);
+    };
+  }, [triggerLetterAnimation]);
+
+  // Handler: Flips to back face ONLY when Food Mood button is clicked
+  const handleFoodMoodClick = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
     const nextQuote = getNextQuote();
     setCurrentQuote(nextQuote);
     setIsFlipped(true);
   }, [getNextQuote]);
 
+  // Handler: Clicking greeting banner replays character effect and 3D wobble transition (does NOT flip)
+  const handleBannerClick = useCallback(() => {
+    triggerLetterAnimation(true);
+  }, [triggerLetterAnimation]);
+
   // Handler: Flips back to the greeting front face
   const handleFlipBack = useCallback(() => {
     setIsFlipped(false);
-  }, []);
+    // Replay character cascade when flipping back to front
+    setTimeout(() => {
+      triggerLetterAnimation(false);
+    }, 220);
+  }, [triggerLetterAnimation]);
 
   // Handler: Cycles to the next quote on the back face with smooth 3D flip spin
   const handleNextQuote = useCallback(() => {
@@ -442,6 +514,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
       onMouseLeave={handleMouseLeave}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      data-animate-letters={isLetterAnimating ? "true" : undefined}
       className="tilt-card-wrapper relative w-full rounded-2xl select-none"
       aria-label="Interactive campus greeting and food cravings card"
     >
@@ -453,19 +526,20 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
         >
           {/* =========================================================================
               FRONT FACE: CLEAN, PROFESSIONAL GREETING WITH COOL FOOD MOOD BUTTON
+              (Clicking banner triggers character falling & wobble; Food Mood flips)
               ========================================================================= */}
           <div
             role="button"
             tabIndex={0}
-            onClick={handleFrontClick}
+            onClick={handleBannerClick}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                handleFrontClick();
+                handleBannerClick();
               }
             }}
             className="flip-card-face rounded-2xl border border-[#ded5c4] dark:border-[#222533] bg-[#eae2d2] dark:bg-[#121319] p-5 flex flex-col justify-between cursor-pointer hover:border-[#181513]/30 dark:hover:border-[#EF4444]/50 transition-colors duration-200 select-none text-left min-h-[185px] relative"
-            title="Click to flip for food cravings!"
+            title="Tap to trigger greeting animation, or click Food Mood to flip"
           >
             {/* Dynamic 3D Glare Lighting Sheen (Front Face) */}
             <div
@@ -504,7 +578,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
                   <span className="greeting-yo-group inline-flex items-center text-[#181513] dark:text-white mr-1.5">
                     {["Y", "O", ","].map((char, index) => (
                       <span
-                        key={`yo-${index}`}
+                        key={`yo-${index}-${animKey}`}
                         className="greeting-yo-letter inline-block"
                         style={{ "--yo-index": index } as React.CSSProperties}
                       >
@@ -515,7 +589,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
                   <span className="greeting-student-name font-extrabold inline-flex items-center text-[#DC2626] dark:text-[#EF4444]">
                     {Array.from(`${firstName}!`).map((char, index) => (
                       <span
-                        key={`name-${char}-${index}`}
+                        key={`name-${char}-${index}-${animKey}`}
                         className="greeting-letter inline-block"
                         style={{ "--char-index": index } as React.CSSProperties}
                       >
@@ -536,10 +610,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
 
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleFrontClick();
-                }}
+                onClick={handleFoodMoodClick}
                 className="min-h-[38px] h-9 px-4 rounded-xl font-bold text-xs bg-[#1b1917] dark:bg-[#1C1F2B] hover:bg-[#DC2626] dark:hover:bg-[#EF4444] dark:hover:text-white text-[#f5efe4] dark:text-[#FBBF24] border border-[#36322e] dark:border-[#2D3142] font-headline uppercase tracking-wider active:scale-95 transition-all shadow-sm inline-flex items-center gap-2 group cursor-pointer shrink-0"
                 title="Flip for food cravings"
               >

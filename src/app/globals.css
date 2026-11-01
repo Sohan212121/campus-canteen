@@ -656,7 +656,8 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 }
 
 .tilt-card-wrapper:hover .greeting-yo-letter,
-.tilt-card-wrapper[data-hovered="true"] .greeting-yo-letter {
+.tilt-card-wrapper[data-hovered="true"] .greeting-yo-letter,
+.tilt-card-wrapper[data-animate-letters="true"] .greeting-yo-letter {
   animation: yo-rise-hover 0.18s cubic-bezier(0.25, 1, 0.5, 1) both;
   animation-delay: calc(var(--yo-index, 0) * 0.04s);
 }
@@ -695,16 +696,18 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
   color: #ef4444;
 }
 
-/* Hover: Sequential falling transition where character (i) starts ONLY after (i-1) takes final position */
+/* Hover or Active Trigger: Sequential falling transition where character (i) starts ONLY after (i-1) takes final position */
 .tilt-card-wrapper:hover .greeting-letter,
-.tilt-card-wrapper[data-hovered="true"] .greeting-letter {
+.tilt-card-wrapper[data-hovered="true"] .greeting-letter,
+.tilt-card-wrapper[data-animate-letters="true"] .greeting-letter {
   animation: letter-fall-hover 0.085s cubic-bezier(0.25, 1, 0.5, 1) both;
   animation-delay: calc(var(--char-index, 0) * 0.085s);
   color: #dc2626;
 }
 
 .dark .tilt-card-wrapper:hover .greeting-letter,
-.dark .tilt-card-wrapper[data-hovered="true"] .greeting-letter {
+.dark .tilt-card-wrapper[data-hovered="true"] .greeting-letter,
+.dark .tilt-card-wrapper[data-animate-letters="true"] .greeting-letter {
   color: #ef4444;
 }
 
