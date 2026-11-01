@@ -285,11 +285,25 @@
   animation: cc-stagger-fade 400ms ease-out 840ms both;
 }
 
-/* Hide fixed bottom bars while celebration overlay is open */
+/* Hide fixed bottom bars while celebration overlay or search takeover is open */
 body[data-celebration-open="true"] [role="region"][aria-label*="install" i],
 body[data-celebration-open="true"] [role="region"][aria-label*="Install" i],
-body[data-celebration-open="true"] [data-cart-shortcut] {
+body[data-celebration-open="true"] [data-cart-shortcut],
+body[data-search-takeover-open="true"] [role="region"][aria-label*="install" i],
+body[data-search-takeover-open="true"] [role="region"][aria-label*="Install" i],
+body[data-search-takeover-open="true"] [data-cart-shortcut],
+body[data-search-takeover-open="true"] [aria-label*="cart shortcut" i] {
   display: none !important;
+}
+
+@keyframes gentle-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: gentle-shake 0.35s ease-in-out;
 }
 
 /* Sonner Toast High-Contrast Description & Typography */

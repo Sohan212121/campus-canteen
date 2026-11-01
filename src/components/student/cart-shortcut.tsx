@@ -85,6 +85,7 @@ export function CartShortcut({
       {isVisible && (
         <aside
           role="region"
+          data-cart-shortcut
           aria-label="Floating cart shortcut"
           className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-3 right-3 z-40 mx-auto max-w-md pointer-events-auto animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none motion-reduce:transition-none"
         >

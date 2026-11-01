@@ -543,7 +543,13 @@ export function StudentHomeView({
               placeholder='Search "dosa, biryani, samosa, meals..."'
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-12 pl-10 pr-16 text-sm font-semibold bg-[#eae2d2] dark:bg-[#121319] border-2 border-[#181513]/40 dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#181513] focus-visible:dark:ring-[#FBBF24]"
+              onClick={() => {
+                startTransition("/menu?search=open", "Menu");
+              }}
+              onFocus={() => {
+                startTransition("/menu?search=open", "Menu");
+              }}
+              className="h-12 pl-10 pr-16 text-sm font-semibold bg-[#eae2d2] dark:bg-[#121319] border-2 border-[#181513]/40 dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#181513] focus-visible:dark:ring-[#FBBF24] cursor-pointer"
             />
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {searchQuery && (

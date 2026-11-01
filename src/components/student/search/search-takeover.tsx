@@ -1,0 +1,521 @@
+"use client";
+
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import { ArrowLeft, Search, X, Clock, Sparkles, Utensils } from "lucide-react";
+
+import { Input } from "@/components/ui/input";
+import { VoiceSearchButton } from "@/components/ui/voice-search-button";
+import { VegIndicator } from "@/components/student/veg-indicator";
+import type { MenuItemData } from "@/components/student/item-detail-sheet";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
+import { cn } from "@/lib/utils";
+
+import {
+  FOOD_CATEGORIES,
+  type FoodCategory,
+} from "@/lib/search/categories";
+import {
+  matchCategoryItems,
+  getSortedCategoryTiles,
+  loadRecentSearches,
+  saveRecentSearch,
+  clearRecentSearches,
+  getSearchSuggestions,
+  type SearchSuggestion,
+} from "@/lib/search/search-helpers";
+import { DEV_SAMPLE_ITEMS } from "@/lib/search/sample-data";
+import { CategoryTile } from "./category-tile";
+
+export interface SearchTakeoverProps {
+  isOpen: boolean;
+  onClose: () => void;
+  items: MenuItemData[];
+  categoryMap?: Map<string, string>;
+  onSelectCategory: (category: FoodCategory) => void;
+  onSearchSubmit: (query: string) => void;
+  onOpenItem?: (item: MenuItemData) => void;
+  triggerRect?: DOMRect | null;
+  initialQuery?: string;
+}
+
+export function SearchTakeover({
+  isOpen,
+  onClose,
+  items,
+  categoryMap,
+  onSelectCategory,
+  onSearchSubmit,
+  onOpenItem,
+  triggerRect,
+  initialQuery = "",
+}: SearchTakeoverProps) {
+  const prefersReducedMotion = usePrefersReducedMotion();
+
+  // Search input state: initialized directly so no cascading render occurs on mount
+  const [query, setQuery] = useState(initialQuery);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() =>
+    typeof window !== "undefined" ? loadRecentSearches() : []
+  );
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+
+  // Missing dish inline polite notice state
+  const [unmatchedNotice, setUnmatchedNotice] = useState<{
+    categoryLabel: string;
+    timestamp: number;
+  } | null>(null);
+  const [shakingCategoryId, setShakingCategoryId] = useState<string | null>(null);
+
+  // Development sample data toggle
+  const [useSampleData, setUseSampleData] = useState(false);
+
+  // DOM and animation references
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const topBarRef = useRef<HTMLDivElement>(null);
+  const historyPushedRef = useRef(false);
+
+  // Effective items (incorporating dev sample switch if active in non-production)
+  const effectiveItems = useMemo(() => {
+    if (process.env.NODE_ENV !== "production" && useSampleData) {
+      return [...items, ...DEV_SAMPLE_ITEMS];
+    }
+    return items;
+  }, [items, useSampleData]);
+
+  // Debounce query for live suggestions (~150ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query);
+      setActiveSuggestionIndex(-1);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Sorted category tiles: categories with real dishes first!
+  const sortedTiles = useMemo(() => {
+    return getSortedCategoryTiles(FOOD_CATEGORIES, effectiveItems, categoryMap);
+  }, [effectiveItems, categoryMap]);
+
+  // Live suggestions (up to 6 items)
+  const suggestions = useMemo(() => {
+    if (!debouncedQuery.trim()) return [];
+    return getSearchSuggestions(effectiveItems, FOOD_CATEGORIES, debouncedQuery, 6);
+  }, [effectiveItems, debouncedQuery]);
+
+  // Safe close handler that coordinates browser history pop
+  const handleSafeClose = useCallback(() => {
+    if (historyPushedRef.current) {
+      historyPushedRef.current = false;
+      try {
+        window.history.back();
+      } catch {
+        // Fallback if history.back fails
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  }, [onClose]);
+
+  // Body scroll lock & data-search-takeover-open attribute management
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Set body attributes
+    document.body.setAttribute("data-search-takeover-open", "true");
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    // Manage single history entry so browser Back dismisses takeover without leaving the page
+    if (!historyPushedRef.current) {
+      try {
+        window.history.pushState({ searchTakeover: true }, "");
+        historyPushedRef.current = true;
+      } catch {
+        // Ignore pushState errors in restricted environments
+      }
+    }
+
+    const handlePopState = () => {
+      // If user hit browser Back
+      historyPushedRef.current = false;
+      onClose();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    // Auto-focus the search input
+    const focusTimer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+
+    return () => {
+      clearTimeout(focusTimer);
+      window.removeEventListener("popstate", handlePopState);
+      document.body.removeAttribute("data-search-takeover-open");
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen, onClose]);
+
+  // FLIP animation: measure source bar rect and animate top bar from old position
+  useEffect(() => {
+    const topBarEl = topBarRef.current;
+    if (!isOpen || prefersReducedMotion || !triggerRect || !topBarEl) return;
+
+    const targetRect = topBarEl.getBoundingClientRect();
+    const deltaY = triggerRect.top - targetRect.top;
+    const deltaX = triggerRect.left - targetRect.left;
+    const scaleX = triggerRect.width / Math.max(1, targetRect.width);
+
+    // Apply FLIP initial position
+    topBarEl.style.transform = `translate3d(${deltaX.toFixed(1)}px, ${deltaY.toFixed(1)}px, 0) scaleX(${scaleX.toFixed(2)})`;
+    topBarEl.style.transition = "none";
+
+    // Animate to top slot
+    const raf = requestAnimationFrame(() => {
+      if (!topBarEl) return;
+      topBarEl.style.transition = "transform 280ms cubic-bezier(0.16, 1, 0.3, 1)";
+      topBarEl.style.transform = "translate3d(0, 0, 0) scaleX(1)";
+    });
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (topBarEl) {
+        topBarEl.style.transform = "";
+        topBarEl.style.transition = "";
+      }
+    };
+  }, [isOpen, prefersReducedMotion, triggerRect]);
+
+  // Execute text search submit
+  const executeSearch = useCallback(
+    (textToSearch: string) => {
+      const trimmed = textToSearch.trim();
+      if (!trimmed) return;
+
+      const updated = saveRecentSearch(trimmed);
+      setRecentSearches(updated);
+      onSearchSubmit(trimmed);
+      handleSafeClose();
+    },
+    [onSearchSubmit, handleSafeClose]
+  );
+
+  // Tile selection handler
+  const handleTileSelect = useCallback(
+    (category: FoodCategory) => {
+      const matching = matchCategoryItems(effectiveItems, category, categoryMap);
+
+      if (matching.length > 0) {
+        // Matches found: save category to recent searches, close takeover, apply filter
+        saveRecentSearch(category.label);
+        onSelectCategory(category);
+        handleSafeClose();
+      } else {
+        // Zero matches on current menu: stay in takeover, show polite live notice & shake
+        setUnmatchedNotice({
+          categoryLabel: category.label,
+          timestamp: Date.now(),
+        });
+        setShakingCategoryId(category.id);
+        setTimeout(() => {
+          setShakingCategoryId(null);
+        }, 400);
+      }
+    },
+    [effectiveItems, categoryMap, onSelectCategory, handleSafeClose]
+  );
+
+  // Suggestion item click
+  const handleSuggestionClick = useCallback(
+    (suggestion: SearchSuggestion) => {
+      if (suggestion.type === "category" && suggestion.category) {
+        handleTileSelect(suggestion.category);
+      } else if (suggestion.type === "dish" && suggestion.dish) {
+        if (onOpenItem) {
+          // Open item detail sheet directly above or from takeover
+          onOpenItem(suggestion.dish);
+        } else {
+          executeSearch(suggestion.title);
+        }
+      } else {
+        executeSearch(suggestion.title);
+      }
+    },
+    [handleTileSelect, onOpenItem, executeSearch]
+  );
+
+  // Keyboard navigation for suggestions and escape handling
+  const handleKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      if (query) {
+        setQuery("");
+      } else {
+        handleSafeClose();
+      }
+      return;
+    }
+
+    if (suggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveSuggestionIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveSuggestionIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (activeSuggestionIndex >= 0 && activeSuggestionIndex < suggestions.length) {
+          handleSuggestionClick(suggestions[activeSuggestionIndex]);
+        } else if (query.trim()) {
+          executeSearch(query);
+        }
+        return;
+      }
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (query.trim()) {
+        executeSearch(query);
+      }
+    }
+  };
+
+  // Recent search chip click
+  const handleRecentClick = (term: string) => {
+    executeSearch(term);
+  };
+
+  // Clear recent searches
+  const handleClearRecents = () => {
+    clearRecentSearches();
+    setRecentSearches([]);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Search food and categories"
+      className="fixed inset-0 z-[48] flex flex-col bg-[#f5efe4] dark:bg-[#090A0F] text-[#181513] dark:text-[#f8fafc] animate-in fade-in duration-200 motion-reduce:animate-none"
+    >
+      {/* =========================================================================
+          TOP SLAB: 44px BACK BUTTON + AUTOFOCUSED SEARCH INPUT + MICROPHONE
+          ========================================================================= */}
+      <header
+        ref={topBarRef}
+        className="sticky top-0 z-30 flex items-center gap-2 px-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-3 bg-[#f5efe4]/95 dark:bg-[#090A0F]/95 backdrop-blur-md border-b border-[#ded5c4] dark:border-[#222533]"
+      >
+        {/* Back Button (44px Accessible Target) */}
+        <button
+          type="button"
+          onClick={handleSafeClose}
+          aria-label="Back"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#181513] dark:text-white hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <ArrowLeft className="h-5 w-5 stroke-[2.5]" />
+        </button>
+
+        {/* Search Input Box with Search Icon & Clear Button */}
+        <div className="relative flex-1">
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#181513]/70 dark:text-slate-400 pointer-events-none" />
+          <Input
+            ref={inputRef}
+            type="search"
+            enterKeyHint="search"
+            placeholder='Search "dosa, biryani, samosa, thali..."'
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="h-11 pl-10 pr-10 text-sm font-semibold bg-[#eae2d2] dark:bg-[#121319] border-2 border-[#181513]/30 dark:border-[#262836] text-[#181513] dark:text-white placeholder:text-[#181513]/60 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-2 focus-visible:ring-primary"
+          />
+
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                inputRef.current?.focus();
+              }}
+              aria-label="Clear search text"
+              className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Microphone Button (Reusing & Extending existing voice-search-button) */}
+        <div className="shrink-0">
+          <VoiceSearchButton
+            onSearch={(transcript) => {
+              setQuery(transcript);
+              executeSearch(transcript);
+            }}
+          />
+        </div>
+      </header>
+
+      {/* =========================================================================
+          MAIN SCROLLABLE CONTENT BODY (Mobile-First, scrolls inside itself)
+          ========================================================================= */}
+      <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-6 pb-[calc(2rem+env(safe-area-inset-bottom,0px))]">
+        {/* LIVE SUGGESTIONS DROPDOWN (when query typed) */}
+        {query.trim().length > 0 && (
+          <section aria-label="Search suggestions" className="space-y-2">
+            {suggestions.length > 0 ? (
+              <ul className="rounded-2xl border border-[#ded5c4] dark:border-[#222533] bg-[#eae2d2]/70 dark:bg-[#121319]/80 backdrop-blur-md overflow-hidden divide-y divide-[#ded5c4]/60 dark:divide-[#222533]/80 shadow-md">
+                {suggestions.map((suggestion, idx) => {
+                  const isSelected = idx === activeSuggestionIndex;
+                  return (
+                    <li key={suggestion.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleSuggestionClick(suggestion)}
+                        className={cn(
+                          "w-full px-4 py-3 text-left flex items-center justify-between gap-3 text-sm font-semibold transition-colors cursor-pointer",
+                          isSelected
+                            ? "bg-primary/15 text-primary"
+                            : "hover:bg-black/5 dark:hover:bg-white/5 text-[#181513] dark:text-white"
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {suggestion.type === "category" ? (
+                            <Utensils className="h-4 w-4 text-primary shrink-0" />
+                          ) : (
+                            suggestion.dish && <VegIndicator isVeg={suggestion.dish.is_veg} />
+                          )}
+                          <span className="truncate">{suggestion.title}</span>
+                        </div>
+
+                        {suggestion.subtitle && (
+                          <span className="text-[11px] font-medium text-muted-foreground shrink-0 uppercase tracking-wider">
+                            {suggestion.subtitle}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="p-6 text-center rounded-2xl border border-dashed border-[#ded5c4] dark:border-[#222533] bg-[#eae2d2]/40 dark:bg-[#121319]/40 space-y-2">
+                <p className="text-sm font-bold text-[#181513] dark:text-white">
+                  No dishes found for &ldquo;{query}&rdquo;
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Try searching by dish name, or tap any category tile below.
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* RECENT SEARCHES ROW (when query is empty and recent searches exist) */}
+        {!query.trim() && recentSearches.length > 0 && (
+          <section aria-label="Recent searches" className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 font-headline">
+                <Clock className="h-3.5 w-3.5 text-primary" />
+                <span>Your Recent Searches</span>
+              </span>
+
+              <button
+                type="button"
+                onClick={handleClearRecents}
+                className="text-xs font-bold text-red-600 dark:text-red-400 hover:underline cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {recentSearches.map((term) => (
+                <button
+                  key={term}
+                  type="button"
+                  onClick={() => handleRecentClick(term)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#eae2d2] dark:bg-[#16171E] border border-[#ded5c4] dark:border-[#262836] text-xs font-semibold text-[#181513] dark:text-[#f8fafc] hover:border-primary active:scale-95 transition-all cursor-pointer shadow-2xs"
+                >
+                  <span>{term}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* POLITE LIVE REGION: NOT ON OUR MENU INLINE NOTICE */}
+        <div aria-live="polite" aria-atomic="true" className="w-full">
+          {unmatchedNotice && (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 flex items-start gap-3 animate-in fade-in duration-200">
+              <Sparkles className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5 text-xs sm:text-sm">
+                <p className="font-bold">
+                  Sorry, {unmatchedNotice.categoryLabel} isn&rsquo;t on our menu right now.
+                </p>
+                <p className="text-amber-800/80 dark:text-amber-300/80 text-xs">
+                  Try another category or search by dish name above.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* WHAT'S ON YOUR MIND? 3-COLUMN CATEGORY GRID */}
+        <section aria-label="What's on your mind categories" className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-muted-foreground font-headline">
+              What&rsquo;s on your mind?
+            </h2>
+
+            {/* Development-only sample switch (Compiled out in production) */}
+            {process.env.NODE_ENV !== "production" && (
+              <button
+                type="button"
+                onClick={() => setUseSampleData((prev) => !prev)}
+                className={cn(
+                  "px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase border transition-colors cursor-pointer",
+                  useSampleData
+                    ? "bg-emerald-600 text-white border-emerald-700"
+                    : "bg-muted text-muted-foreground border-border hover:text-foreground"
+                )}
+                title="Development preview: blends sample items to preview photo tiles"
+              >
+                Sample data: {useSampleData ? "ON" : "OFF"}
+              </button>
+            )}
+          </div>
+
+          {/* 3-Column Touch-Friendly Responsive Grid */}
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 sm:gap-3">
+            {sortedTiles.map(({ category, matchingCount, photoUrl }) => (
+              <CategoryTile
+                key={category.id}
+                category={category}
+                photoUrl={photoUrl}
+                matchingCount={matchingCount}
+                onSelect={handleTileSelect}
+                isShaking={shakingCategoryId === category.id}
+              />
+            ))}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}

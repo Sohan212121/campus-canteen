@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Search, X, SlidersHorizontal, UtensilsCrossed } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,9 @@ import { BestSellersRow } from "@/components/student/best-sellers-row";
 import { CartShortcut } from "@/components/student/cart-shortcut";
 import { useCartStore } from "@/lib/cart-store";
 import type { BestSellerItem } from "@/server/actions/best-sellers";
+import { SearchTakeover } from "@/components/student/search/search-takeover";
+import type { FoodCategory } from "@/lib/search/categories";
+import { matchesAliasWholeWord } from "@/lib/search/search-helpers";
 
 export type CategoryData = {
   id: string;
@@ -32,8 +35,54 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
   const [vegFilter, setVegFilter] = useState<"all" | "veg" | "non-veg">("all");
   const [availableOnly, setAvailableOnly] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MenuItemData | null>(null);
+  const [activeCategoryTile, setActiveCategoryTile] = useState<FoodCategory | null>(null);
+
+  // Full-screen Search Takeover State: initial state reads ?search=open synchronously to avoid cascading renders
+  const [isTakeoverOpen, setIsTakeoverOpen] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        return params.get("search") === "open";
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
+  const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+  const searchBarContainerRef = useRef<HTMLDivElement>(null);
+
   const foodItemsSectionRef = useRef<HTMLDivElement>(null);
   const filterSectionRef = useRef<HTMLDivElement>(null);
+
+  // Category map for fast name lookup
+  const categoryMap = useMemo(() => {
+    const map = new Map<string, string>();
+    categories.forEach((c) => map.set(c.id, c.name));
+    return map;
+  }, [categories]);
+
+  // Clean URL parameter ?search=open immediately so page refresh never re-triggers the takeover unexpectedly
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("search") === "open") {
+        params.delete("search");
+        const newQuery = params.toString() ? `?${params.toString()}` : "";
+        window.history.replaceState({}, "", window.location.pathname + newQuery);
+      }
+    } catch {
+      // Ignore URL manipulation errors in restricted environments
+    }
+  }, []);
+
+  const openTakeover = useCallback(() => {
+    if (searchBarContainerRef.current) {
+      setTriggerRect(searchBarContainerRef.current.getBoundingClientRect());
+    }
+    setIsTakeoverOpen(true);
+  }, []);
 
   const scrollToFoodSection = useCallback(() => {
     requestAnimationFrame(() => {
@@ -59,6 +108,21 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
     return initialItems.filter((item) => {
       // Must be active
       if (!item.is_active) return false;
+
+      // Active category tile filter (applied from search takeover)
+      if (activeCategoryTile) {
+        const categoryName = item.category_id ? categoryMap.get(item.category_id) || "" : "";
+        const name = item.name || "";
+        const desc = item.description || "";
+        const matchesTile = activeCategoryTile.aliases.some((alias) => {
+          return (
+            matchesAliasWholeWord(name, alias) ||
+            matchesAliasWholeWord(desc, alias) ||
+            matchesAliasWholeWord(categoryName, alias)
+          );
+        });
+        if (!matchesTile) return false;
+      }
 
       // Category filter
       if (selectedCategory !== "all" && item.category_id !== selectedCategory) {
@@ -88,48 +152,112 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
 
       return true;
     });
-  }, [initialItems, selectedCategory, vegFilter, availableOnly, searchQuery]);
+  }, [
+    initialItems,
+    selectedCategory,
+    vegFilter,
+    availableOnly,
+    searchQuery,
+    activeCategoryTile,
+    categoryMap,
+  ]);
 
   const hasActiveFilters =
     selectedCategory !== "all" ||
     vegFilter !== "all" ||
     availableOnly ||
-    searchQuery.trim().length > 0;
+    searchQuery.trim().length > 0 ||
+    activeCategoryTile !== null;
 
   const resetFilters = useCallback(() => {
     setSelectedCategory("all");
     setSearchQuery("");
     setVegFilter("all");
     setAvailableOnly(false);
+    setActiveCategoryTile(null);
     scrollToFoodSection();
   }, [scrollToFoodSection]);
 
+  const handleSelectCategoryFromTakeover = useCallback(
+    (category: FoodCategory) => {
+      setActiveCategoryTile(category);
+      setSearchQuery(""); // Clear plain text search when tile is picked
+      scrollToFoodSection();
+    },
+    [scrollToFoodSection]
+  );
+
+  const handleSearchSubmitFromTakeover = useCallback(
+    (text: string) => {
+      setActiveCategoryTile(null); // Clear tile filter if explicit text search is submitted
+      setSearchQuery(text);
+      scrollToFoodSection();
+    },
+    [scrollToFoodSection]
+  );
+
   return (
     <div className="space-y-4">
-      {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#181513] dark:text-muted-foreground" />
+      {/* Search Bar (Tapping or focusing opens full-screen SearchTakeover) */}
+      <div
+        ref={searchBarContainerRef}
+        onClick={openTakeover}
+        className="relative cursor-pointer"
+        role="search"
+      >
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#181513] dark:text-muted-foreground pointer-events-none" />
         <Input
           type="text"
+          readOnly
           placeholder="Search items, snacks, drinks..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-11 pl-9 pr-16 text-sm font-semibold bg-card border-2 border-[#181513]/40 dark:border-border/80 text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-xl"
+          onFocus={openTakeover}
+          className="h-11 pl-9 pr-16 text-sm font-semibold bg-card border-2 border-[#181513]/40 dark:border-border/80 text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-xl cursor-pointer"
         />
         <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
           {searchQuery && (
             <button
               type="button"
-              onClick={() => setSearchQuery("")}
-              className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSearchQuery("");
+              }}
+              className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground cursor-pointer"
               aria-label="Clear search"
             >
               <X className="h-3.5 w-3.5" />
             </button>
           )}
-          <VoiceSearchButton onSearch={(transcript) => setSearchQuery(transcript)} />
+          <div onClick={(e) => e.stopPropagation()}>
+            <VoiceSearchButton
+              onSearch={(transcript) => {
+                setSearchQuery(transcript);
+                setActiveCategoryTile(null);
+                scrollToFoodSection();
+              }}
+            />
+          </div>
         </div>
       </div>
+
+      {/* Dismissible Category Filter Chip: "Showing: Biryani" */}
+      {activeCategoryTile && (
+        <div className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary animate-in fade-in duration-150">
+          <span className="text-xs font-bold font-headline uppercase tracking-wider flex items-center gap-1.5">
+            <span>Showing:</span>
+            <span className="underline decoration-2">{activeCategoryTile.label}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setActiveCategoryTile(null)}
+            className="flex items-center gap-1 text-xs font-bold hover:underline cursor-pointer"
+            aria-label={`Clear ${activeCategoryTile.label} filter`}
+          >
+            <span>Clear</span>
+            <X className="h-3.5 w-3.5 stroke-[2.5]" />
+          </button>
+        </div>
+      )}
 
       {/* Filter Row: Veg / Non-Veg segmented control + Available only toggle */}
       <div className="flex items-center justify-between gap-2 text-xs">
@@ -316,10 +444,23 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
         onClose={() => setSelectedItem(null)}
       />
 
+      {/* Full-Screen Search Takeover: FLIP Glide, What's on your mind Grid & Recent Searches */}
+      <SearchTakeover
+        isOpen={isTakeoverOpen}
+        onClose={() => setIsTakeoverOpen(false)}
+        items={initialItems}
+        categoryMap={categoryMap}
+        onSelectCategory={handleSelectCategoryFromTakeover}
+        onSearchSubmit={handleSearchSubmitFromTakeover}
+        onOpenItem={(item) => setSelectedItem(item)}
+        triggerRect={triggerRect}
+        initialQuery={searchQuery}
+      />
+
       {/* Floating 1-tap Cart Shortcut (visible on menu when cart has items) */}
       <CartShortcut
         menuItems={initialItems}
-        isDetailSheetOpen={Boolean(selectedItem)}
+        isDetailSheetOpen={Boolean(selectedItem) || isTakeoverOpen}
       />
     </div>
   );

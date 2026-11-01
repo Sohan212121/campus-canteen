@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, useSyncExternalStore } from "
 import { Mic } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { hasAcknowledgedVoiceNotice, acknowledgeVoiceNotice } from "@/lib/search/search-helpers";
 
 interface SpeechRecognitionResultItem {
   transcript: string;
@@ -68,8 +69,13 @@ export function VoiceSearchButton({
     () => true
   );
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const stopListening = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -101,12 +107,30 @@ export function VoiceSearchButton({
       return;
     }
 
+    // First use notice
+    if (!hasAcknowledgedVoiceNotice()) {
+      toast.info("Voice search uses your browser's speech service.", {
+        id: "voice-search-ack-toast",
+        duration: 3500,
+      });
+      acknowledgeVoiceNotice();
+    }
+
     try {
       const recognition = new SpeechRecognitionClass();
       recognition.lang = lang;
       recognition.continuous = false;
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
+
+      // 10-second automatic safety timeout
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        if (recognitionRef.current) {
+          stopListening();
+          toast.info("Voice search timed out. Speak again or type to search.", { id: "voice-search-toast" });
+        }
+      }, 10000);
 
       recognition.onstart = () => {
         setIsListening(true);
@@ -118,6 +142,10 @@ export function VoiceSearchButton({
       };
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
         const transcript = event.results?.[0]?.[0]?.transcript;
         if (transcript && transcript.trim()) {
           const cleaned = transcript.trim();
@@ -130,6 +158,10 @@ export function VoiceSearchButton({
       };
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
         setIsListening(false);
         if (event.error === "no-speech") {
           toast.info("No speech detected. Please try again.", { id: "voice-search-toast" });
@@ -141,6 +173,10 @@ export function VoiceSearchButton({
       };
 
       recognition.onend = () => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
         setIsListening(false);
       };
 

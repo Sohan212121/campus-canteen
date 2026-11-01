@@ -1,0 +1,203 @@
+import type { ComponentType } from "react";
+import {
+  Pizza as PizzaIcon,
+  Coffee,
+  Utensils,
+  Sandwich as SandwichIcon,
+  IceCream as IceCreamIcon,
+  Cake as CakeIcon,
+  Soup,
+  Flame,
+  Sparkles,
+  Leaf,
+  CupSoda,
+  Cookie,
+  Drumstick,
+  Wheat,
+} from "lucide-react";
+
+export interface FoodCategory {
+  id: string;
+  label: string;
+  aliases: string[];
+  icon: ComponentType<{ className?: string }>;
+  accentColor: string; // Subtle pastel tint for icon fallback circle
+}
+
+export const FOOD_CATEGORIES: FoodCategory[] = [
+  {
+    id: "biryani",
+    label: "Biryani",
+    aliases: ["biryani", "pulao", "rice bowl"],
+    icon: Flame,
+    accentColor: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  },
+  {
+    id: "dosa",
+    label: "Dosa",
+    aliases: ["dosa", "masala dosa", "plain dosa", "crepe"],
+    icon: Utensils,
+    accentColor: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
+  },
+  {
+    id: "samosa",
+    label: "Samosa",
+    aliases: ["samosa", "samosas", "puff", "pakoda", "chaat"],
+    icon: Sparkles,
+    accentColor: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30",
+  },
+  {
+    id: "chai-coffee",
+    label: "Chai & Coffee",
+    aliases: ["chai", "tea", "coffee", "kaapi", "filter coffee"],
+    icon: Coffee,
+    accentColor: "bg-amber-600/15 text-amber-700 dark:text-amber-300 border-amber-600/30",
+  },
+  {
+    id: "thali",
+    label: "Thali",
+    aliases: ["thali", "meal", "dal", "subzi", "rajma chawal"],
+    icon: Utensils,
+    accentColor: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+  },
+  {
+    id: "rolls",
+    label: "Rolls",
+    aliases: ["roll", "rolls", "kathi roll", "wrap", "frankie"],
+    icon: Utensils,
+    accentColor: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
+  },
+  {
+    id: "sandwich",
+    label: "Sandwich",
+    aliases: ["sandwich", "toast", "grilled sandwich", "bread"],
+    icon: SandwichIcon,
+    accentColor: "bg-lime-500/15 text-lime-600 dark:text-lime-400 border-lime-500/30",
+  },
+  {
+    id: "noodles",
+    label: "Noodles",
+    aliases: ["noodles", "hakka noodles", "chowmein", "maggi", "ramen"],
+    icon: Soup,
+    accentColor: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  },
+  {
+    id: "pav-bhaji",
+    label: "Pav Bhaji",
+    aliases: ["pav bhaji", "vada pav", "pav", "bhaji"],
+    icon: Sparkles,
+    accentColor: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30",
+  },
+  {
+    id: "pizza",
+    label: "Pizza",
+    aliases: ["pizza", "calzone", "cheesy pizza"],
+    icon: PizzaIcon,
+    accentColor: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
+  },
+  {
+    id: "burger",
+    label: "Burger",
+    aliases: ["burger", "burgers", "slider", "patty"],
+    icon: Utensils,
+    accentColor: "bg-orange-600/15 text-orange-600 dark:text-orange-400 border-orange-600/30",
+  },
+  {
+    id: "chicken",
+    label: "Chicken",
+    aliases: ["chicken", "murgh", "tandoori chicken", "tikka"],
+    icon: Drumstick,
+    accentColor: "bg-amber-700/15 text-amber-700 dark:text-amber-300 border-amber-700/30",
+  },
+  {
+    id: "curries",
+    label: "Curries",
+    aliases: ["curry", "curries", "paneer", "gravy", "masala"],
+    icon: Soup,
+    accentColor: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
+  },
+  {
+    id: "fried-rice",
+    label: "Fried Rice",
+    aliases: ["fried rice", "egg rice", "veg rice", "schezwan rice"],
+    icon: Utensils,
+    accentColor: "bg-yellow-600/15 text-yellow-700 dark:text-yellow-300 border-yellow-600/30",
+  },
+  {
+    id: "fries",
+    label: "Fries",
+    aliases: ["fries", "french fries", "peri peri fries", "potato fries", "finger chips"],
+    icon: Sparkles,
+    accentColor: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  },
+  {
+    id: "momos",
+    label: "Momos",
+    aliases: ["momo", "momos", "dumpling", "dimsum"],
+    icon: Utensils,
+    accentColor: "bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/30",
+  },
+  {
+    id: "paratha",
+    label: "Paratha",
+    aliases: ["paratha", "aloo paratha", "roti", "phulka", "kulcha"],
+    icon: Wheat,
+    accentColor: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  },
+  {
+    id: "wings",
+    label: "Wings",
+    aliases: ["wings", "chicken wings", "hot wings", "crispy wings"],
+    icon: Drumstick,
+    accentColor: "bg-red-600/15 text-red-600 dark:text-red-400 border-red-600/30",
+  },
+  {
+    id: "ice-cream",
+    label: "Ice Cream",
+    aliases: ["ice cream", "kulfi", "sundae", "gelato"],
+    icon: IceCreamIcon,
+    accentColor: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/30",
+  },
+  {
+    id: "cake",
+    label: "Cake",
+    aliases: ["cake", "pastry", "brownie", "muffin", "cupcake"],
+    icon: CakeIcon,
+    accentColor: "bg-pink-500/15 text-pink-600 dark:text-pink-400 border-pink-500/30",
+  },
+  {
+    id: "waffles",
+    label: "Waffles",
+    aliases: ["waffle", "waffles", "pancake", "pancakes"],
+    icon: Cookie,
+    accentColor: "bg-yellow-600/15 text-yellow-600 dark:text-yellow-400 border-yellow-600/30",
+  },
+  {
+    id: "shawarma",
+    label: "Shawarma",
+    aliases: ["shawarma", "doner", "pita wrap"],
+    icon: Utensils,
+    accentColor: "bg-rose-600/15 text-rose-600 dark:text-rose-400 border-rose-600/30",
+  },
+  {
+    id: "juice",
+    label: "Juice",
+    aliases: ["juice", "shake", "smoothie", "nimbu pani", "lassi", "beverage"],
+    icon: CupSoda,
+    accentColor: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+  },
+  {
+    id: "salad",
+    label: "Salad",
+    aliases: ["salad", "sprouts", "healthy bowl", "greens"],
+    icon: Leaf,
+    accentColor: "bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30",
+  },
+  {
+    id: "sweets",
+    label: "Sweets",
+    aliases: ["sweet", "sweets", "gulab jamun", "halwa", "dessert", "mithai"],
+    icon: Cookie,
+    accentColor: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/30",
+  },
+];
