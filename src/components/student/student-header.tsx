@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { getNotificationsAction } from "@/server/actions/notifications";
 import { NotificationBell } from "@/components/student/notification-bell";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
 
 interface StudentHeaderProps {
@@ -113,14 +114,14 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
         </div>
       </Link>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <Link
           href={isHealthy ? "/" : "/healthy"}
           prefetch={true}
           onClick={() => {
             startTransition(isHealthy ? "/" : "/healthy");
           }}
-          className={`group/healthy h-11 px-3 sm:px-3.5 rounded-xl border font-bold text-xs flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all select-none cursor-pointer ${
+          className={`group/healthy h-10 sm:h-11 px-2.5 sm:px-3.5 rounded-xl border font-bold text-xs flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all select-none cursor-pointer ${
             isHealthy
               ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
               : "border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 hover:border-emerald-500/60 hover:shadow-[0_0_12px_rgba(16,185,129,0.2)]"
@@ -138,6 +139,9 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
             {isHealthy ? "Active" : "Mode"}
           </span>
         </Link>
+
+        {/* Light & Dark Theme Toggle Button */}
+        <ThemeToggle />
 
         <NotificationBell unreadCount={unreadCount} />
       </div>

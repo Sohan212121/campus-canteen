@@ -400,7 +400,7 @@ export function StudentHomeView({
                 className={cn(
                   "w-14 h-14 rounded-full flex items-center justify-center p-2 text-2xl transition-all",
                   isSelected
-                    ? "bg-[#241f1c] border-2 border-[#FF385C] shadow-lg shadow-rose-950/40 text-[#FF385C]"
+                    ? "bg-rose-50 dark:bg-[#241f1c] border-2 border-[#FF385C] shadow-md dark:shadow-lg dark:shadow-rose-950/40 text-[#FF385C]"
                     : "bg-card dark:bg-[#201c19] border border-border/80 dark:border-[#352f2a] hover:border-primary/50 dark:hover:border-amber-500/50"
                 )}
               >
@@ -665,17 +665,17 @@ export function StudentHomeView({
       <Link
         href="/menu"
         prefetch={true}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#20150d] via-[#1a120b] to-[#120e0b] border border-amber-500/30 p-4 sm:p-5 flex items-center justify-between shadow-lg transition-all hover:border-amber-500/50 active:scale-[0.99] select-none group block"
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:from-[#20150d] dark:via-[#1a120b] dark:to-[#120e0b] border border-amber-500/30 p-4 sm:p-5 flex items-center justify-between shadow-sm dark:shadow-lg transition-all hover:border-amber-500/50 active:scale-[0.99] select-none group block"
       >
         <div className="space-y-1 max-w-[72%] z-10">
-          <div className="inline-flex items-center gap-1.5 text-amber-400 font-headline text-[11px] uppercase tracking-widest font-bold">
-            <Flame className="h-3.5 w-3.5 text-amber-400" />
+          <div className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-headline text-[11px] uppercase tracking-widest font-bold">
+            <Flame className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
             <span>COMBO IT BETTER</span>
           </div>
-          <h3 className="font-headline text-lg sm:text-xl uppercase text-white font-bold leading-tight group-hover:text-amber-300 transition-colors">
+          <h3 className="font-headline text-lg sm:text-xl uppercase text-foreground dark:text-white font-bold leading-tight group-hover:text-primary dark:group-hover:text-amber-300 transition-colors">
             Meal + Drink = Save 20%
           </h3>
-          <p className="font-body text-[12px] text-stone-300 line-clamp-2">
+          <p className="font-body text-[12px] text-muted-foreground dark:text-stone-300 line-clamp-2">
             Pair any hot main dish with iced lemon tea or cold coffee.
           </p>
         </div>
