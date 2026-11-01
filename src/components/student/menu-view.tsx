@@ -108,13 +108,13 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
     <div className="space-y-4">
       {/* Search Bar */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#181513] dark:text-muted-foreground" />
         <Input
           type="text"
           placeholder="Search items, snacks, drinks..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-11 pl-9 pr-16 text-sm bg-card border-border/80 rounded-xl"
+          className="h-11 pl-9 pr-16 text-sm font-semibold bg-card border-2 border-[#181513]/40 dark:border-border/80 text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-xl"
         />
         <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
           {searchQuery && (

@@ -523,13 +523,13 @@ export function StudentHomeView({
         <div className="flex items-center gap-2.5">
           {/* Search Box */}
           <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#635e58] dark:text-slate-400 pointer-events-none" />
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#181513] dark:text-slate-300 pointer-events-none" />
             <Input
               type="text"
               placeholder='Search "dosa, biryani, samosa, meals..."'
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-12 pl-10 pr-16 text-sm font-medium bg-[#eae2d2] dark:bg-[#121319] border-[#ded5c4] dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#635e58]/80 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#d9531e] focus-visible:dark:ring-[#FBBF24]"
+              className="h-12 pl-10 pr-16 text-sm font-semibold bg-[#eae2d2] dark:bg-[#121319] border-2 border-[#181513]/40 dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#181513] focus-visible:dark:ring-[#FBBF24]"
             />
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {searchQuery && (
@@ -607,7 +607,7 @@ export function StudentHomeView({
             onClick={() => {
               startTransition("/healthy", "Healthy Mode");
             }}
-            className="min-h-[36px] h-9 px-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs font-headline tracking-wide uppercase"
+            className="min-h-[36px] h-9 px-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs font-headline tracking-wide uppercase border-2 border-emerald-900/40"
             aria-label="Healthy Mode & High-Protein Fuel"
           >
             <Leaf className="h-3.5 w-3.5" />
@@ -620,13 +620,13 @@ export function StudentHomeView({
               setInStockOnly((prev) => !prev);
               scrollToFoodSection();
             }}
-            className={`min-h-[36px] h-9 px-3.5 rounded-xl border text-xs font-headline uppercase tracking-wider font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+            className={`min-h-[36px] h-9 px-3.5 rounded-xl border-2 text-xs font-headline uppercase tracking-wider font-extrabold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               inStockOnly
-                ? "bg-[#1b1917] dark:bg-[#1C1F2B] border-[#36322e] dark:border-[#FBBF24] text-[#e5891e] dark:text-[#FBBF24] shadow-2xs"
-                : "bg-[#eae2d2] dark:bg-[#121319] border-[#ded5c4] dark:border-[#222533] text-[#635e58] dark:text-slate-300 hover:border-[#181513]/40 hover:dark:border-[#FBBF24]/40"
+                ? "bg-[#1b1917] dark:bg-[#1C1F2B] border-[#181513] dark:border-[#FBBF24] text-[#d97706] dark:text-[#FBBF24] shadow-xs"
+                : "bg-[#eae2d2] dark:bg-[#121319] border-[#181513]/40 dark:border-[#222533] text-[#181513] dark:text-slate-100 hover:border-[#181513]"
             }`}
           >
-            <span className={`h-2 w-2 rounded-full ${inStockOnly ? "bg-[#d9531e] dark:bg-[#FBBF24]" : "bg-emerald-500"}`} />
+            <span className={`h-2.5 w-2.5 rounded-full ${inStockOnly ? "bg-[#d97706] dark:bg-[#FBBF24]" : "bg-emerald-600"}`} />
             <span>In Stock Only</span>
           </button>
 
@@ -636,10 +636,10 @@ export function StudentHomeView({
               setUnder100Only((prev) => !prev);
               scrollToFoodSection();
             }}
-            className={`min-h-[36px] h-9 px-3.5 rounded-xl border text-xs font-headline uppercase tracking-wider font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+            className={`min-h-[36px] h-9 px-3.5 rounded-xl border-2 text-xs font-headline uppercase tracking-wider font-extrabold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               under100Only
-                ? "bg-[#1b1917] dark:bg-[#1C1F2B] border-[#36322e] dark:border-[#FBBF24] text-[#e5891e] dark:text-[#FBBF24] shadow-2xs"
-                : "bg-[#eae2d2] dark:bg-[#121319] border-[#ded5c4] dark:border-[#222533] text-[#635e58] dark:text-slate-300 hover:border-[#181513]/40 hover:dark:border-[#FBBF24]/40"
+                ? "bg-[#1b1917] dark:bg-[#1C1F2B] border-[#181513] dark:border-[#FBBF24] text-[#d97706] dark:text-[#FBBF24] shadow-xs"
+                : "bg-[#eae2d2] dark:bg-[#121319] border-[#181513]/40 dark:border-[#222533] text-[#181513] dark:text-slate-100 hover:border-[#181513]"
             }`}
           >
             <span>💰</span>
@@ -654,9 +654,9 @@ export function StudentHomeView({
                 handleResetFilters();
                 scrollToFoodSection();
               }}
-              className="min-h-[36px] h-9 px-3 rounded-xl text-xs font-bold text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1 cursor-pointer font-headline uppercase tracking-wider"
+              className="min-h-[36px] h-9 px-3 rounded-xl border-2 border-red-600/50 bg-red-600/10 hover:bg-red-600/20 text-red-700 dark:text-red-400 text-xs font-headline uppercase tracking-wider font-black transition-all flex items-center gap-1 cursor-pointer active:scale-95"
             >
-              <X className="h-3 w-3" />
+              <X className="h-3.5 w-3.5 stroke-[3]" />
               <span>Reset</span>
             </button>
           )}
