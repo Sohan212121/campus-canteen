@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Plus,
   Clock,
+  Leaf,
 } from "lucide-react";
 import { formatPaise } from "@/lib/money";
 import { VegIndicator } from "@/components/student/veg-indicator";
@@ -100,25 +101,33 @@ export function TopProteinRow({
       <div className="flex items-center justify-between gap-2">
         <div className="space-y-0.5">
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
-              <Dumbbell className="h-4 w-4" />
+            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br from-[#2E7D32] to-[#4CAF50] text-white shadow-xs">
+              <Leaf className="h-4 w-4" />
             </div>
-            <h2 className="text-sm sm:text-base font-black tracking-tight text-foreground">
-              Top Protein Fuel
-            </h2>
+            <div>
+              <span className="font-script text-[11px] sm:text-xs text-[#ffb74d] italic leading-none block">
+                Featured Nutrition Harvest
+              </span>
+              <h2 className="text-sm sm:text-base font-bold tracking-tight text-foreground dark:text-[#ede7e1] leading-tight">
+                Top Protein Fuel
+              </h2>
+            </div>
           </div>
-          <p className="text-[11px] text-muted-foreground font-medium pl-9">
+          <p className="text-[11px] text-muted-foreground dark:text-stone-400 font-medium pl-9">
             Highest protein-density meals for sustained campus energy
           </p>
         </div>
 
         {/* Previous / Next One-by-One Controls */}
         <div className="flex items-center gap-1.5 shrink-0">
+          <span className="hidden xs:inline-block px-2.5 py-0.5 rounded-full bg-[#2d4b29] text-[#c9f3c7] font-bold text-[10px] uppercase tracking-wider border border-[#4CAF50]/30 mr-1">
+            Chef Curated
+          </span>
           <button
             type="button"
             onClick={prevSlide}
             aria-label="Previous protein slide"
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-border/80 bg-card text-foreground transition-all cursor-pointer hover:bg-emerald-600 hover:text-white hover:border-emerald-600 shadow-2xs active:scale-95"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-border/80 dark:border-[#3b533a] bg-card dark:bg-[#1e291c] text-foreground dark:text-[#ede7e1] transition-all cursor-pointer hover:bg-[#2E7D32] hover:text-white dark:hover:border-[#4CAF50] shadow-2xs active:scale-95"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -126,7 +135,7 @@ export function TopProteinRow({
             type="button"
             onClick={nextSlide}
             aria-label="Next protein slide"
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-border/80 bg-card text-foreground transition-all cursor-pointer hover:bg-emerald-600 hover:text-white hover:border-emerald-600 shadow-2xs active:scale-95"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-border/80 dark:border-[#3b533a] bg-card dark:bg-[#1e291c] text-foreground dark:text-[#ede7e1] transition-all cursor-pointer hover:bg-[#2E7D32] hover:text-white dark:hover:border-[#4CAF50] shadow-2xs active:scale-95"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -147,7 +156,7 @@ export function TopProteinRow({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="relative overflow-hidden rounded-3xl border border-emerald-950/10 dark:border-emerald-400/20 bg-card shadow-sm focus:outline-hidden"
+        className="relative overflow-hidden rounded-3xl border border-emerald-950/10 dark:border-[#3b533a] bg-card dark:bg-gradient-to-b dark:from-[#1e291c]/95 dark:to-[#161311] shadow-xl focus:outline-hidden backdrop-blur-xl"
       >
         {/* Animated Sliding Track */}
         <div
@@ -197,17 +206,18 @@ export function TopProteinRow({
                   </div>
                 </div>
 
-                {/* Bottom of Image Overlay: Calories & Star Rating */}
-                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2 z-10 text-xs">
-                  {dish.calories_kcal != null ? (
-                    <span className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-white font-black border border-white/10">
-                      {dish.calories_kcal} kcal
+                {/* Bottom of Image Overlay: Live Cold-Pressed badge & Star Rating */}
+                <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 z-10 text-xs">
+                  <div className="flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 dark:border-[#3b533a]/50">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#4CAF50] animate-ping" />
+                    <span className="text-[10px] text-white dark:text-[#81c784] font-bold tracking-wide uppercase">
+                      Cold-Pressed Dressing
                     </span>
-                  ) : <span />}
+                  </div>
 
                   {dish.rating_avg != null && dish.rating_avg > 0 && (
-                    <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-amber-300 font-bold border border-white/10">
-                      <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                    <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md text-[#ffb74d] font-bold border border-white/10 dark:border-[#3b533a]/50">
+                      <Star className="h-3 w-3 fill-[#ffb74d] text-[#ffb74d]" />
                       <span>{dish.rating_avg.toFixed(1)}</span>
                     </div>
                   )}
@@ -217,34 +227,49 @@ export function TopProteinRow({
               {/* Card Body & Footer Details */}
               <div className="p-4 sm:p-5 space-y-3">
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-base sm:text-lg font-black tracking-tight text-foreground group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors line-clamp-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="text-base sm:text-lg font-bold tracking-tight text-foreground dark:text-[#ede7e1] group-hover:text-emerald-700 dark:group-hover:text-[#81c784] transition-colors line-clamp-1">
                       {dish.name}
                     </h3>
 
-                    {dish.prep_minutes > 0 && (
-                      <span className="text-[11px] font-semibold text-muted-foreground shrink-0 flex items-center gap-1">
-                        <Clock className="h-3 w-3 text-muted-foreground" />
-                        <span>~{dish.prep_minutes} min</span>
-                      </span>
-                    )}
+                    <span className="text-base sm:text-lg font-extrabold text-[#2E7D32] dark:text-[#ffb74d] shrink-0 font-headline">
+                      {formatPaise(dish.price_paise)}
+                    </span>
                   </div>
 
                   {dish.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                    <p className="text-xs text-muted-foreground dark:text-[#c4bdb3] line-clamp-2 leading-relaxed">
                       {dish.description}
                     </p>
                   )}
                 </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-border/60">
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                      PRICE
+                {/* Macro Pill Tags matching Dark Harvest Edition */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {dish.calories_kcal != null && (
+                    <span className="bg-emerald-50 dark:bg-[#263725] border border-emerald-500/20 dark:border-[#3b533a]/50 px-2 py-0.5 rounded-full text-emerald-800 dark:text-[#c9f3c7] text-[10px] font-bold">
+                      {dish.calories_kcal} kcal
                     </span>
-                    <span className="text-base sm:text-lg font-black text-foreground">
-                      {formatPaise(dish.price_paise)}
+                  )}
+                  {dish.protein_g != null && (
+                    <span className="bg-emerald-50 dark:bg-[#263725] border border-emerald-500/20 dark:border-[#3b533a]/50 px-2 py-0.5 rounded-full text-emerald-800 dark:text-[#81c784] text-[10px] font-bold">
+                      {dish.protein_g}g Protein
                     </span>
+                  )}
+                  {dish.fibre_g != null && (
+                    <span className="bg-amber-50 dark:bg-[#263725] border border-amber-500/20 dark:border-[#3b533a]/50 px-2 py-0.5 rounded-full text-amber-800 dark:text-[#ffb74d] text-[10px] font-bold">
+                      {dish.fibre_g}g Fiber
+                    </span>
+                  )}
+                  <span className="bg-muted dark:bg-[#24201c] border border-border/60 dark:border-[#443e39] px-2 py-0.5 rounded-full text-muted-foreground dark:text-[#c4bdb3] text-[10px] font-semibold">
+                    Low GI • Fresh Wok
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t border-border/60 dark:border-[#3b533a]/40">
+                  <div className="flex items-center gap-1.5 text-muted-foreground dark:text-[#c4bdb3] text-xs">
+                    <Clock className="h-3.5 w-3.5 text-emerald-600 dark:text-[#81c784]" />
+                    <span>~{dish.prep_minutes > 0 ? dish.prep_minutes : 5} min</span>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -254,24 +279,20 @@ export function TopProteinRow({
                         e.stopPropagation();
                         onOpenDish(dish);
                       }}
-                      className="text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline px-2 py-1 cursor-pointer"
+                      className="text-xs font-bold text-emerald-700 dark:text-[#81c784] hover:underline px-2 py-1 cursor-pointer"
                     >
-                      Macros
+                      Nutrition Details
                     </button>
 
                     {onAddToCart && (
                       <button
                         type="button"
                         disabled={!dish.is_available}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAddToCart(e, dish);
-                        }}
-                        className="inline-flex items-center justify-center min-h-[36px] px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-xs active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
-                        aria-label={`Add ${dish.name} to cart`}
+                        onClick={(e) => onAddToCart(e, dish)}
+                        className="px-4 py-2 rounded-full bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white font-bold text-xs shadow-md shadow-emerald-950/40 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
                       >
-                        <Plus className="h-4 w-4 mr-1" />
-                        <span>Add</span>
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Add to Meal</span>
                       </button>
                     )}
                   </div>

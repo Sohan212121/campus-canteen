@@ -55,18 +55,18 @@ export function HealthyRangeChips({
   return (
     <div className="space-y-3">
       {/* iOS/Modern Segmented Tab Control */}
-      <div className="flex rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 p-1.5 border border-zinc-200/80 dark:border-zinc-700/60 shadow-2xs">
+      <div className="flex rounded-2xl bg-zinc-100 dark:bg-[#181412] p-1.5 border border-zinc-200/80 dark:border-[#3b533a]/50 shadow-2xs">
         <button
           type="button"
           onClick={() => onSelectMetric("protein")}
           className={`flex-1 min-h-[42px] rounded-xl text-xs font-black transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
             selectedMetric === "protein"
-              ? "bg-white dark:bg-zinc-900 text-emerald-800 dark:text-emerald-300 shadow-sm border border-emerald-500/25"
-              : "text-zinc-500 dark:text-zinc-400 hover:text-foreground font-bold"
+              ? "bg-white dark:bg-[#1e291c] text-emerald-800 dark:text-[#81c784] shadow-sm border border-emerald-500/25 dark:border-[#4CAF50]/40"
+              : "text-zinc-500 dark:text-stone-400 hover:text-foreground dark:hover:text-[#ede7e1] font-bold"
           }`}
           aria-pressed={selectedMetric === "protein"}
         >
-          <Dumbbell className={`h-4 w-4 ${selectedMetric === "protein" ? "text-emerald-600 dark:text-emerald-400" : ""}`} />
+          <Dumbbell className={`h-4 w-4 ${selectedMetric === "protein" ? "text-emerald-600 dark:text-[#4CAF50]" : ""}`} />
           <span>Browse by Protein</span>
         </button>
 
@@ -75,12 +75,12 @@ export function HealthyRangeChips({
           onClick={() => onSelectMetric("calories")}
           className={`flex-1 min-h-[42px] rounded-xl text-xs font-black transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
             selectedMetric === "calories"
-              ? "bg-white dark:bg-zinc-900 text-emerald-800 dark:text-emerald-300 shadow-sm border border-emerald-500/25"
-              : "text-zinc-500 dark:text-zinc-400 hover:text-foreground font-bold"
+              ? "bg-white dark:bg-[#1e291c] text-emerald-800 dark:text-[#81c784] shadow-sm border border-emerald-500/25 dark:border-[#4CAF50]/40"
+              : "text-zinc-500 dark:text-stone-400 hover:text-foreground dark:hover:text-[#ede7e1] font-bold"
           }`}
           aria-pressed={selectedMetric === "calories"}
         >
-          <Flame className={`h-4 w-4 ${selectedMetric === "calories" ? "text-emerald-600 dark:text-emerald-400" : ""}`} />
+          <Flame className={`h-4 w-4 ${selectedMetric === "calories" ? "text-emerald-600 dark:text-[#ffb74d]" : ""}`} />
           <span>Browse by Calories</span>
         </button>
       </div>
@@ -96,13 +96,13 @@ export function HealthyRangeChips({
               }
               className={`min-h-[38px] px-4 rounded-full border text-xs font-black transition-all duration-200 flex items-center gap-1.5 cursor-pointer select-none ${
                 proteinRange === "20-30"
-                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs scale-[1.02]"
-                  : "bg-card border-border/80 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground"
+                  ? "bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white border-transparent shadow-[0_4px_14px_rgba(76,175,80,0.3)] scale-[1.02]"
+                  : "bg-card dark:bg-[#1e291c] border-border/80 dark:border-[#3b533a]/60 text-muted-foreground dark:text-stone-300 hover:border-emerald-500/40 dark:hover:border-[#4CAF50]/40 hover:text-foreground dark:hover:text-[#81c784]"
               }`}
             >
               {proteinRange === "20-30" && <Check className="h-3.5 w-3.5" />}
               <span>20 - 30 g</span>
-              <span className={`text-[10px] font-semibold opacity-80 ${proteinRange === "20-30" ? "text-emerald-100" : "text-muted-foreground"}`}>
+              <span className={`text-[10px] font-semibold opacity-80 ${proteinRange === "20-30" ? "text-emerald-100" : "text-muted-foreground dark:text-stone-400"}`}>
                 ({counts.p20_30})
               </span>
             </button>
@@ -114,13 +114,13 @@ export function HealthyRangeChips({
               }
               className={`min-h-[38px] px-4 rounded-full border text-xs font-black transition-all duration-200 flex items-center gap-1.5 cursor-pointer select-none ${
                 proteinRange === "30-40"
-                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs scale-[1.02]"
-                  : "bg-card border-border/80 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground"
+                  ? "bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white border-transparent shadow-[0_4px_14px_rgba(76,175,80,0.3)] scale-[1.02]"
+                  : "bg-card dark:bg-[#1e291c] border-border/80 dark:border-[#3b533a]/60 text-muted-foreground dark:text-stone-300 hover:border-emerald-500/40 dark:hover:border-[#4CAF50]/40 hover:text-foreground dark:hover:text-[#81c784]"
               }`}
             >
               {proteinRange === "30-40" && <Check className="h-3.5 w-3.5" />}
               <span>30 - 40 g</span>
-              <span className={`text-[10px] font-semibold opacity-80 ${proteinRange === "30-40" ? "text-emerald-100" : "text-muted-foreground"}`}>
+              <span className={`text-[10px] font-semibold opacity-80 ${proteinRange === "30-40" ? "text-emerald-100" : "text-muted-foreground dark:text-stone-400"}`}>
                 ({counts.p30_40})
               </span>
             </button>
@@ -132,13 +132,13 @@ export function HealthyRangeChips({
               }
               className={`min-h-[38px] px-4 rounded-full border text-xs font-black transition-all duration-200 flex items-center gap-1.5 cursor-pointer select-none ${
                 proteinRange === "40+"
-                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs scale-[1.02]"
-                  : "bg-card border-border/80 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground"
+                  ? "bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white border-transparent shadow-[0_4px_14px_rgba(76,175,80,0.3)] scale-[1.02]"
+                  : "bg-card dark:bg-[#1e291c] border-border/80 dark:border-[#3b533a]/60 text-muted-foreground dark:text-stone-300 hover:border-emerald-500/40 dark:hover:border-[#4CAF50]/40 hover:text-foreground dark:hover:text-[#81c784]"
               }`}
             >
               {proteinRange === "40+" && <Check className="h-3.5 w-3.5" />}
               <span>40+ g</span>
-              <span className={`text-[10px] font-semibold opacity-80 ${proteinRange === "40+" ? "text-emerald-100" : "text-muted-foreground"}`}>
+              <span className={`text-[10px] font-semibold opacity-80 ${proteinRange === "40+" ? "text-emerald-100" : "text-muted-foreground dark:text-stone-400"}`}>
                 ({counts.p40_plus})
               </span>
             </button>
@@ -154,13 +154,13 @@ export function HealthyRangeChips({
               }
               className={`min-h-[38px] px-4 rounded-full border text-xs font-black transition-all duration-200 flex items-center gap-1.5 cursor-pointer select-none ${
                 calorieRange === "under-300"
-                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs scale-[1.02]"
-                  : "bg-card border-border/80 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground"
+                  ? "bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white border-transparent shadow-[0_4px_14px_rgba(76,175,80,0.3)] scale-[1.02]"
+                  : "bg-card dark:bg-[#1e291c] border-border/80 dark:border-[#3b533a]/60 text-muted-foreground dark:text-stone-300 hover:border-emerald-500/40 dark:hover:border-[#4CAF50]/40 hover:text-foreground dark:hover:text-[#81c784]"
               }`}
             >
               {calorieRange === "under-300" && <Check className="h-3.5 w-3.5" />}
               <span>&lt; 300 kcal</span>
-              <span className={`text-[10px] font-semibold opacity-80 ${calorieRange === "under-300" ? "text-emerald-100" : "text-muted-foreground"}`}>
+              <span className={`text-[10px] font-semibold opacity-80 ${calorieRange === "under-300" ? "text-emerald-100" : "text-muted-foreground dark:text-stone-400"}`}>
                 ({counts.cUnder300})
               </span>
             </button>
@@ -174,13 +174,13 @@ export function HealthyRangeChips({
               }
               className={`min-h-[38px] px-4 rounded-full border text-xs font-black transition-all duration-200 flex items-center gap-1.5 cursor-pointer select-none ${
                 calorieRange === "300-500"
-                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs scale-[1.02]"
-                  : "bg-card border-border/80 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground"
+                  ? "bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white border-transparent shadow-[0_4px_14px_rgba(76,175,80,0.3)] scale-[1.02]"
+                  : "bg-card dark:bg-[#1e291c] border-border/80 dark:border-[#3b533a]/60 text-muted-foreground dark:text-stone-300 hover:border-emerald-500/40 dark:hover:border-[#4CAF50]/40 hover:text-foreground dark:hover:text-[#81c784]"
               }`}
             >
               {calorieRange === "300-500" && <Check className="h-3.5 w-3.5" />}
               <span>300 - 500 kcal</span>
-              <span className={`text-[10px] font-semibold opacity-80 ${calorieRange === "300-500" ? "text-emerald-100" : "text-muted-foreground"}`}>
+              <span className={`text-[10px] font-semibold opacity-80 ${calorieRange === "300-500" ? "text-emerald-100" : "text-muted-foreground dark:text-stone-400"}`}>
                 ({counts.c300_500})
               </span>
             </button>
@@ -192,13 +192,13 @@ export function HealthyRangeChips({
               }
               className={`min-h-[38px] px-4 rounded-full border text-xs font-black transition-all duration-200 flex items-center gap-1.5 cursor-pointer select-none ${
                 calorieRange === "500+"
-                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs scale-[1.02]"
-                  : "bg-card border-border/80 text-muted-foreground hover:border-emerald-500/40 hover:text-foreground"
+                  ? "bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white border-transparent shadow-[0_4px_14px_rgba(76,175,80,0.3)] scale-[1.02]"
+                  : "bg-card dark:bg-[#1e291c] border-border/80 dark:border-[#3b533a]/60 text-muted-foreground dark:text-stone-300 hover:border-emerald-500/40 dark:hover:border-[#4CAF50]/40 hover:text-foreground dark:hover:text-[#81c784]"
               }`}
             >
               {calorieRange === "500+" && <Check className="h-3.5 w-3.5" />}
               <span>500+ kcal</span>
-              <span className={`text-[10px] font-semibold opacity-80 ${calorieRange === "500+" ? "text-emerald-100" : "text-muted-foreground"}`}>
+              <span className={`text-[10px] font-semibold opacity-80 ${calorieRange === "500+" ? "text-emerald-100" : "text-muted-foreground dark:text-stone-400"}`}>
                 ({counts.c500_plus})
               </span>
             </button>

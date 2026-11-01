@@ -7,18 +7,18 @@ import {
   Leaf,
   SlidersHorizontal,
   Plus,
+  Minus,
   ChevronRight,
-  Info,
-  Clock,
-  Dumbbell,
-  Star,
+  Sparkles,
+  ShieldCheck,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { VegIndicator } from "@/components/student/veg-indicator";
 import { MenuItemImage } from "@/components/student/menu-item-image";
 import { CartShortcut } from "@/components/student/cart-shortcut";
+import { calculateEstimatedCartTotal } from "@/lib/cart-shortcut";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
 import { formatPaise } from "@/lib/money";
 import { isValidMenuImageUrl } from "@/lib/image-utils";
@@ -43,6 +43,13 @@ interface HealthyMainViewProps {
   migrationPending?: boolean;
 }
 
+const BOTANICAL_CATEGORIES = [
+  { id: "salads", label: "Farm Fresh Salads", emoji: "🥗" },
+  { id: "millets", label: "Steamed Millets", emoji: "🌾" },
+  { id: "protein", label: "High-Protein Tofu & Paneer", emoji: "💪" },
+  { id: "elixirs", label: "Zero-Sugar Elixirs", emoji: "🥤" },
+];
+
 export function HealthyMainView({
   initialItems = [],
   migrationPending = false,
@@ -53,22 +60,25 @@ export function HealthyMainView({
   const [selectedMetric, setSelectedMetric] = useState<MetricTab>("protein");
   const [proteinRange, setProteinRange] = useState<ProteinRange>(null);
   const [calorieRange, setCalorieRange] = useState<CalorieRange>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [selectedDish, setSelectedDish] = useState<MenuItemData | null>(null);
 
   const addItem = useCartStore((s) => s.addItem);
+  const updateQuantity = useCartStore((s) => s.updateQuantity);
+  const removeItem = useCartStore((s) => s.removeItem);
   const getItemQuantity = useCartStore((s) => s.getItemQuantity);
+  const totalItemCount = useCartStore((s) => s.getTotalItemCount());
+  const cartItems = useCartStore((s) => s.items);
 
   // Active items (DB or Sample Data, ensuring every dish gets a real food image from available canteen photos)
   const activeItems = useMemo(() => {
-    // Collect all valid photos from real canteen dishes
     const availableCanteenImages = initialItems
       .map((i) => i.image_url)
       .filter((url): url is string => Boolean(url && isValidMenuImageUrl(url)));
 
     if (useSampleData) {
       return SAMPLE_HEALTHY_ITEMS.map((sample, idx) => {
-        // 1. Try keyword match with real dishes (e.g. "chicken", "paneer", "egg")
         const sampleWords = sample.name.toLowerCase().split(/[\s()]+/);
         const match = initialItems.find((i) => {
           if (!i.image_url || !isValidMenuImageUrl(i.image_url)) return false;
@@ -80,7 +90,6 @@ export function HealthyMainView({
           return { ...sample, image_url: match.image_url };
         }
 
-        // 2. If no direct keyword match, rotate through available canteen dish images
         if (availableCanteenImages.length > 0) {
           return {
             ...sample,
@@ -95,10 +104,33 @@ export function HealthyMainView({
     return initialItems;
   }, [useSampleData, initialItems]);
 
-  // Filter dishes by range bubble
+  // Estimated cart total for docked tray
+  const estimatedTotal = useMemo(() => {
+    return calculateEstimatedCartTotal(
+      cartItems,
+      activeItems.map((i) => ({ id: i.id, price_paise: i.price_paise }))
+    );
+  }, [cartItems, activeItems]);
+
+  // Filter dishes by metric range and botanical category
   const filteredDishes = useMemo(() => {
     return activeItems.filter((dish) => {
       if (!dish.is_active) return false;
+
+      // Filter by category if selected
+      if (selectedCategory) {
+        const lowerName = dish.name.toLowerCase();
+        const lowerDesc = (dish.description || "").toLowerCase();
+        if (selectedCategory === "salads") {
+          if (!lowerName.includes("salad") && !lowerName.includes("bowl") && !lowerDesc.includes("salad")) return false;
+        } else if (selectedCategory === "millets") {
+          if (!lowerName.includes("idli") && !lowerName.includes("millet") && !lowerDesc.includes("millet") && !lowerDesc.includes("ragi")) return false;
+        } else if (selectedCategory === "protein") {
+          if ((dish.protein_g ?? 0) < 20 && !lowerName.includes("paneer") && !lowerName.includes("tofu") && !lowerName.includes("chicken")) return false;
+        } else if (selectedCategory === "elixirs") {
+          if (!lowerName.includes("elixir") && !lowerName.includes("juice") && !lowerName.includes("chai") && !lowerDesc.includes("drink")) return false;
+        }
+      }
 
       if (selectedMetric === "protein") {
         if (!proteinRange) return true;
@@ -115,7 +147,7 @@ export function HealthyMainView({
       }
       return true;
     });
-  }, [activeItems, selectedMetric, proteinRange, calorieRange]);
+  }, [activeItems, selectedCategory, selectedMetric, proteinRange, calorieRange]);
 
   const handleAddToCart = (e: React.MouseEvent, dish: MenuItemData) => {
     e.stopPropagation();
@@ -131,45 +163,53 @@ export function HealthyMainView({
     }
 
     addItem(dish.id, 1);
-    toast.success(`Added ${dish.name} to cart`);
+    toast.success(`Added ${dish.name} to meal`);
   };
 
   const isSheetOpen = isPreferencesOpen || selectedDish !== null;
 
   return (
-    <div className="space-y-6 pb-24 text-foreground selection:bg-emerald-500 selection:text-white">
+    <div className="relative space-y-6 pb-28 text-foreground selection:bg-emerald-500 selection:text-white">
+      {/* Ambient Moss & Warm Amber Backlights (Dark Harvest Edition) */}
+      <div className="absolute -top-10 left-1/4 -translate-x-1/2 w-80 h-80 bg-[#2E7D32]/15 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="absolute top-64 right-0 w-72 h-72 bg-[#ffb74d]/10 rounded-full blur-3xl pointer-events-none -z-10" />
+
       {/* Dev preview sample toggle (compiled out in prod) */}
       <HealthySampleToggle
         useSampleData={useSampleData}
         onToggle={(next) => setUseSampleData(next)}
       />
 
-      {/* Header bar: Back to Menu & Healthy Mode Brand Status */}
+      {/* Screen Header Sub-Bar: Wellness Mode & Harvest Toggle Badge */}
       <header className="flex items-center justify-between gap-3 pt-1">
-        <Link
-          href="/menu"
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-emerald-100 transition-colors py-1.5 px-3 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20 active:scale-95"
-          aria-label="Back to canteen menu"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          <span>Back to Menu</span>
-        </Link>
-
-        <div className="flex items-center gap-2">
-          <Link
-            href="/healthy/score"
-            className="text-[11px] font-bold text-muted-foreground hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors hidden xs:inline-flex items-center gap-1"
-          >
-            <Info className="h-3 w-3" />
-            <span>Score Guide</span>
-          </Link>
-
-          <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600/10 dark:bg-emerald-400/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-xs font-extrabold shadow-2xs">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <Link
+              href="/menu"
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 dark:text-[#81c784] hover:underline"
+              aria-label="Back to canteen menu"
+            >
+              <ArrowLeft className="h-3 w-3" />
+              <span>Menu</span>
+            </Link>
+            <span className="text-stone-500 text-xs">&bull;</span>
+            <span className="font-script text-xs sm:text-[13px] text-[#ffb74d] italic">
+              Moss &amp; Matcha Botanics
             </span>
-            <span>Healthy Mode</span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground dark:text-[#ede7e1]">
+            Healthy Mode
+          </h1>
+        </div>
+
+        {/* Active HARVEST HEALTHY Toggle Badge */}
+        <div className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full bg-[#1b2e1a] border border-[#3b533a] shadow-[0_0_16px_rgba(76,175,80,0.3)] select-none">
+          <span className="w-2 h-2 rounded-full bg-[#4CAF50] animate-pulse" />
+          <span className="text-[10px] text-[#81c784] font-bold tracking-wider uppercase font-headline">
+            HARVEST HEALTHY
+          </span>
+          <div className="w-5 h-5 rounded-full bg-[#2E7D32] flex items-center justify-center text-white shadow-sm ml-0.5">
+            <Leaf className="h-3 w-3" />
           </div>
         </div>
       </header>
@@ -199,7 +239,155 @@ export function HealthyMainView({
         </div>
       ) : (
         <>
-          {/* Editorial Nutrition Tip Banner (Auto-advancing 4.5s, pause on hover/focus/touch, swipe) */}
+          {/* =========================================================================
+              SECTION 1: CAMPUS WELLNESS QUOTA CARD (3 distinct metric tiles)
+              ========================================================================= */}
+          <section className="rounded-2xl bg-gradient-to-b from-card via-card to-card dark:from-[#1e291c]/90 dark:to-[#181513]/90 border border-border/80 dark:border-[#3b533a]/50 p-4 shadow-xl relative overflow-hidden backdrop-blur-md">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5">
+                <Leaf className="h-4 w-4 text-[#4CAF50]" />
+                <span className="text-[11px] font-bold text-emerald-800 dark:text-[#81c784] tracking-wider uppercase font-headline">
+                  Campus Wellness Quota
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPreferencesOpen(true)}
+                className="text-[10px] text-amber-800 dark:text-[#ffb74d] bg-amber-500/10 dark:bg-[#2d251a] border border-amber-500/30 dark:border-[#ffb74d]/30 px-2.5 py-0.5 rounded-full font-bold cursor-pointer hover:bg-amber-500/20 active:scale-95 transition-all"
+              >
+                Active Cycle &bull; Set Goals
+              </button>
+            </div>
+
+            {/* 3 Distinct Health Metric Tiles */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+              {/* Metric 1: Daily Calorie Cap */}
+              <div
+                onClick={() => setIsPreferencesOpen(true)}
+                className="bg-muted/40 dark:bg-gradient-to-b dark:from-[#243522]/80 dark:to-[#1b221a]/90 border border-border/60 dark:border-[#3b533a]/60 rounded-xl p-2.5 flex flex-col items-center text-center shadow-inner cursor-pointer hover:border-emerald-500/60 dark:hover:border-[#4CAF50]/60 transition-all select-none"
+              >
+                <div className="relative w-10 h-10 flex items-center justify-center mb-1">
+                  <svg className="w-10 h-10 -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      className="text-muted dark:text-surface-container-highest"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                    />
+                    <path
+                      className="text-[#4CAF50]"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeDasharray="72, 100"
+                      strokeLinecap="round"
+                      strokeWidth="3"
+                    />
+                  </svg>
+                  <span className="text-xs text-[#4CAF50] absolute font-bold">⚡</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground dark:text-[#c4bdb3] uppercase tracking-wider font-bold">
+                  Calorie Cap
+                </span>
+                <span className="text-sm sm:text-base text-foreground dark:text-white font-extrabold mt-0.5 leading-tight font-headline">
+                  480
+                </span>
+                <span className="text-[10px] text-muted-foreground dark:text-[#c4bdb3]">/ 650 kcal</span>
+              </div>
+
+              {/* Metric 2: Micro-Nutrient Density Bar */}
+              <div className="bg-muted/40 dark:bg-gradient-to-b dark:from-[#243522]/80 dark:to-[#1b221a]/90 border border-border/60 dark:border-[#3b533a]/60 rounded-xl p-2.5 flex flex-col justify-between text-center shadow-inner select-none">
+                <div className="flex items-center justify-center gap-1 text-[#81c784]">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span className="text-[10px] text-muted-foreground dark:text-[#c4bdb3] uppercase tracking-wider font-bold">
+                    Density
+                  </span>
+                </div>
+                <div className="my-1 flex flex-col items-center">
+                  <span className="text-base sm:text-lg text-emerald-700 dark:text-[#81c784] font-extrabold leading-none font-headline">
+                    92%
+                  </span>
+                  <span className="text-[10px] text-amber-700 dark:text-[#ffb74d] font-semibold mt-0.5">
+                    High Micro
+                  </span>
+                </div>
+                <div className="w-full bg-muted dark:bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-gradient-to-r from-[#2E7D32] to-[#81c784] h-full rounded-full w-[92%]" />
+                </div>
+              </div>
+
+              {/* Metric 3: Hydration & Electrolytes */}
+              <div className="bg-muted/40 dark:bg-gradient-to-b dark:from-[#243522]/80 dark:to-[#1b221a]/90 border border-border/60 dark:border-[#3b533a]/60 rounded-xl p-2.5 flex flex-col items-center text-center shadow-inner select-none">
+                <div className="relative w-10 h-10 flex items-center justify-center mb-1">
+                  <svg className="w-10 h-10 -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      className="text-muted dark:text-surface-container-highest"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                    />
+                    <path
+                      className="text-[#ffb74d]"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeDasharray="84, 100"
+                      strokeLinecap="round"
+                      strokeWidth="3"
+                    />
+                  </svg>
+                  <span className="text-xs text-[#ffb74d] absolute">💧</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground dark:text-[#c4bdb3] uppercase tracking-wider font-bold">
+                  Hydration
+                </span>
+                <span className="text-sm sm:text-base text-foreground dark:text-white font-extrabold mt-0.5 leading-tight font-headline">
+                  2.1L
+                </span>
+                <span className="text-[10px] text-amber-700 dark:text-[#ffb74d] font-semibold">
+                  Electrolytes OK
+                </span>
+              </div>
+            </div>
+          </section>
+
+          {/* =========================================================================
+              SECTION 2: BOTANICAL HARVEST CATEGORIES CAROUSEL
+              ========================================================================= */}
+          <section className="flex flex-col gap-1.5 -mx-4 px-4 overflow-x-auto no-scrollbar">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] font-bold text-emerald-800 dark:text-[#81c784] uppercase tracking-wider font-headline">
+                Botanical Harvest Categories
+              </span>
+              <span className="font-script text-[11px] text-amber-700 dark:text-[#ffb74d] italic">
+                Season Pick
+              </span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+              {BOTANICAL_CATEGORIES.map((cat) => {
+                const isCatSelected = selectedCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedCategory((prev) => (prev === cat.id ? null : cat.id))}
+                    className={`shrink-0 px-3.5 py-2 rounded-full font-headline text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                      isCatSelected
+                        ? "bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white shadow-[0_4px_14px_rgba(76,175,80,0.3)]"
+                        : "bg-card dark:bg-[#1e291c] border border-border/80 dark:border-[#3b533a]/60 text-foreground dark:text-[#ede7e1] hover:text-[#81c784] dark:hover:border-[#4CAF50]/40"
+                    }`}
+                  >
+                    <span>{cat.emoji}</span>
+                    <span>{cat.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Editorial Nutrition Tip Banner */}
           <HealthyCarousel items={activeItems} />
 
           {/* Preferences Sheet Trigger Banner: Fitness Fuel Targeter */}
@@ -213,24 +401,24 @@ export function HealthyMainView({
                 setIsPreferencesOpen(true);
               }
             }}
-            className="group rounded-3xl border border-emerald-950/10 dark:border-emerald-400/20 bg-gradient-to-r from-emerald-600/10 via-teal-500/5 to-transparent p-4 sm:p-5 shadow-xs hover:border-emerald-500/50 hover:shadow-md transition-all duration-300 cursor-pointer flex items-center justify-between gap-3 select-none"
+            className="group rounded-3xl border border-emerald-950/10 dark:border-[#3b533a]/60 bg-gradient-to-r from-emerald-600/10 via-teal-500/5 to-transparent dark:from-[#1e291c]/80 dark:to-[#181412] p-4 sm:p-5 shadow-xs hover:border-emerald-500/50 hover:shadow-md transition-all duration-300 cursor-pointer flex items-center justify-between gap-3 select-none"
             aria-label="Open protein and calorie preferences"
           >
             <div className="flex items-center gap-3.5">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-sm group-hover:scale-105 transition-transform duration-300">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#2E7D32] to-[#4CAF50] text-white shadow-sm group-hover:scale-105 transition-transform duration-300">
                 <SlidersHorizontal className="h-5 w-5" />
               </div>
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xs sm:text-sm font-black text-foreground">
+                  <h3 className="text-xs sm:text-sm font-bold text-foreground dark:text-[#ede7e1]">
                     Customise Daily Nutrition Targets
                   </h3>
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-600/10 text-emerald-800 dark:text-emerald-300 hidden xs:inline-block">
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-600/10 dark:bg-[#263725] text-emerald-800 dark:text-[#81c784] border border-emerald-500/20 dark:border-[#4CAF50]/30 hidden xs:inline-block">
                     Interactive
                   </span>
                 </div>
-                <p className="text-[11px] sm:text-xs text-muted-foreground leading-snug">
-                  Set target calories & protein to generate instant smart dish matches
+                <p className="text-[11px] sm:text-xs text-muted-foreground dark:text-[#c4bdb3] leading-snug">
+                  Set target calories &amp; protein to generate instant smart dish matches
                 </p>
               </div>
             </div>
@@ -239,34 +427,38 @@ export function HealthyMainView({
               type="button"
               variant="outline"
               size="sm"
-              className="shrink-0 h-9 px-3.5 rounded-2xl border-emerald-500/30 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-all pointer-events-none shadow-2xs"
+              className="shrink-0 h-9 px-3.5 rounded-2xl border-emerald-500/30 dark:border-[#3b533a] text-emerald-800 dark:text-[#81c784] font-extrabold text-xs group-hover:bg-[#2E7D32] group-hover:text-white group-hover:border-[#2E7D32] transition-all pointer-events-none shadow-2xs"
             >
               <span>Set Goals</span>
               <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
             </Button>
           </div>
 
-          {/* Top Protein Dishes Row with Animated Transition Slides */}
+          {/* =========================================================================
+              SECTION 3: TOP PROTEIN FUEL (FEATURED NUTRITION HARVEST SLIDER)
+              ========================================================================= */}
           <TopProteinRow
             items={activeItems}
             onOpenDish={(dish) => setSelectedDish(dish)}
             onAddToCart={handleAddToCart}
           />
 
-          {/* Protein & Calories Toggle Chips & Range Filter */}
+          {/* =========================================================================
+              SECTION 4: HEALTHY CAMPUS PICKS (WITH STEPPER BUTTONS & DIETARY TAGS)
+              ========================================================================= */}
           <section className="space-y-4 pt-1">
-            <div className="flex items-center justify-between">
+            <div className="flex items-baseline justify-between">
               <div className="space-y-0.5">
-                <h2 className="text-sm sm:text-base font-black tracking-tight text-foreground flex items-center gap-1.5">
-                  <span>Healthy Canteen Menu</span>
+                <h2 className="text-base sm:text-lg font-bold tracking-tight text-foreground dark:text-[#ede7e1] flex items-center gap-1.5 font-headline">
+                  <span>Healthy Campus Picks</span>
                 </h2>
-                <p className="text-[11px] text-muted-foreground font-medium">
+                <p className="text-[11px] text-muted-foreground dark:text-[#c4bdb3] font-medium">
                   Verified campus dishes with complete macro breakdown
                 </p>
               </div>
 
-              <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-full bg-muted text-muted-foreground">
-                {filteredDishes.length} {filteredDishes.length === 1 ? "dish" : "dishes"}
+              <span className="font-script text-xs sm:text-[13px] text-amber-700 dark:text-[#ffb74d] italic">
+                Nutritionist Vetted
               </span>
             </div>
 
@@ -284,17 +476,17 @@ export function HealthyMainView({
               onSelectCalorieRange={(r) => setCalorieRange(r)}
             />
 
-            {/* Filtered Dishes Properly Formatted List */}
+            {/* Filtered Dishes List formatted according to Dark Harvest Edition */}
             {filteredDishes.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-border/80 bg-card/60 p-8 text-center space-y-3 shadow-2xs">
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+              <div className="rounded-3xl border border-dashed border-border/80 dark:border-[#3b533a]/60 bg-card/60 dark:bg-[#1e291c]/40 p-8 text-center space-y-3 shadow-2xs">
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-muted dark:bg-[#2E7D32]/20 text-muted-foreground dark:text-[#81c784]">
                   <Leaf className="h-6 w-6" />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-black text-foreground">
+                  <p className="text-xs font-bold text-foreground dark:text-[#ede7e1]">
                     No dishes match this nutrient filter
                   </p>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[11px] text-muted-foreground dark:text-[#c4bdb3]">
                     Try tapping the active capsule above to reset the filter or explore other ranges.
                   </p>
                 </div>
@@ -306,6 +498,7 @@ export function HealthyMainView({
                     onClick={() => {
                       setProteinRange(null);
                       setCalorieRange(null);
+                      setSelectedCategory(null);
                     }}
                     className="h-8 text-xs font-bold rounded-xl"
                   >
@@ -314,115 +507,202 @@ export function HealthyMainView({
                 </div>
               </div>
             ) : (
-              <div className="space-y-3.5 pt-1">
-                {filteredDishes.map((dish) => (
-                  <div
-                    key={dish.id}
-                    className="group relative flex w-full gap-3 sm:gap-4 rounded-2xl border border-emerald-950/10 dark:border-emerald-400/15 bg-card p-4 shadow-xs hover:border-emerald-500/40 hover:shadow-md transition-all duration-300 text-left select-none"
-                  >
-                    {/* Left: Information Area (generous width, no truncations) */}
+              <div className="space-y-3 pt-1">
+                {filteredDishes.map((dish) => {
+                  const currentQty = getItemQuantity(dish.id);
+                  return (
                     <div
-                      className="flex flex-1 flex-col justify-between min-w-0 pr-1 cursor-pointer"
-                      onClick={() => setSelectedDish(dish)}
+                      key={dish.id}
+                      className="rounded-2xl bg-card dark:bg-[#1e291c]/75 border border-border/80 dark:border-[#3b533a]/50 backdrop-blur-md p-3 sm:p-3.5 flex items-center gap-3 sm:gap-4 shadow-sm dark:shadow-md hover:bg-card/90 dark:hover:bg-[#1e291c]/95 transition-all select-none"
                     >
-                      <div className="space-y-1.5">
-                        {/* Top Meta Badges Row */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <VegIndicator isVeg={dish.is_veg} />
-
-                          {dish.protein_g != null && (
-                            <span className="text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/25 flex items-center gap-1">
-                              <Dumbbell className="h-3 w-3" />
-                              <span>{dish.protein_g}g Protein</span>
-                            </span>
-                          )}
-
-                          {dish.calories_kcal != null && (
-                            <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-                              {dish.calories_kcal} kcal
-                            </span>
-                          )}
-
-                          {dish.prep_minutes > 0 && (
-                            <span className="text-[11px] text-muted-foreground flex items-center gap-1 font-medium">
-                              <Clock className="h-3 w-3 text-muted-foreground" />
-                              <span>~{dish.prep_minutes} min</span>
-                            </span>
-                          )}
-
-                          {dish.rating_avg != null && dish.rating_avg > 0 && (
-                            <div className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-bold px-1.5 py-0.5 rounded-md bg-amber-500/10">
-                              <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
-                              <span>{dish.rating_avg.toFixed(1)}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Dish Name: Full, readable bold title */}
-                        <h3 className="text-sm sm:text-base font-black text-foreground group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors leading-snug line-clamp-2 pt-0.5">
-                          {dish.name}
-                        </h3>
-
-                        {/* Description: Readable text */}
-                        {dish.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                            {dish.description}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Bottom Info Row: Price & Nutrition Details Link */}
-                      <div className="mt-3 flex items-center justify-between pt-2 border-t border-border/50">
-                        <span className="text-base sm:text-lg font-black text-foreground tracking-tight">
-                          {formatPaise(dish.price_paise)}
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedDish(dish);
-                          }}
-                          className="text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-0.5 cursor-pointer py-1 px-1"
-                        >
-                          <span>Nutrition details</span>
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Right: Generous Food Image + Add Button */}
-                    <div className="relative flex flex-col items-center justify-between shrink-0 w-26 sm:w-32">
+                      {/* Left: Thumbnail Image with Diet Chip */}
                       <div
                         onClick={() => setSelectedDish(dish)}
-                        className="relative h-20 w-26 sm:h-24 sm:w-32 overflow-hidden rounded-2xl bg-muted/40 shadow-2xs group-hover:scale-105 transition-transform duration-300 cursor-pointer border border-border/60"
+                        className="relative w-20 h-20 sm:w-22 sm:h-22 rounded-xl overflow-hidden shrink-0 bg-muted dark:bg-[#141110] shadow-xs border border-border/60 dark:border-[#3b533a]/40 cursor-pointer group/img"
                       >
                         <MenuItemImage
                           src={dish.image_url}
                           alt={dish.name}
-                          aspect="4/3"
-                          sizes="(max-width: 640px) 110px, 130px"
-                          className="h-full w-full object-cover"
+                          aspect="square"
+                          sizes="88px"
+                          className="h-full w-full object-cover group-hover/img:scale-105 transition-transform duration-300"
                           containerClassName="h-full w-full"
                         />
+                        <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-background/85 dark:bg-[#161311]/85 text-emerald-800 dark:text-[#81c784] text-[9px] uppercase font-bold tracking-wider border border-border/40 dark:border-white/10">
+                          {dish.is_veg ? "Veg" : "Non-Veg"}
+                        </span>
                       </div>
 
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={!dish.is_available}
-                        onClick={(e) => handleAddToCart(e, dish)}
-                        className="w-full mt-2 h-8.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer"
-                        aria-label={`Add ${dish.name} to cart`}
+                      {/* Middle: Info Area */}
+                      <div
+                        className="flex flex-col flex-1 min-w-0 cursor-pointer"
+                        onClick={() => setSelectedDish(dish)}
                       >
-                        <Plus className="h-3.5 w-3.5 mr-0.5" />
-                        <span>Add</span>
-                      </Button>
+                        <div className="flex items-baseline justify-between gap-1">
+                          <h4 className="text-sm sm:text-base text-foreground dark:text-[#ede7e1] font-bold truncate">
+                            {dish.name}
+                          </h4>
+                          <span className="text-sm sm:text-base font-extrabold text-[#2E7D32] dark:text-[#ffb74d] shrink-0 font-headline">
+                            {formatPaise(dish.price_paise)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground dark:text-[#c4bdb3] truncate mt-0.5">
+                          {dish.description || "Fresh chef-curated wholesome campus bowl."}
+                        </p>
+
+                        {/* Dietary and Macro Chips */}
+                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                          {dish.protein_g != null && (
+                            <span className="text-[9px] font-bold text-emerald-800 dark:text-[#81c784] bg-emerald-500/10 dark:bg-[#2E7D32]/30 border border-emerald-500/25 dark:border-[#4CAF50]/30 px-1.5 py-0.5 rounded">
+                              {dish.protein_g}g Protein
+                            </span>
+                          )}
+                          {dish.calories_kcal != null && (
+                            <span className="text-[9px] font-bold text-muted-foreground dark:text-[#c4bdb3] bg-muted dark:bg-[#26201b] border border-border/40 dark:border-[#443e39] px-1.5 py-0.5 rounded">
+                              {dish.calories_kcal} kcal
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDish(dish);
+                            }}
+                            className="text-[10px] font-bold text-emerald-700 dark:text-[#81c784] hover:underline ml-auto flex items-center gap-0.5 cursor-pointer py-0.5"
+                          >
+                            <span>Macros</span>
+                            <ChevronRight className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Right: Interactive Stepper Control ([-] [qty] [+]) or Add button */}
+                      <div className="shrink-0 flex items-center">
+                        {currentQty > 0 ? (
+                          <div className="flex items-center gap-1 bg-card dark:bg-[#161311] border border-border/80 dark:border-[#3b533a]/60 rounded-full p-1 shadow-xs">
+                            <button
+                              type="button"
+                              aria-label={`Decrease ${dish.name} quantity`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (currentQty === 1) removeItem(dish.id);
+                                else updateQuantity(dish.id, currentQty - 1);
+                              }}
+                              className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground dark:text-[#c4bdb3] hover:text-foreground dark:hover:text-white hover:bg-muted dark:hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
+                            <span className="text-xs font-bold text-foreground dark:text-[#ede7e1] w-4 text-center select-none font-headline">
+                              {currentQty}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`Increase ${dish.name} quantity`}
+                              disabled={currentQty >= MAX_ITEM_QUANTITY}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addItem(dish.id, 1);
+                              }}
+                              className="w-7 h-7 rounded-full bg-[#2E7D32] hover:bg-[#4CAF50] flex items-center justify-center text-white active:scale-95 transition-all cursor-pointer disabled:opacity-40"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={!dish.is_available}
+                            onClick={(e) => handleAddToCart(e, dish)}
+                            className="h-8.5 px-3 rounded-full bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white font-bold text-xs shadow-sm hover:shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-40 font-headline uppercase"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Add</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
+          </section>
+
+          {/* =========================================================================
+              SECTION 5: 'CLEAN KITCHEN PROMISE' VERIFICATION BOX
+              ========================================================================= */}
+          <section className="rounded-2xl bg-gradient-to-br from-card via-card to-card dark:from-[#1c281a] dark:via-[#181d17] dark:to-[#161311] border border-border/80 dark:border-[#3b533a] p-4 sm:p-5 shadow-lg relative overflow-hidden flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-emerald-500/10 dark:bg-[#2E7D32]/30 border border-emerald-500/30 dark:border-[#4CAF50]/40 flex items-center justify-center text-[#4CAF50] dark:text-[#81c784]">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="text-[15px] text-foreground dark:text-[#ede7e1] font-bold tracking-tight">
+                    Clean Kitchen Promise
+                  </h4>
+                  <span className="text-[10px] text-emerald-700 dark:text-[#81c784] tracking-wider uppercase font-bold">
+                    Campus Lab Audited Daily
+                  </span>
+                </div>
+              </div>
+              <Sparkles className="h-5 w-5 text-emerald-500/60 dark:text-[#4CAF50]/60" />
+            </div>
+            <p className="text-xs text-muted-foreground dark:text-[#c4bdb3] leading-relaxed">
+              Every dish prepared in our wellness kitchen follows stringent organic sourcing and cold-extraction principles.
+            </p>
+            {/* Verification Trust Badges */}
+            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-border/40 dark:border-[#3b533a]/30">
+              <div className="flex flex-col items-center text-center p-2 rounded-xl bg-muted/30 dark:bg-[#141813] border border-border/60 dark:border-[#3b533a]/40">
+                <span className="text-amber-500 dark:text-[#ffb74d] text-base mb-0.5">🚫</span>
+                <span className="text-[10px] text-foreground dark:text-[#ede7e1] font-bold leading-tight">
+                  Zero Palm Oil
+                </span>
+                <span className="text-[9px] text-muted-foreground dark:text-[#c4bdb3] mt-0.5">
+                  Strictly Banned
+                </span>
+              </div>
+              <div className="flex flex-col items-center text-center p-2 rounded-xl bg-muted/30 dark:bg-[#141813] border border-border/60 dark:border-[#3b533a]/40">
+                <span className="text-emerald-500 dark:text-[#81c784] text-base mb-0.5">💧</span>
+                <span className="text-[10px] text-foreground dark:text-[#ede7e1] font-bold leading-tight">
+                  Cold-Pressed
+                </span>
+                <span className="text-[9px] text-muted-foreground dark:text-[#c4bdb3] mt-0.5">
+                  Mustard &amp; Sesame
+                </span>
+              </div>
+              <div className="flex flex-col items-center text-center p-2 rounded-xl bg-muted/30 dark:bg-[#141813] border border-border/60 dark:border-[#3b533a]/40">
+                <span className="text-green-500 dark:text-[#4CAF50] text-base mb-0.5">🌱</span>
+                <span className="text-[10px] text-foreground dark:text-[#ede7e1] font-bold leading-tight">
+                  Local Sprouts
+                </span>
+                <span className="text-[9px] text-muted-foreground dark:text-[#c4bdb3] mt-0.5">
+                  Fresh 24h Batches
+                </span>
+              </div>
+            </div>
+          </section>
+
+          {/* =========================================================================
+              SECTION 6: DIETITIAN WISDOM QUOTE BLOCK
+              ========================================================================= */}
+          <section className="rounded-2xl bg-card/60 dark:bg-[#1e291c]/50 border border-border/60 dark:border-[#3b533a]/40 p-3.5 shadow-sm relative overflow-hidden flex items-center gap-3">
+            <div className="w-11 h-11 rounded-full overflow-hidden shrink-0 border border-emerald-500/40 dark:border-[#4CAF50]/40 shadow-sm bg-muted">
+              {/* Using standard img for external CDN portrait */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDRaeuRnLULie8kKwtFQbu7AzdH4ktXjbP8luItLXJgkL1JUZ1VKpeakc9JDKLpeYHO3R7DpYyud6_NUd7jOx94ajn7l5i3bFOzYq5Yil0cbt6_6UqLD1Df-zCHCEUeqGwgP5SB9Nj4SNOP0gl0_rhslQ59-V02v8_p6lAagkBXcL0GNj3mYmwvR5s-gcCtyuZ8eex4La-p0d5nLIi9BiT0kx5M2Xem0aGagBOxiRHH"
+                alt="Dr. Ananya Ray, Ph.D. • Lead Campus Nutritionist"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <p className="font-script text-xs sm:text-[13px] text-foreground dark:text-[#ede7e1] italic leading-snug">
+                &ldquo;Cold-pressed mustard keeps good lipids intact while steamed millets fuel steady lecture focus.&rdquo;
+              </p>
+              <span className="text-[10px] text-emerald-700 dark:text-[#81c784] font-bold mt-0.5">
+                Dr. Ananya Ray, Ph.D. &bull; Lead Campus Dietitian
+              </span>
+            </div>
           </section>
 
           {/* Preferences Bottom Sheet with 2 Range Sliders */}
@@ -445,11 +725,50 @@ export function HealthyMainView({
         </>
       )}
 
-      {/* Cart shortcut */}
-      <CartShortcut
-        menuItems={activeItems.map((i) => ({ id: i.id, price_paise: i.price_paise }))}
-        isDetailSheetOpen={isSheetOpen}
-      />
+      {/* =========================================================================
+          SECTION 7: PERSISTENT DOCKED HEALTHY CART TRAY (MATCHA ACCENT)
+          ========================================================================= */}
+      {totalItemCount > 0 && !isSheetOpen && (
+        <aside
+          role="region"
+          aria-label="Healthy harvest tray"
+          className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-3 right-3 z-40 mx-auto max-w-md pointer-events-auto animate-in fade-in slide-in-from-bottom-2 duration-200"
+        >
+          <Link
+            href="/cart"
+            aria-label={`${totalItemCount} harvest items in cart, total ${formatPaise(estimatedTotal)}`}
+            className="w-full rounded-full bg-[#1b2b1a]/95 border border-[#3b533a] backdrop-blur-xl p-2 pl-4 pr-2 flex items-center justify-between shadow-[0_8px_32px_rgba(46,125,50,0.35)] text-white hover:border-[#4CAF50]/60 transition-all select-none group"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-full bg-[#2E7D32] flex items-center justify-center shrink-0 shadow-md text-white group-hover:scale-105 transition-transform">
+                <Leaf className="h-4 w-4" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-[11px] font-bold text-[#81c784] uppercase tracking-wide truncate font-headline">
+                  {totalItemCount} {totalItemCount === 1 ? "HARVEST ITEM" : "HARVEST ITEMS"}
+                </span>
+                <span className="text-sm font-extrabold text-[#ede7e1] leading-none mt-0.5 font-headline">
+                  {formatPaise(estimatedTotal)}{" "}
+                  <span className="text-[10px] text-stone-400 font-normal font-sans">subtotal</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white text-xs font-bold shadow-[0_4px_16px_rgba(76,175,80,0.4)] group-hover:shadow-[0_4px_20px_rgba(76,175,80,0.6)] active:scale-95 transition-all shrink-0">
+              <span>View Harvest Tray</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </div>
+          </Link>
+        </aside>
+      )}
+
+      {/* Standard Fallback CartShortcut if tray not visible */}
+      {totalItemCount === 0 && (
+        <CartShortcut
+          menuItems={activeItems.map((i) => ({ id: i.id, price_paise: i.price_paise }))}
+          isDetailSheetOpen={isSheetOpen}
+        />
+      )}
     </div>
   );
 }

@@ -25,11 +25,11 @@ interface SlideItem {
 }
 
 const LUXURY_WELLNESS_GRADIENTS = [
-  "from-[#073024] via-[#094132] to-[#042018]",
-  "from-[#06332d] via-[#094236] to-[#03231f]",
-  "from-[#0a382c] via-[#062f25] to-[#042219]",
-  "from-[#083a30] via-[#0b483b] to-[#05261d]",
-  "from-[#093529] via-[#063125] to-[#031d16]",
+  "from-[#1c281a] via-[#161f15] to-[#12100e]",
+  "from-[#1e291c] via-[#171e16] to-[#100e0c]",
+  "from-[#202d1e] via-[#1a2318] to-[#12100e]",
+  "from-[#1c2a1a] via-[#182117] to-[#110f0d]",
+  "from-[#192618] via-[#151c14] to-[#0e0c0b]",
 ];
 
 export function HealthyCarousel({ items }: HealthyCarouselProps) {
@@ -148,7 +148,7 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
       role="region"
       aria-roledescription="carousel"
       aria-label="Healthy eating tips and featured dishes"
-      className="relative overflow-hidden rounded-3xl border border-emerald-500/25 shadow-lg shadow-emerald-950/10 bg-card focus:outline-hidden"
+      className="relative overflow-hidden rounded-3xl border border-emerald-500/25 dark:border-[#3b533a]/60 shadow-lg shadow-emerald-950/20 bg-card focus:outline-hidden"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onMouseEnter={() => setIsPaused(true)}
@@ -237,7 +237,7 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
                     onClick={() => setCurrentSlide(dotIdx)}
                     className={`h-1.5 rounded-full transition-all duration-500 cursor-pointer ${
                       currentSlide === dotIdx
-                        ? "w-8 bg-emerald-400 shadow-xs"
+                        ? "w-8 bg-[#4CAF50] shadow-xs"
                         : "w-2 bg-white/30 hover:bg-white/60"
                     }`}
                   />
@@ -249,7 +249,7 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
                 <button
                   type="button"
                   onClick={prevSlide}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white backdrop-blur-md transition-all active:scale-95 cursor-pointer border border-white/10"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-black/35 hover:bg-[#2E7D32] text-white backdrop-blur-md transition-all active:scale-95 cursor-pointer border border-white/15"
                   aria-label="Previous slide"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -257,7 +257,7 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
                 <button
                   type="button"
                   onClick={nextSlide}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white backdrop-blur-md transition-all active:scale-95 cursor-pointer border border-white/10"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-black/35 hover:bg-[#2E7D32] text-white backdrop-blur-md transition-all active:scale-95 cursor-pointer border border-white/15"
                   aria-label="Next slide"
                 >
                   <ChevronRight className="h-4 w-4" />
