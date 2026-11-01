@@ -467,7 +467,7 @@ export function StudentHomeView({
             </p>
           </div>
 
-          {/* CTA Button and Readiness badge */}
+          {/* CTA Button */}
           <div className="pt-1 flex items-center gap-2 flex-wrap">
             <button
               type="button"
@@ -477,10 +477,6 @@ export function StudentHomeView({
               <span>{PROMO_SLIDES[currentSlide].ctaText}</span>
               <ArrowRight className="h-3.5 w-3.5 font-bold" />
             </button>
-
-            <span className="font-headline text-[11px] uppercase tracking-wider text-[#ded5c4] font-bold px-2.5 py-1.5 rounded-lg bg-[#2e2926] border border-[#3d3834]">
-              Station 3 Ready
-            </span>
           </div>
         </div>
 
