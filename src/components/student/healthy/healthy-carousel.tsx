@@ -99,13 +99,13 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
     setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
   }, [slides.length]);
 
-  // Auto-advance every 4.5 seconds (disabled under reduced motion, paused on hover/focus/touch)
+  // Auto-advance every 3.0 seconds (disabled under reduced motion, paused on hover/focus/touch)
   useEffect(() => {
     if (prefersReducedMotion || isPaused) return;
 
     const timer = setInterval(() => {
       nextSlide();
-    }, 4500);
+    }, 3000);
 
     return () => clearInterval(timer);
   }, [prefersReducedMotion, isPaused, nextSlide]);
@@ -164,7 +164,7 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
         className={`flex ${
           prefersReducedMotion
             ? ""
-            : "transition-transform duration-700 cubic-bezier(0.2, 0.8, 0.2, 1) will-change-transform"
+            : "transition-transform duration-350 cubic-bezier(0.2, 0.8, 0.2, 1) will-change-transform"
         }`}
         style={{ transform: `translateX(-${currentSlide * 100}%)` }}
       >
@@ -235,7 +235,7 @@ export function HealthyCarousel({ items }: HealthyCarouselProps) {
                     aria-selected={currentSlide === dotIdx}
                     aria-label={`Go to slide ${dotIdx + 1}`}
                     onClick={() => setCurrentSlide(dotIdx)}
-                    className={`h-1.5 rounded-full transition-all duration-500 cursor-pointer ${
+                    className={`h-1.5 rounded-full transition-all duration-200 cursor-pointer ${
                       currentSlide === dotIdx
                         ? "w-8 bg-[#4CAF50] shadow-xs"
                         : "w-2 bg-white/30 hover:bg-white/60"

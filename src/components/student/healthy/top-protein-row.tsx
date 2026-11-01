@@ -47,13 +47,13 @@ export function TopProteinRow({
     setCurrentIndex((prev) => (prev - 1 + topProteinDishes.length) % topProteinDishes.length);
   }, [topProteinDishes.length]);
 
-  // Keep performing transition one by one automatically every 3.8s
+  // Keep performing transition one by one automatically every 2.8s
   useEffect(() => {
     if (prefersReducedMotion || isPaused || topProteinDishes.length <= 1) return;
 
     const timer = setInterval(() => {
       nextSlide();
-    }, 3800);
+    }, 2800);
 
     return () => clearInterval(timer);
   }, [prefersReducedMotion, isPaused, nextSlide, topProteinDishes.length]);
@@ -155,7 +155,7 @@ export function TopProteinRow({
           className={`flex gap-3 sm:gap-4 ${
             prefersReducedMotion
               ? ""
-              : "transition-transform duration-500 ease-out will-change-transform"
+              : "transition-transform duration-300 ease-out will-change-transform"
           }`}
           style={{
             transform: `translateX(calc(-${currentIndex} * (clamp(260px, 78vw, 290px) + 12px)))`,

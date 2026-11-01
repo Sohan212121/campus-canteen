@@ -560,7 +560,7 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 .flip-card-inner {
   position: relative;
   width: 100%;
-  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+  transition: transform 0.42s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.42s cubic-bezier(0.23, 1, 0.32, 1);
   transform-style: preserve-3d;
   will-change: transform, box-shadow;
   border-radius: 1rem;
@@ -570,7 +570,7 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 }
 
 .tilt-card-wrapper[data-hovered="true"] .flip-card-inner {
-  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.12s ease-out;
+  transition: transform 0.42s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.12s ease-out;
   box-shadow:
     0 12px 28px -6px rgba(220, 38, 38, 0.18),
     var(--shadow-x) var(--shadow-y) 30px -4px rgba(239, 68, 68, 0.22),
@@ -633,7 +633,7 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 }
 
 .animate-flip-quote-spin {
-  animation: flip-quote-spin 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: flip-quote-spin 0.32s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 /* "YO," Bottom-to-Top Character Rise Transition */
@@ -647,7 +647,7 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
   color: #181513;
   transform: translateY(0);
   opacity: 1;
-  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+  transition: transform 0.15s ease-out, opacity 0.15s ease-out;
   will-change: transform, opacity;
 }
 
@@ -657,8 +657,8 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 
 .tilt-card-wrapper:hover .greeting-yo-letter,
 .tilt-card-wrapper[data-hovered="true"] .greeting-yo-letter {
-  animation: yo-rise-hover 0.28s cubic-bezier(0.25, 1, 0.5, 1) both;
-  animation-delay: calc(var(--yo-index, 0) * 0.08s);
+  animation: yo-rise-hover 0.18s cubic-bezier(0.25, 1, 0.5, 1) both;
+  animation-delay: calc(var(--yo-index, 0) * 0.04s);
 }
 
 @keyframes yo-rise-hover {
@@ -687,7 +687,7 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
   color: #dc2626;
   transform: translateY(0);
   opacity: 1;
-  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+  transition: transform 0.15s ease-out, opacity 0.15s ease-out;
   will-change: transform, opacity;
 }
 
@@ -698,8 +698,8 @@ body[data-celebration-open="true"] [data-cart-shortcut] {
 /* Hover: Sequential falling transition where character (i) starts ONLY after (i-1) takes final position */
 .tilt-card-wrapper:hover .greeting-letter,
 .tilt-card-wrapper[data-hovered="true"] .greeting-letter {
-  animation: letter-fall-hover 0.14s cubic-bezier(0.25, 1, 0.5, 1) both;
-  animation-delay: calc(var(--char-index, 0) * 0.14s);
+  animation: letter-fall-hover 0.085s cubic-bezier(0.25, 1, 0.5, 1) both;
+  animation-delay: calc(var(--char-index, 0) * 0.085s);
   color: #dc2626;
 }
 

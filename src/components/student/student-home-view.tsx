@@ -261,13 +261,13 @@ export function StudentHomeView({
     });
   }, [initialItems, categoryMap]);
 
-  // Auto-transition interval: advances every 2.8 seconds (smooth right-to-left slide)
+  // Auto-transition interval: advances every 2.2 seconds (smooth right-to-left slide)
   useEffect(() => {
     if (isPaused) return;
 
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % PROMO_SLIDES.length);
-    }, 2800);
+    }, 2200);
 
     return () => clearInterval(timer);
   }, [isPaused]);
@@ -427,9 +427,10 @@ export function StudentHomeView({
 
       {/* =========================================================================
           SECTION 1: HIGH-IMPACT FAST-CASUAL HERO BANNER (Smoked & Golden Style)
+          Visible Right-to-Left Sliding Window Carousel
           ========================================================================= */}
       <section
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1b1917] via-[#231f1d] to-[#141210] dark:from-[#16171E] dark:via-[#101117] dark:to-[#0A0A0E] border border-[#36322e] dark:border-[#262836] text-[#f5efe4] shadow-md dark:shadow-2xl p-5 select-none"
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1b1917] via-[#231f1d] to-[#141210] dark:from-[#16171E] dark:via-[#101117] dark:to-[#0A0A0E] border border-[#36322e] dark:border-[#262836] text-[#f5efe4] shadow-md dark:shadow-2xl select-none"
         aria-label="Campus food highlights and subscriptions"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
@@ -439,79 +440,92 @@ export function StudentHomeView({
       >
         {/* Ambient Radial Glow */}
         <div
-          className="absolute -top-16 -left-16 w-48 h-48 bg-[#d9531e]/20 dark:bg-[#F59E0B]/10 rounded-full blur-3xl pointer-events-none"
+          className="absolute -top-16 -left-16 w-48 h-48 bg-[#d9531e]/20 dark:bg-[#F59E0B]/10 rounded-full blur-3xl pointer-events-none z-10"
           aria-hidden="true"
         />
 
-        {/* Sliding Content Container */}
-        <div className="relative z-10 flex flex-col justify-between min-h-[175px] space-y-3">
-          <div className="max-w-[62%] sm:max-w-[68%] space-y-2">
-            {/* Eyebrow badge */}
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#36322e] dark:bg-[#1A1C24] border border-[#e5891e]/40 dark:border-[#F59E0B]/40 text-[#e5891e] dark:text-[#FBBF24] font-headline text-[11px] tracking-widest uppercase font-bold">
-              <span>⚡</span>
-              <span>{PROMO_SLIDES[currentSlide].badge}</span>
-            </div>
-
-            {/* Main headline */}
-            <h3 className="font-headline text-2xl sm:text-[30px] font-bold text-[#f5efe4] dark:text-white uppercase leading-[0.95] tracking-tight font-display">
-              {PROMO_SLIDES[currentSlide].id === "homely-meals" ? (
-                <>
-                  FOOD THAT <br />
-                  <span className="text-[#d9531e] dark:text-[#FBBF24] dark:drop-shadow-sm">HITS THE SPOT</span>
-                </>
-              ) : (
-                PROMO_SLIDES[currentSlide].title
-              )}
-            </h3>
-
-            {/* Subtitle */}
-            <p className="font-body text-[12px] text-[#ded5c4]/80 dark:text-slate-300 line-clamp-2 pt-0.5 font-medium leading-snug">
-              {PROMO_SLIDES[currentSlide].subtitle}
-            </p>
-          </div>
-
-          {/* CTA Button */}
-          <div className="pt-1 flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => handleSlideCta(PROMO_SLIDES[currentSlide].mealTarget)}
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#d9531e] to-[#ea642d] dark:from-[#FBBF24] dark:to-[#F59E0B] hover:from-[#bf4414] hover:to-[#d9531e] dark:hover:brightness-110 text-[#f5efe4] dark:text-[#090A0F] font-headline text-[13px] tracking-wider uppercase font-bold dark:font-black shadow-[0_4px_16px_rgba(217,83,30,0.45)] dark:shadow-[#FBBF24]/25 active:scale-95 transition-all cursor-pointer"
-            >
-              <span>{PROMO_SLIDES[currentSlide].ctaText}</span>
-              <ArrowRight className="h-3.5 w-3.5 font-bold" />
-            </button>
-          </div>
-        </div>
-
-        {/* Spotlight Decorative Circular Dish Frame on the Right */}
-        <div className="absolute -right-6 -bottom-6 w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden shadow-2xl border-2 border-[#d9531e]/40 dark:border-[#F59E0B]/50 bg-[#1b1917] dark:bg-[#090A0F] shrink-0 pointer-events-none">
-          {slideImages[currentSlide] ? (
-            <img
-              src={slideImages[currentSlide]}
-              alt={PROMO_SLIDES[currentSlide].title}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-5xl bg-gradient-to-br from-amber-950/60 to-black/80">
-              {PROMO_SLIDES[currentSlide].emoji}
-            </div>
-          )}
-        </div>
-
-        {/* Dynamic Dot Indicators */}
+        {/* Dynamic Dot Indicators (Top-right corner) */}
         <div className="absolute top-3 right-3 flex items-center gap-1 z-20 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10 dark:bg-[#090A0F]/90 dark:border-[#262836]">
           {PROMO_SLIDES.map((_, idx) => (
             <button
               key={idx}
               type="button"
               onClick={() => setCurrentSlide(idx)}
-              className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+              className={`h-1.5 rounded-full transition-all duration-200 cursor-pointer ${
                 idx === currentSlide
                   ? "w-4 bg-[#ffb94e] dark:bg-[#FBBF24] shadow-xs"
                   : "w-1.5 bg-white/40 dark:bg-slate-600 hover:bg-white/70"
               }`}
               aria-label={`Go to slide ${idx + 1}`}
             />
+          ))}
+        </div>
+
+        {/* Sliding Horizontal Track Window (Glides smoothly from right to left) */}
+        <div
+          className="flex w-full transition-transform duration-350 ease-out will-change-transform"
+          style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+        >
+          {PROMO_SLIDES.map((slide, idx) => (
+            <div
+              key={slide.id}
+              className="min-w-full w-full shrink-0 relative p-5 flex flex-col justify-between min-h-[175px] sm:min-h-[190px] overflow-hidden"
+            >
+              {/* Slide Content: Left Text & CTA */}
+              <div className="relative z-10 flex flex-col justify-between h-full space-y-3">
+                <div className="max-w-[62%] sm:max-w-[68%] space-y-2">
+                  {/* Eyebrow badge */}
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#36322e] dark:bg-[#1A1C24] border border-[#e5891e]/40 dark:border-[#F59E0B]/40 text-[#e5891e] dark:text-[#FBBF24] font-headline text-[11px] tracking-widest uppercase font-bold">
+                    <span>⚡</span>
+                    <span>{slide.badge}</span>
+                  </div>
+
+                  {/* Main headline */}
+                  <h3 className="font-headline text-2xl sm:text-[30px] font-bold text-[#f5efe4] dark:text-white uppercase leading-[0.95] tracking-tight font-display">
+                    {slide.id === "homely-meals" ? (
+                      <>
+                        FOOD THAT <br />
+                        <span className="text-[#d9531e] dark:text-[#FBBF24] dark:drop-shadow-sm">HITS THE SPOT</span>
+                      </>
+                    ) : (
+                      slide.title
+                    )}
+                  </h3>
+
+                  {/* Subtitle */}
+                  <p className="font-body text-[12px] text-[#ded5c4]/80 dark:text-slate-300 line-clamp-2 pt-0.5 font-medium leading-snug">
+                    {slide.subtitle}
+                  </p>
+                </div>
+
+                {/* CTA Button */}
+                <div className="pt-1 flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleSlideCta(slide.mealTarget)}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#d9531e] to-[#ea642d] dark:from-[#FBBF24] dark:to-[#F59E0B] hover:from-[#bf4414] hover:to-[#d9531e] dark:hover:brightness-110 text-[#f5efe4] dark:text-[#090A0F] font-headline text-[13px] tracking-wider uppercase font-bold dark:font-black shadow-[0_4px_16px_rgba(217,83,30,0.45)] dark:shadow-[#FBBF24]/25 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <span>{slide.ctaText}</span>
+                    <ArrowRight className="h-3.5 w-3.5 font-bold" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Spotlight Decorative Circular Dish Frame on the Right (moves synchronously with this slide) */}
+              <div className="absolute -right-6 -bottom-6 w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden shadow-2xl border-2 border-[#d9531e]/40 dark:border-[#F59E0B]/50 bg-[#1b1917] dark:bg-[#090A0F] shrink-0 pointer-events-none">
+                {slideImages[idx] ? (
+                  <img
+                    src={slideImages[idx]}
+                    alt={slide.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-5xl bg-gradient-to-br from-amber-950/60 to-black/80">
+                    {slide.emoji}
+                  </div>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       </section>
