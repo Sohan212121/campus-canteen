@@ -21,6 +21,9 @@ import { CartShortcut } from "@/components/student/cart-shortcut";
 import { type MenuItemPriceRef, registerMenuItemPrices } from "@/lib/cart-shortcut";
 import type { BestSellerItem } from "@/server/actions/best-sellers";
 import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
+import { SearchTakeover } from "@/components/student/search/search-takeover";
+import type { FoodCategory } from "@/lib/search/categories";
+import { matchesAliasWholeWord } from "@/lib/search/search-helpers";
 
 export type CategoryData = {
   id: string;
@@ -206,6 +209,19 @@ export function StudentHomeView({
   const [inStockOnly, setInStockOnly] = useState(false);
   const [under100Only, setUnder100Only] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [activeCategoryTile, setActiveCategoryTile] = useState<FoodCategory | null>(null);
+
+  // Search Takeover states
+  const [isTakeoverOpen, setIsTakeoverOpen] = useState(false);
+  const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+  const searchBarContainerRef = useRef<HTMLDivElement>(null);
+
+  const openTakeover = useCallback(() => {
+    if (searchBarContainerRef.current) {
+      setTriggerRect(searchBarContainerRef.current.getBoundingClientRect());
+    }
+    setIsTakeoverOpen(true);
+  }, []);
 
   // 3. Item detail modal & cart state
   const [selectedItem, setSelectedItem] = useState<MenuItemData | null>(null);
@@ -301,6 +317,19 @@ export function StudentHomeView({
     return initialItems.filter((item) => {
       if (!item.is_active) return false;
 
+      // Active category tile alias matching from SearchTakeover
+      if (activeCategoryTile) {
+        const catName = (item.category_id ? categoryMap.get(item.category_id) : "") || "";
+        const matchesAlias = activeCategoryTile.aliases.some((alias) =>
+          matchesAliasWholeWord(item.name, alias) ||
+          (item.description ? matchesAliasWholeWord(item.description, alias) : false) ||
+          (catName ? matchesAliasWholeWord(catName, alias) : false)
+        );
+        if (!matchesAlias) {
+          return false;
+        }
+      }
+
       // Meal type filter (Breakfast / Lunch / Snacks / Dinner / Beverages)
       if (selectedMeal !== "all" && !matchesMealType(item, categoryMap, selectedMeal)) {
         return false;
@@ -341,6 +370,7 @@ export function StudentHomeView({
     });
   }, [
     initialItems,
+    activeCategoryTile,
     selectedMeal,
     selectedCategory,
     isVegOnly,
@@ -352,6 +382,7 @@ export function StudentHomeView({
 
   const hasActiveFilters =
     searchQuery.trim().length > 0 ||
+    activeCategoryTile !== null ||
     selectedMeal !== "all" ||
     selectedCategory !== "all" ||
     isVegOnly ||
@@ -360,6 +391,7 @@ export function StudentHomeView({
 
   const handleResetFilters = useCallback(() => {
     setSearchQuery("");
+    setActiveCategoryTile(null);
     setSelectedMeal("all");
     setSelectedCategory("all");
     setIsVegOnly(false);
@@ -536,19 +568,16 @@ export function StudentHomeView({
       <section className="space-y-3">
         <div className="flex items-center gap-2.5">
           {/* Search Box */}
-          <div className="relative flex-1">
+          <div ref={searchBarContainerRef} className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#181513] dark:text-slate-300 pointer-events-none" />
             <Input
               type="text"
+              readOnly
               placeholder='Search "dosa, biryani, samosa, meals..."'
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onClick={() => {
-                startTransition("/menu?search=open", "Menu");
-              }}
-              onFocus={() => {
-                startTransition("/menu?search=open", "Menu");
-              }}
+              onClick={openTakeover}
+              onFocus={openTakeover}
               className="h-12 pl-10 pr-16 text-sm font-semibold bg-[#eae2d2] dark:bg-[#121319] border-2 border-[#181513]/40 dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#181513] focus-visible:dark:ring-[#FBBF24] cursor-pointer"
             />
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -723,6 +752,24 @@ export function StudentHomeView({
           )}
         </div>
 
+        {/* Dismissible category tile filter chip from SearchTakeover */}
+        {activeCategoryTile && (
+          <div className="flex items-center gap-2 pt-1 pb-1">
+            <span className="text-xs font-semibold text-muted-foreground">Showing:</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-[#EA580C]/10 text-[#EA580C] dark:bg-[#EA580C]/20 border border-[#EA580C]/30 shadow-2xs">
+              <span>{activeCategoryTile.label}</span>
+              <button
+                type="button"
+                onClick={() => setActiveCategoryTile(null)}
+                className="flex h-3.5 w-3.5 items-center justify-center rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors cursor-pointer"
+                aria-label={`Clear ${activeCategoryTile.label} filter`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          </div>
+        )}
+
         {/* Items List (Fast-Casual Cards with Smooth Filter Transition) */}
         {filteredItems.length > 0 ? (
           <div
@@ -782,6 +829,28 @@ export function StudentHomeView({
       <CartShortcut
         menuItems={allPriceRefs}
         isDetailSheetOpen={Boolean(selectedItem)}
+      />
+
+      {/* Full-Screen Search Takeover Dialog (FLIP animated, zero logo transition) */}
+      <SearchTakeover
+        isOpen={isTakeoverOpen}
+        onClose={() => setIsTakeoverOpen(false)}
+        items={initialItems}
+        initialQuery={searchQuery}
+        triggerRect={triggerRect}
+        onSelectCategory={(category) => {
+          setIsTakeoverOpen(false);
+          setActiveCategoryTile(category);
+          scrollToFoodSection();
+        }}
+        onSearchSubmit={(term: string) => {
+          setIsTakeoverOpen(false);
+          setSearchQuery(term);
+          scrollToFoodSection();
+        }}
+        onOpenItem={(dish) => {
+          setSelectedItem(dish);
+        }}
       />
     </div>
   );

@@ -80,6 +80,10 @@ export function SearchTakeover({
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
+  const backBtnRef = useRef<HTMLButtonElement>(null);
+  const micBtnRef = useRef<HTMLDivElement>(null);
+  const mainContentRef = useRef<HTMLElement>(null);
   const historyPushedRef = useRef(false);
 
   // Effective items (incorporating dev sample switch if active in non-production)
@@ -165,32 +169,87 @@ export function SearchTakeover({
     };
   }, [isOpen, onClose]);
 
-  // FLIP animation: measure source bar rect and animate top bar from old position
+  // FLIP animation: measure source bar rect and smoothly shift search box from old position to top slot
   useEffect(() => {
-    const topBarEl = topBarRef.current;
-    if (!isOpen || prefersReducedMotion || !triggerRect || !topBarEl) return;
+    const searchBoxEl = searchBoxRef.current;
+    const backBtnEl = backBtnRef.current;
+    const micBtnEl = micBtnRef.current;
+    const mainEl = mainContentRef.current;
 
-    const targetRect = topBarEl.getBoundingClientRect();
+    if (!isOpen || prefersReducedMotion || !triggerRect || !searchBoxEl) return;
+
+    const targetRect = searchBoxEl.getBoundingClientRect();
     const deltaY = triggerRect.top - targetRect.top;
     const deltaX = triggerRect.left - targetRect.left;
     const scaleX = triggerRect.width / Math.max(1, targetRect.width);
+    const scaleY = triggerRect.height / Math.max(1, targetRect.height);
 
-    // Apply FLIP initial position
-    topBarEl.style.transform = `translate3d(${deltaX.toFixed(1)}px, ${deltaY.toFixed(1)}px, 0) scaleX(${scaleX.toFixed(2)})`;
-    topBarEl.style.transition = "none";
+    // Initial state: search box starts exactly where the tapped bar was on screen
+    searchBoxEl.style.transformOrigin = "top left";
+    searchBoxEl.style.transform = `translate3d(${deltaX.toFixed(1)}px, ${deltaY.toFixed(1)}px, 0) scale(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)})`;
+    searchBoxEl.style.transition = "none";
 
-    // Animate to top slot
+    // Side buttons & content fade in while search bar shifts
+    if (backBtnEl) {
+      backBtnEl.style.opacity = "0";
+      backBtnEl.style.transform = "translateX(-8px)";
+      backBtnEl.style.transition = "none";
+    }
+    if (micBtnEl) {
+      micBtnEl.style.opacity = "0";
+      micBtnEl.style.transform = "translateX(8px)";
+      micBtnEl.style.transition = "none";
+    }
+    if (mainEl) {
+      mainEl.style.opacity = "0";
+      mainEl.style.transform = "translateY(16px)";
+      mainEl.style.transition = "none";
+    }
+
+    // Next frame: smooth ease-out shift to final top position
     const raf = requestAnimationFrame(() => {
-      if (!topBarEl) return;
-      topBarEl.style.transition = "transform 280ms cubic-bezier(0.16, 1, 0.3, 1)";
-      topBarEl.style.transform = "translate3d(0, 0, 0) scaleX(1)";
+      if (!searchBoxEl) return;
+      searchBoxEl.style.transition = "transform 280ms cubic-bezier(0.16, 1, 0.3, 1)";
+      searchBoxEl.style.transform = "translate3d(0, 0, 0) scale(1, 1)";
+
+      if (backBtnEl) {
+        backBtnEl.style.transition = "opacity 220ms ease-out 40ms, transform 220ms ease-out 40ms";
+        backBtnEl.style.opacity = "1";
+        backBtnEl.style.transform = "translateX(0)";
+      }
+      if (micBtnEl) {
+        micBtnEl.style.transition = "opacity 220ms ease-out 40ms, transform 220ms ease-out 40ms";
+        micBtnEl.style.opacity = "1";
+        micBtnEl.style.transform = "translateX(0)";
+      }
+      if (mainEl) {
+        mainEl.style.transition = "opacity 260ms ease-out 50ms, transform 260ms cubic-bezier(0.16, 1, 0.3, 1) 50ms";
+        mainEl.style.opacity = "1";
+        mainEl.style.transform = "translateY(0)";
+      }
     });
 
     return () => {
       cancelAnimationFrame(raf);
-      if (topBarEl) {
-        topBarEl.style.transform = "";
-        topBarEl.style.transition = "";
+      if (searchBoxEl) {
+        searchBoxEl.style.transform = "";
+        searchBoxEl.style.transition = "";
+        searchBoxEl.style.transformOrigin = "";
+      }
+      if (backBtnEl) {
+        backBtnEl.style.opacity = "";
+        backBtnEl.style.transform = "";
+        backBtnEl.style.transition = "";
+      }
+      if (micBtnEl) {
+        micBtnEl.style.opacity = "";
+        micBtnEl.style.transform = "";
+        micBtnEl.style.transition = "";
+      }
+      if (mainEl) {
+        mainEl.style.opacity = "";
+        mainEl.style.transform = "";
+        mainEl.style.transition = "";
       }
     };
   }, [isOpen, prefersReducedMotion, triggerRect]);
@@ -323,6 +382,7 @@ export function SearchTakeover({
       >
         {/* Back Button (44px Accessible Target) */}
         <button
+          ref={backBtnRef}
           type="button"
           onClick={handleSafeClose}
           aria-label="Back"
@@ -332,7 +392,7 @@ export function SearchTakeover({
         </button>
 
         {/* Search Input Box with Search Icon & Clear Button */}
-        <div className="relative flex-1">
+        <div ref={searchBoxRef} className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#181513]/70 dark:text-slate-400 pointer-events-none" />
           <Input
             ref={inputRef}
@@ -361,7 +421,7 @@ export function SearchTakeover({
         </div>
 
         {/* Microphone Button (Reusing & Extending existing voice-search-button) */}
-        <div className="shrink-0">
+        <div ref={micBtnRef} className="shrink-0">
           <VoiceSearchButton
             onSearch={(transcript) => {
               setQuery(transcript);
@@ -374,7 +434,10 @@ export function SearchTakeover({
       {/* =========================================================================
           MAIN SCROLLABLE CONTENT BODY (Mobile-First, scrolls inside itself)
           ========================================================================= */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-6 pb-[calc(2rem+env(safe-area-inset-bottom,0px))]">
+      <main
+        ref={mainContentRef}
+        className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-6 pb-[calc(2rem+env(safe-area-inset-bottom,0px))]"
+      >
         {/* LIVE SUGGESTIONS DROPDOWN (when query typed) */}
         {query.trim().length > 0 && (
           <section aria-label="Search suggestions" className="space-y-2">
