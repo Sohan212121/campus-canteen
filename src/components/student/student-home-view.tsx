@@ -403,8 +403,8 @@ export function StudentHomeView({
                 className={cn(
                   "w-14 h-14 rounded-2xl bg-[#1b1917] dark:bg-[#121319] flex items-center justify-center p-2 text-2xl transition-all shadow-sm relative",
                   isSelected
-                    ? "border-2 border-black dark:border-[#FBBF24] text-black dark:text-[#FBBF24] shadow-md dark:shadow-lg dark:shadow-[#FBBF24]/20"
-                    : "border border-[#36322e] dark:border-[#222533] hover:border-black dark:hover:border-[#FBBF24]/50 text-[#f5efe4] dark:text-slate-300"
+                    ? "border-2 border-[#d97706] dark:border-[#FBBF24] text-[#d97706] dark:text-[#FBBF24] shadow-md dark:shadow-lg dark:shadow-[#FBBF24]/20"
+                    : "border border-[#36322e] dark:border-[#222533] hover:border-[#d97706] dark:hover:border-[#FBBF24]/50 text-[#f5efe4] dark:text-slate-300"
                 )}
               >
                 <span className="filter drop-shadow">{tab.icon}</span>
@@ -414,8 +414,8 @@ export function StudentHomeView({
               </div>
               <span
                 className={cn(
-                  "font-headline text-[11px] uppercase tracking-wider font-bold transition-colors",
-                  isSelected ? "text-black dark:text-[#FBBF24]" : "text-black dark:text-slate-300"
+                  "font-headline text-[11px] uppercase tracking-wider font-bold transition-colors text-[#d97706] dark:text-[#FBBF24]",
+                  isSelected ? "font-black" : "opacity-90 hover:opacity-100"
                 )}
               >
                 {tab.id === "all" ? "All" : tab.label}
