@@ -87,14 +87,23 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
   const scrollToFoodSection = useCallback(() => {
     requestAnimationFrame(() => {
       setTimeout(() => {
-        const target = filterSectionRef.current || foodItemsSectionRef.current;
+        const target = foodItemsSectionRef.current || filterSectionRef.current;
         if (target) {
-          target.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
+          const rect = target.getBoundingClientRect();
+          const targetY = rect.top + window.pageYOffset - 16;
+          try {
+            window.scrollTo({
+              top: Math.max(0, targetY),
+              behavior: "smooth",
+            });
+          } catch {
+            target.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+          }
         }
-      }, 50);
+      }, 60);
     });
   }, []);
 
@@ -365,7 +374,12 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
               type="button"
               onClick={(e) => {
                 setSelectedCategory(cat.id);
-                e.currentTarget.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+                const container = e.currentTarget.parentElement;
+                if (container) {
+                  const scrollLeft =
+                    e.currentTarget.offsetLeft - container.offsetWidth / 2 + e.currentTarget.offsetWidth / 2;
+                  container.scrollTo({ left: Math.max(0, scrollLeft), behavior: "smooth" });
+                }
                 scrollToFoodSection();
               }}
               className={`min-h-[38px] shrink-0 rounded-full px-4 text-xs font-semibold transition-all ${
