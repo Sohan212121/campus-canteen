@@ -60,6 +60,9 @@ function generateSvg({ size, isMaskable = false }) {
 async function main() {
   console.log("Generating PWA icons...");
 
+  const brandLogoPath = path.resolve(process.cwd(), "public", "brand", "logo.png");
+  const hasBrandLogo = fs.existsSync(brandLogoPath);
+
   const targets = [
     { name: "icon-192.png", size: 192, maskable: false },
     { name: "icon-512.png", size: 512, maskable: false },
@@ -67,13 +70,20 @@ async function main() {
   ];
 
   for (const target of targets) {
-    const svg = generateSvg({ size: target.size, isMaskable: target.maskable });
     const dest = path.join(ICONS_DIR, target.name);
 
-    await sharp(Buffer.from(svg))
-      .resize(target.size, target.size)
-      .png({ compressionLevel: 9 })
-      .toFile(dest);
+    if (hasBrandLogo) {
+      await sharp(brandLogoPath)
+        .resize(target.size, target.size)
+        .png({ compressionLevel: 9 })
+        .toFile(dest);
+    } else {
+      const svg = generateSvg({ size: target.size, isMaskable: target.maskable });
+      await sharp(Buffer.from(svg))
+        .resize(target.size, target.size)
+        .png({ compressionLevel: 9 })
+        .toFile(dest);
+    }
 
     const stats = fs.statSync(dest);
     const meta = await sharp(dest).metadata();

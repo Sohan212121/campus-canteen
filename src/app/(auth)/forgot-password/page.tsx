@@ -3,7 +3,8 @@
 import { Suspense, useActionState, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { UtensilsCrossed, Loader2, ArrowLeft, MailCheck } from "lucide-react";
+import Image from "next/image";
+import { Loader2, ArrowLeft, MailCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -138,8 +139,15 @@ export default function ForgotPasswordPage() {
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <UtensilsCrossed className="h-6 w-6 text-primary" />
+          <div className="mx-auto mb-2 relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden shadow-sm">
+            <Image
+              src="/brand/logo.png"
+              alt="Campus Canteen"
+              width={48}
+              height={48}
+              className="w-full h-full object-cover"
+              priority
+            />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">
             Forgot password

@@ -2,7 +2,8 @@
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
-import { UtensilsCrossed, Loader2, MailCheck, RotateCcw } from "lucide-react";
+import Image from "next/image";
+import { Loader2, MailCheck, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -93,8 +94,15 @@ export default function SignupPage() {
   return (
     <Card className="border-border/60 shadow-sm">
       <CardHeader className="space-y-2 text-center">
-        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <UtensilsCrossed className="h-5 w-5" />
+        <div className="mx-auto relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden shadow-sm">
+          <Image
+            src="/brand/logo.png"
+            alt="Campus Canteen"
+            width={48}
+            height={48}
+            className="w-full h-full object-cover"
+            priority
+          />
         </div>
         <CardTitle className="text-xl font-bold">Create Account</CardTitle>
         <CardDescription className="text-sm">

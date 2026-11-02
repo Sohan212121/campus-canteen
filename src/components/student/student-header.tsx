@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
-import { UtensilsCrossed, Leaf } from "lucide-react";
+import { Leaf } from "lucide-react";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
@@ -101,8 +102,15 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
   return (
     <header className="flex items-center justify-between pb-3.5 mb-2 border-b border-[#ded5c4] dark:border-[#1E202B]">
       <Link href="/" prefetch={true} className="flex items-center gap-2.5 group min-h-[44px] py-1 select-none">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1b1917] dark:bg-gradient-to-br dark:from-[#1F1408] dark:to-[#0A0A0C] text-[#f5efe4] border border-[#36322e] dark:border-[#F59E0B]/40 shadow-sm dark:shadow-inner group-hover:scale-105 transition-all">
-          <UtensilsCrossed className="h-5 w-5 text-[#d9531e] dark:text-[#FBBF24]" />
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl overflow-hidden shadow-sm group-hover:scale-105 transition-transform">
+          <Image
+            src="/brand/logo.png"
+            alt="Campus Canteen"
+            width={40}
+            height={40}
+            className="w-full h-full object-cover"
+            priority
+          />
         </div>
         <div className="flex flex-col">
           <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase text-[#c2630d] dark:text-[#FBBF24] font-headline leading-tight">
