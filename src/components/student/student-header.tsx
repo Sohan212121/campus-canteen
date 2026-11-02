@@ -113,7 +113,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
           />
         </div>
         <div className="flex flex-col justify-center min-w-0">
-          <span className="text-[10px] sm:text-xs font-brand tracking-[0.09em] sm:tracking-[0.14em] text-[#b87304] dark:text-[#FACC15] leading-none uppercase select-none truncate">
+          <span className="text-[10.5px] sm:text-xs font-brand tracking-[0.08em] sm:tracking-[0.12em] text-[#7a4500] dark:text-[#FACC15] font-medium leading-none uppercase select-none truncate">
             SKIP THE QUEUE, GRAB THE FOOD
           </span>
           <h1 className="select-none pt-1 leading-none">
