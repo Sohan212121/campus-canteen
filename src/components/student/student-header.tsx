@@ -102,9 +102,9 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
   return (
     <header className="flex items-center justify-between pb-3.5 mb-2 border-b border-[#ded5c4] dark:border-[#1E202B]">
       <Link href="/" prefetch={true} className="flex items-center gap-2.5 sm:gap-3 group min-h-[44px] py-1 select-none">
-        <div className="relative flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl overflow-hidden shadow-xs group-hover:scale-105 transition-transform bg-[#FFFDF5] dark:bg-[#1E202B] p-1 border border-black/5 dark:border-white/10">
+        <div className="relative flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl overflow-hidden shadow-xs group-hover:scale-105 transition-transform bg-[#FFFDF5] dark:bg-[#1E202B] p-0.5 border border-black/5 dark:border-white/10">
           <Image
-            src="/brand/logo.png"
+            src="/brand/campbite-logo.png"
             alt="C@mpBite"
             width={48}
             height={48}

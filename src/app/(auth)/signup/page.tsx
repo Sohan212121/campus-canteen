@@ -94,9 +94,9 @@ export default function SignupPage() {
   return (
     <Card className="border-border/60 shadow-sm">
       <CardHeader className="space-y-2 text-center">
-        <div className="mx-auto relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden shadow-xs bg-[#FFFDF5] dark:bg-[#1E202B] p-1 border border-black/5 dark:border-white/10">
+        <div className="mx-auto relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden shadow-xs bg-[#FFFDF5] dark:bg-[#1E202B] p-0.5 border border-black/5 dark:border-white/10">
           <Image
-            src="/brand/logo.png"
+            src="/brand/campbite-logo.png"
             alt="C@mpBite"
             width={48}
             height={48}

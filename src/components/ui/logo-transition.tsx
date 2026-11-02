@@ -71,7 +71,7 @@ export function LogoTransition({
           {/* Official App Logo Badge */}
           <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-[28px] overflow-hidden bg-zinc-900 border border-zinc-700/60 shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_35px_rgba(255,255,255,0.06)] flex items-center justify-center p-2">
             <Image
-              src="/brand/logo.png"
+              src="/brand/campbite-logo.png"
               alt="C@mpBite"
               width={128}
               height={128}

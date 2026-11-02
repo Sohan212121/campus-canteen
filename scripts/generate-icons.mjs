@@ -60,7 +60,7 @@ function generateSvg({ size, isMaskable = false }) {
 async function main() {
   console.log("Generating PWA icons...");
 
-  const brandLogoPath = path.resolve(process.cwd(), "public", "brand", "logo.png");
+  const brandLogoPath = path.resolve(process.cwd(), "public", "brand", "campbite-logo.png");
   const hasBrandLogo = fs.existsSync(brandLogoPath);
 
   const targets = [
