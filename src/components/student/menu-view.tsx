@@ -461,7 +461,10 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
       {/* Full-Screen Search Takeover: FLIP Glide, What's on your mind Grid & Recent Searches */}
       <SearchTakeover
         isOpen={isTakeoverOpen}
-        onClose={() => setIsTakeoverOpen(false)}
+        onClose={() => {
+          setIsTakeoverOpen(false);
+          setTriggerRect(null);
+        }}
         items={initialItems}
         categoryMap={categoryMap}
         onSelectCategory={handleSelectCategoryFromTakeover}

@@ -8,6 +8,7 @@ import {
   useMemo,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { ArrowLeft, Search, X, Clock, Sparkles, Utensils } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -56,6 +57,8 @@ export function SearchTakeover({
   triggerRect,
   initialQuery = "",
 }: SearchTakeoverProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const prefersReducedMotion = usePrefersReducedMotion();
 
   // Search input state: initialized directly so no cascading render occurs on mount
@@ -114,20 +117,39 @@ export function SearchTakeover({
     return getSearchSuggestions(effectiveItems, FOOD_CATEGORIES, debouncedQuery, 6);
   }, [effectiveItems, debouncedQuery]);
 
-  // Safe close handler that coordinates browser history pop
+  // Safe close handler that dismisses takeover and returns to the home screen
   const handleSafeClose = useCallback(() => {
+    // 1. Immediately invoke onClose to close/unmount the takeover dialog
+    onClose();
+
+    // 2. Clear query & suggestions
+    setQuery("");
+    setDebouncedQuery("");
+    setActiveSuggestionIndex(-1);
+
+    // 3. Immediately restore body scrolling and remove takeover attribute
+    if (typeof document !== "undefined") {
+      document.body.removeAttribute("data-search-takeover-open");
+      document.body.style.overflow = "";
+    }
+
+    // 4. Clean up the history entry if one was pushed
     if (historyPushedRef.current) {
       historyPushedRef.current = false;
       try {
         window.history.back();
       } catch {
-        // Fallback if history.back fails
-        onClose();
+        // Fallback ignore
       }
-    } else {
-      onClose();
     }
-  }, [onClose]);
+
+    // 5. Always ensure the user returns/redirects to the home screen ("/")
+    if (pathname !== "/") {
+      router.push("/");
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [onClose, pathname, router]);
 
   // Body scroll lock & data-search-takeover-open attribute management
   useEffect(() => {
@@ -152,6 +174,13 @@ export function SearchTakeover({
       // If user hit browser Back
       historyPushedRef.current = false;
       onClose();
+      if (typeof document !== "undefined") {
+        document.body.removeAttribute("data-search-takeover-open");
+        document.body.style.overflow = "";
+      }
+      if (window.location.pathname !== "/") {
+        router.push("/");
+      }
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -167,7 +196,7 @@ export function SearchTakeover({
       document.body.removeAttribute("data-search-takeover-open");
       document.body.style.overflow = originalOverflow;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, router]);
 
   // FLIP animation: measure source bar rect and smoothly shift search box from old position to top slot
   useEffect(() => {
@@ -385,7 +414,7 @@ export function SearchTakeover({
           ref={backBtnRef}
           type="button"
           onClick={handleSafeClose}
-          aria-label="Back"
+          aria-label="Back to home screen"
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#181513] dark:text-white hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
         >
           <ArrowLeft className="h-5 w-5 stroke-[2.5]" />

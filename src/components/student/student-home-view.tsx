@@ -844,7 +844,10 @@ export function StudentHomeView({
       {/* Full-Screen Search Takeover Dialog (FLIP animated, zero logo transition) */}
       <SearchTakeover
         isOpen={isTakeoverOpen}
-        onClose={() => setIsTakeoverOpen(false)}
+        onClose={() => {
+          setIsTakeoverOpen(false);
+          setTriggerRect(null);
+        }}
         items={initialItems}
         initialQuery={searchQuery}
         triggerRect={triggerRect}
