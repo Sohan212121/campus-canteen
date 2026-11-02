@@ -116,8 +116,24 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
           <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase text-[#c2630d] dark:text-[#FBBF24] font-headline leading-tight">
             Good Food. Fast Vibes.
           </span>
-          <h1 className="text-2xl sm:text-3xl font-brand font-normal leading-none text-[#181513] dark:text-white select-none pt-0.5">
-            C<span className="text-red-600 dark:text-red-500 font-bold">@</span>mpBite
+          <h1 className="select-none pt-0.5 leading-none">
+            <span className="sr-only">C@mpBite</span>
+            <Image
+              src="/brand/campbite-title-light.png"
+              alt="C@MPBITE"
+              width={180}
+              height={29}
+              className="h-6 sm:h-7 w-auto object-contain dark:hidden"
+              priority
+            />
+            <Image
+              src="/brand/campbite-title-dark.png"
+              alt="C@MPBITE"
+              width={180}
+              height={29}
+              className="h-6 sm:h-7 w-auto object-contain hidden dark:block"
+              priority
+            />
           </h1>
         </div>
       </Link>

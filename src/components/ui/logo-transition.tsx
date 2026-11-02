@@ -105,8 +105,8 @@ export function LogoTransition({
 
         {/* Premium Typography & Status Label */}
         <div className="mt-7 flex flex-col items-center gap-1.5 text-center">
-          <span className="text-sm sm:text-base font-brand tracking-[0.2em] text-amber-400">
-            C<span className="text-red-500 font-bold">@</span>mpBite
+          <span className="text-sm sm:text-base font-brand tracking-[0.15em] text-amber-400">
+            C@MPBITE
           </span>
           <div className="flex items-center gap-2 text-xs font-medium text-zinc-300">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
