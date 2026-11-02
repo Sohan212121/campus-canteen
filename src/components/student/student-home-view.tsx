@@ -436,7 +436,7 @@ export function StudentHomeView({
                   "w-14 h-14 rounded-2xl flex items-center justify-center p-2 text-2xl transition-all shadow-xs relative",
                   isSelected
                     ? "bg-white dark:bg-[#1E2230] border-2 border-[#DC2626] dark:border-[#EF4444] shadow-md shadow-[#DC2626]/20 dark:shadow-[#EF4444]/25 scale-105"
-                    : "bg-white dark:bg-[#1E2230] border-2 border-[#181513]/40 dark:border-[#222533] hover:border-[#DC2626]/50 hover:bg-[#FAF8F5] dark:hover:bg-[#252A3B] hover:shadow-xs"
+                    : "bg-white dark:bg-[#1E2230] border border-black/20 dark:border-white/20 hover:border-[#DC2626]/50 hover:bg-[#FAF8F5] dark:hover:bg-[#252A3B] hover:shadow-xs"
                 )}
               >
                 <span className="filter drop-shadow-xs transition-transform duration-200 group-hover:scale-110">{tab.icon}</span>
