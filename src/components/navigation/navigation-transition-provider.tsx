@@ -39,7 +39,7 @@ export function getSectionTitle(path: string): string {
   return "Campus Dining";
 }
 
-const MIN_DISPLAY_MS = 350; // Standard routes: responsive & fluid
+const MIN_DISPLAY_MS = 650; // Standard routes: allows signature food bounce & typewriter to complete smoothly
 const HEALTHY_MIN_DISPLAY_MS = 800; // Healthy Mode: deliberate, premium showcase of botanical badge & light sweep
 const EXIT_FADE_MS = 240;   // Matches cb-backdrop-exit & cb-stage-exit duration
 const MAX_FAILSAFE_MS = 2500; // Failsafe if route change completely stalls
