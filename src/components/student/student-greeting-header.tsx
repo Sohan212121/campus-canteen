@@ -538,7 +538,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
                 handleBannerClick();
               }
             }}
-            className="flip-card-face rounded-2xl border border-[#ded5c4] dark:border-[#222533] bg-[#eae2d2] dark:bg-[#121319] p-5 flex flex-col justify-between cursor-pointer hover:border-[#181513]/30 dark:hover:border-[#EF4444]/50 transition-colors duration-200 select-none text-left min-h-[185px] relative"
+            className="flip-card-face rounded-2xl border border-[#ded5c4] dark:border-[#222533] bg-[#eae2d2] dark:bg-[#121319] p-5 flex flex-col justify-between cursor-pointer hover:border-[#181513]/30 dark:hover:border-[#EF4444]/50 transition-colors duration-200 select-none text-left min-h-[185px] relative shadow-md shadow-black/15 dark:shadow-black/70"
             title="Tap to trigger greeting animation, or click Food Mood to flip"
           >
             {/* Dynamic 3D Glare Lighting Sheen (Front Face) */}
@@ -594,7 +594,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
 
             {/* Bottom row: Call-to-action & Prominent Food Mood Button */}
             <div className="pt-3 border-t border-[#ded5c4] dark:border-[#1E202B] flex items-center justify-between gap-3 relative z-10">
-              <span className="font-editorial text-[15px] sm:text-lg font-bold text-[#181513] dark:text-[#f8fafc] tracking-tight leading-snug">
+              <span className="font-script italic font-bold text-[17px] sm:text-xl text-[#181513] dark:text-[#f8fafc] tracking-normal leading-snug">
                 What are you craving today?
               </span>
 
@@ -623,7 +623,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
                 handleNextQuote();
               }
             }}
-            className="flip-card-back rounded-2xl border border-[#ded5c4] dark:border-[#222533] bg-[#eae2d2] dark:bg-[#121319] p-5 flex flex-col justify-between select-none text-left cursor-pointer hover:border-[#181513]/30 dark:hover:border-[#EF4444]/50 transition-colors duration-200 min-h-[185px] relative"
+            className="flip-card-back rounded-2xl border border-[#ded5c4] dark:border-[#222533] bg-[#eae2d2] dark:bg-[#121319] p-5 flex flex-col justify-between select-none text-left cursor-pointer hover:border-[#181513]/30 dark:hover:border-[#EF4444]/50 transition-colors duration-200 min-h-[185px] relative shadow-md shadow-black/15 dark:shadow-black/70"
             title="Click to see another quote, or click Back to return"
           >
             {/* Dynamic 3D Glare Lighting Sheen (Back Face) */}
