@@ -594,7 +594,7 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
 
             {/* Bottom row: Call-to-action & Prominent Food Mood Button */}
             <div className="pt-3 border-t border-[#ded5c4] dark:border-[#1E202B] flex items-center justify-between gap-3 relative z-10">
-              <span className="text-xs font-medium text-[#635e58] dark:text-slate-400">
+              <span className="font-editorial text-[15px] sm:text-lg font-bold text-[#181513] dark:text-[#f8fafc] tracking-tight leading-snug">
                 What are you craving today?
               </span>
 
