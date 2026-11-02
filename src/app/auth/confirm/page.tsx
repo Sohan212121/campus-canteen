@@ -34,7 +34,7 @@ export default async function ConfirmPage({ searchParams }: ConfirmPageProps) {
   if (type === "invite") {
     title = "Accept staff invitation";
     description =
-      "Welcome to Campus Canteen! Click below to accept your invitation and configure your account password.";
+      "Welcome to C@mpBite! Click below to accept your invitation and configure your account password.";
   } else if (type === "recovery") {
     title = "Password reset verification";
     description =

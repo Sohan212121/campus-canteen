@@ -291,7 +291,7 @@ export function OrdersListView({
                         </Badge>
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {order.canteens?.name ?? "Campus Canteen"}
+                        {order.canteens?.name ?? "C@mpBite"}
                       </p>
                     </div>
 
@@ -395,7 +395,7 @@ export function OrdersListView({
                         </Badge>
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {formatIstDateTime(order.placed_at)} &bull; {order.canteens?.name ?? "Campus Canteen"}
+                        {formatIstDateTime(order.placed_at)} &bull; {order.canteens?.name ?? "C@mpBite"}
                       </p>
                     </div>
 

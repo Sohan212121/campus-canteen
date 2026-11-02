@@ -97,7 +97,7 @@ export default function SignupPage() {
         <div className="mx-auto relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden shadow-sm">
           <Image
             src="/brand/logo.png"
-            alt="Campus Canteen"
+            alt="C@mpBite"
             width={48}
             height={48}
             className="w-full h-full object-cover"
@@ -106,7 +106,7 @@ export default function SignupPage() {
         </div>
         <CardTitle className="text-xl font-bold">Create Account</CardTitle>
         <CardDescription className="text-sm">
-          Join Campus Canteen with your campus credentials
+          Join C@mpBite with your campus credentials
         </CardDescription>
       </CardHeader>
       <CardContent>

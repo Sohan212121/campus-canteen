@@ -125,7 +125,7 @@ export default function LoginPage() {
         <div className="mx-auto relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden shadow-sm">
           <Image
             src="/brand/logo.png"
-            alt="Campus Canteen"
+            alt="C@mpBite"
             width={48}
             height={48}
             className="w-full h-full object-cover"
@@ -134,7 +134,7 @@ export default function LoginPage() {
         </div>
         <CardTitle className="text-xl font-bold">Welcome Back</CardTitle>
         <CardDescription className="text-sm">
-          Sign in to Campus Canteen
+          Sign in to C@mpBite
         </CardDescription>
       </CardHeader>
       <CardContent>

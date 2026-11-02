@@ -142,7 +142,7 @@ export default function ForgotPasswordPage() {
           <div className="mx-auto mb-2 relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden shadow-sm">
             <Image
               src="/brand/logo.png"
-              alt="Campus Canteen"
+              alt="C@mpBite"
               width={48}
               height={48}
               className="w-full h-full object-cover"

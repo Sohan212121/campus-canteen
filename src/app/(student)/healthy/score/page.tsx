@@ -5,8 +5,8 @@ import { requireRole } from "@/server/auth";
 import { HEALTHY_SCORE_CRITERIA } from "@/lib/healthy-constants";
 
 export const metadata: Metadata = {
-  title: "How the Healthy Score Works | Campus Canteen",
-  description: "Transparent breakdown of the 5 criteria and weights used to calculate the Campus Canteen Healthy Score.",
+  title: "How the Healthy Score Works | C@mpBite",
+  description: "Transparent breakdown of the 5 criteria and weights used to calculate the C@mpBite Healthy Score.",
 };
 
 const CRITERION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -45,7 +45,7 @@ export default async function HealthyScoreExplainerPage() {
         </h1>
 
         <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-          The Campus Canteen Healthy Score (0 to 100) estimates overall nutrient density for students. Rather than relying on simple calorie counts, it balances macronutrient quality, dietary fibre, and portion alignment.
+          The C@mpBite Healthy Score (0 to 100) estimates overall nutrient density for students. Rather than relying on simple calorie counts, it balances macronutrient quality, dietary fibre, and portion alignment.
         </p>
 
         {/* Score Bands Legend */}

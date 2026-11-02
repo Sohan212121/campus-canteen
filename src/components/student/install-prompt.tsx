@@ -134,7 +134,7 @@ export function StudentInstallPrompt() {
               <Download className="h-5 w-5" />
             </div>
             <div className="space-y-0.5 min-w-0">
-              <h3 className="text-xs font-bold leading-tight truncate">Install Campus Canteen</h3>
+              <h3 className="text-xs font-bold leading-tight truncate">Install C@mpBite</h3>
               <p className="text-[11px] text-muted-foreground leading-tight line-clamp-1">
                 Order fast and track tokens right from your home screen.
               </p>

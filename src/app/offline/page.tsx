@@ -35,7 +35,7 @@ export default function OfflinePage() {
           </Link>
 
           <p className="text-[11px] text-muted-foreground">
-            Campus Canteen &bull; Smart Pre-Order System
+            C@mpBite &bull; Smart Pre-Order System
           </p>
         </div>
       </div>

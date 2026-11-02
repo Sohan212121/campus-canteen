@@ -850,7 +850,7 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
           <div className="pt-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5 font-medium text-foreground">
               <Store className="h-3.5 w-3.5 text-primary" />
-              {order.canteens?.name || "Campus Canteen"}
+              {order.canteens?.name || "C@mpBite"}
             </span>
             {order.canteens?.location && <span>{order.canteens.location}</span>}
           </div>
@@ -1077,7 +1077,7 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
           <div className="pt-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5 font-medium text-foreground">
               <Store className="h-3.5 w-3.5 text-primary" />
-              {order.canteens?.name || "Campus Canteen"}
+              {order.canteens?.name || "C@mpBite"}
             </span>
             {order.canteens?.location && <span>{order.canteens.location}</span>}
           </div>

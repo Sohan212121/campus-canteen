@@ -7,9 +7,9 @@ import { HealthyMainView } from "@/components/student/healthy/healthy-main-view"
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
 
 export const metadata: Metadata = {
-  title: "Healthy Mode & High-Protein Fuel | Campus Canteen",
+  title: "Healthy Mode & High-Protein Fuel | C@mpBite",
   description:
-    "Explore high-protein, nutrient-dense campus canteen meals with full macronutrient pie charts, mineral percentages, and clean calories.",
+    "Explore high-protein, nutrient-dense C@mpBite meals with full macronutrient pie charts, mineral percentages, and clean calories.",
 };
 
 export default async function HealthyModePage() {

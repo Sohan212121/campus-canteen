@@ -72,7 +72,7 @@ export function LogoTransition({
           <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-[28px] overflow-hidden bg-zinc-900 border border-zinc-700/60 shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_35px_rgba(255,255,255,0.06)] flex items-center justify-center">
             <Image
               src="/brand/logo.png"
-              alt="Campus Canteen"
+              alt="C@mpBite"
               width={128}
               height={128}
               className="w-full h-full object-cover select-none pointer-events-none"
@@ -105,8 +105,8 @@ export function LogoTransition({
 
         {/* Premium Typography & Status Label */}
         <div className="mt-7 flex flex-col items-center gap-1.5 text-center">
-          <span className="text-[11px] font-bold tracking-[0.28em] uppercase text-amber-400 font-mono">
-            CAMPUS CANTEEN
+          <span className="text-[11px] font-bold tracking-[0.28em] text-amber-400 font-mono">
+            C@mpBite
           </span>
           <div className="flex items-center gap-2 text-xs font-medium text-zinc-300">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />

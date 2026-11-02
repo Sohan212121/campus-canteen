@@ -80,7 +80,7 @@ export default async function ProfilePage() {
       </div>
 
       <p className="text-center text-xs text-muted-foreground">
-        &copy; {new Date().getFullYear()} Campus Canteen &bull; Smart Pre-Order System
+        &copy; {new Date().getFullYear()} C@mpBite &bull; Smart Pre-Order System
       </p>
     </div>
   );

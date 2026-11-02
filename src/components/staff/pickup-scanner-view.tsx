@@ -141,7 +141,7 @@ export function PickupScannerView() {
         }
       }
 
-      setErrorMessage("Invalid QR code format. Please scan a valid Campus Canteen pickup QR.");
+      setErrorMessage("Invalid QR code format. Please scan a valid C@mpBite pickup QR.");
       toast.error("Invalid QR format");
       setPaused(false);
     }

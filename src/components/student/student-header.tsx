@@ -105,7 +105,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
         <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl overflow-hidden shadow-sm group-hover:scale-105 transition-transform">
           <Image
             src="/brand/logo.png"
-            alt="Campus Canteen"
+            alt="C@mpBite"
             width={40}
             height={40}
             className="w-full h-full object-cover"
@@ -116,8 +116,8 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
           <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase text-[#c2630d] dark:text-[#FBBF24] font-headline leading-tight">
             Good Food. Fast Vibes.
           </span>
-          <h1 className="text-base sm:text-lg font-extrabold tracking-wide uppercase leading-tight text-[#181513] dark:text-white font-display">
-            Campus Canteen
+          <h1 className="text-base sm:text-lg font-extrabold tracking-wide leading-tight text-[#181513] dark:text-white font-display">
+            C@mpBite
           </h1>
         </div>
       </Link>
@@ -134,7 +134,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
               ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
               : "border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 hover:border-emerald-500/60 hover:shadow-[0_0_12px_rgba(16,185,129,0.2)]"
           }`}
-          title={isHealthy ? "Back to Campus Canteen menu" : "Healthy Mode & High-Protein Fuel"}
+          title={isHealthy ? "Back to C@mpBite menu" : "Healthy Mode & High-Protein Fuel"}
           aria-label="Healthy Mode"
         >
           <Leaf

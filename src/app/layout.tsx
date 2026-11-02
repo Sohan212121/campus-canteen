@@ -15,12 +15,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Campus Canteen",
+  title: "C@mpBite",
   description: "Order before the break. Skip the queue. Pick up when you arrive.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Campus Canteen",
+    title: "C@mpBite",
   },
   icons: {
     icon: "/favicon.ico",

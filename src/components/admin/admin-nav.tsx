@@ -50,7 +50,7 @@ export function AdminNav({ adminName }: { adminName?: string | null }) {
             </div>
             <div>
               <span className="font-bold text-base tracking-tight leading-none">
-                Campus Canteen
+                C@mpBite
               </span>
               <span className="block text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">
                 Admin Console
