@@ -428,26 +428,28 @@ export function StudentHomeView({
                 e.currentTarget.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
                 scrollToFoodSection();
               }}
-              className="flex flex-col items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform"
+              className="group flex flex-col items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform"
               aria-label={`Filter by ${tab.label}`}
             >
               <div
                 className={cn(
-                  "w-14 h-14 rounded-2xl bg-[#1b1917] dark:bg-[#121319] flex items-center justify-center p-2 text-2xl transition-all shadow-sm relative",
+                  "w-14 h-14 rounded-2xl flex items-center justify-center p-2 text-2xl transition-all shadow-xs relative",
                   isSelected
-                    ? "border-2 border-[#d97706] dark:border-[#FBBF24] text-[#d97706] dark:text-[#FBBF24] shadow-md dark:shadow-lg dark:shadow-[#FBBF24]/20"
-                    : "border border-[#36322e] dark:border-[#222533] hover:border-[#d97706] dark:hover:border-[#FBBF24]/50 text-[#f5efe4] dark:text-slate-300"
+                    ? "bg-[#FFF7ED] dark:bg-[#28231D] border-2 border-[#EA580C] dark:border-[#FBBF24] shadow-md shadow-[#EA580C]/15 dark:shadow-[#FBBF24]/20 scale-105"
+                    : "bg-white dark:bg-[#1E2230] border border-[#e4dcce] dark:border-[#2D3142] hover:border-[#EA580C]/50 hover:bg-[#FAF8F5] dark:hover:bg-[#252A3B] hover:shadow-xs"
                 )}
               >
-                <span className="filter drop-shadow">{tab.icon}</span>
+                <span className="filter drop-shadow-xs transition-transform duration-200 group-hover:scale-110">{tab.icon}</span>
                 {isSelected && (
-                  <span className="hidden dark:block absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#EF4444] border-2 border-[#090A0F]" />
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#EA580C] dark:bg-[#FBBF24] border-2 border-white dark:border-[#090A0F]" />
                 )}
               </div>
               <span
                 className={cn(
-                  "font-headline text-[11px] uppercase tracking-wider font-bold transition-colors text-[#d97706] dark:text-[#FBBF24]",
-                  isSelected ? "font-black" : "opacity-90 hover:opacity-100"
+                  "font-headline text-[11px] uppercase tracking-wider font-bold transition-colors",
+                  isSelected
+                    ? "text-[#EA580C] dark:text-[#FBBF24] font-black"
+                    : "text-[#635e58] dark:text-slate-400 group-hover:text-[#181513] dark:group-hover:text-white"
                 )}
               >
                 {tab.id === "all" ? "All" : tab.label}
