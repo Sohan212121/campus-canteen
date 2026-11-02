@@ -101,23 +101,23 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
 
   return (
     <header className="flex items-center justify-between pb-3.5 mb-2 border-b border-[#ded5c4] dark:border-[#1E202B]">
-      <Link href="/" prefetch={true} className="flex items-center gap-2.5 group min-h-[44px] py-1 select-none">
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl overflow-hidden shadow-sm group-hover:scale-105 transition-transform">
+      <Link href="/" prefetch={true} className="flex items-center gap-2.5 sm:gap-3 group min-h-[44px] py-1 select-none">
+        <div className="relative flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl overflow-hidden shadow-sm group-hover:scale-105 transition-transform">
           <Image
             src="/brand/logo.png"
             alt="C@mpBite"
-            width={40}
-            height={40}
+            width={48}
+            height={48}
             className="w-full h-full object-cover"
             priority
           />
         </div>
-        <div className="flex flex-col">
+        <div className="flex flex-col justify-center">
           <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase text-[#c2630d] dark:text-[#FBBF24] font-headline leading-tight">
             Good Food. Fast Vibes.
           </span>
-          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight leading-tight text-[#181513] dark:text-white font-display">
-            C<span className="text-red-600 dark:text-red-500">@</span>mpBite
+          <h1 className="text-2xl sm:text-3xl font-brand font-normal leading-none text-[#181513] dark:text-white select-none pt-0.5">
+            C<span className="text-red-600 dark:text-red-500 font-bold">@</span>mpBite
           </h1>
         </div>
       </Link>
