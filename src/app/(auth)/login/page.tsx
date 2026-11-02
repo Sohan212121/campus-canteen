@@ -134,7 +134,7 @@ export default function LoginPage() {
         </div>
         <CardTitle className="text-xl font-bold">Welcome Back</CardTitle>
         <CardDescription className="text-sm">
-          Sign in to C@mpBite
+          Sign in to C<span className="text-red-600 dark:text-red-500 font-bold">@</span>mpBite
         </CardDescription>
       </CardHeader>
       <CardContent>

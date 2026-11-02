@@ -106,7 +106,7 @@ export default function SignupPage() {
         </div>
         <CardTitle className="text-xl font-bold">Create Account</CardTitle>
         <CardDescription className="text-sm">
-          Join C@mpBite with your campus credentials
+          Join C<span className="text-red-600 dark:text-red-500 font-bold">@</span>mpBite with your campus credentials
         </CardDescription>
       </CardHeader>
       <CardContent>

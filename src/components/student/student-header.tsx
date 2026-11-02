@@ -116,8 +116,8 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
           <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase text-[#c2630d] dark:text-[#FBBF24] font-headline leading-tight">
             Good Food. Fast Vibes.
           </span>
-          <h1 className="text-base sm:text-lg font-extrabold tracking-wide leading-tight text-[#181513] dark:text-white font-display">
-            C@mpBite
+          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight leading-tight text-[#181513] dark:text-white font-display">
+            C<span className="text-red-600 dark:text-red-500">@</span>mpBite
           </h1>
         </div>
       </Link>

@@ -35,7 +35,7 @@ export default function OfflinePage() {
           </Link>
 
           <p className="text-[11px] text-muted-foreground">
-            C@mpBite &bull; Smart Pre-Order System
+            C<span className="text-red-600 dark:text-red-500 font-bold">@</span>mpBite &bull; Smart Pre-Order System
           </p>
         </div>
       </div>

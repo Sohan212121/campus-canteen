@@ -49,8 +49,8 @@ export function AdminNav({ adminName }: { adminName?: string | null }) {
               <ShieldCheck className="h-5 w-5" />
             </div>
             <div>
-              <span className="font-bold text-base tracking-tight leading-none">
-                C@mpBite
+              <span className="font-extrabold text-lg tracking-tight leading-none">
+                C<span className="text-red-600 dark:text-red-500">@</span>mpBite
               </span>
               <span className="block text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">
                 Admin Console

@@ -167,7 +167,7 @@ export default async function StudentHomePage() {
 
       {/* Footer Info */}
       <footer className="pt-2 text-center text-xs text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} C@mpBite &bull; Smart Pre-Order System</p>
+        <p>&copy; {new Date().getFullYear()} C<span className="text-red-600 dark:text-red-500 font-bold">@</span>mpBite &bull; Smart Pre-Order System</p>
       </footer>
     </div>
   );

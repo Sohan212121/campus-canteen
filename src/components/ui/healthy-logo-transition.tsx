@@ -88,7 +88,7 @@ export function HealthyLogoTransition({
         {/* Premium Botanical Typography & Status Label */}
         <div className="mt-7 flex flex-col items-center gap-1.5 text-center">
           <span className="text-[10px] sm:text-[11px] font-bold tracking-[0.28em] text-emerald-400 font-mono">
-            C@mpBite • NUTRITION
+            C<span className="text-red-500">@</span>mpBite • NUTRITION
           </span>
           <div className="flex items-center gap-2 text-xs font-medium text-emerald-100">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
