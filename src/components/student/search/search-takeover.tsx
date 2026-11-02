@@ -402,7 +402,7 @@ export function SearchTakeover({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="h-11 pl-10 pr-10 text-sm font-semibold bg-[#eae2d2] dark:bg-[#121319] border-2 border-[#181513]/30 dark:border-[#262836] text-[#181513] dark:text-white placeholder:text-[#181513]/60 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-2 focus-visible:ring-primary"
+            className="h-11 pl-10 pr-10 text-sm font-semibold bg-[#eae2d2] dark:bg-[#121319] border border-[#181513]/25 dark:border-[#262836] text-[#181513] dark:text-white placeholder:text-[#181513]/60 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-2 focus-visible:ring-primary"
           />
 
           {query && (
