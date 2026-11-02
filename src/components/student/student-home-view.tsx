@@ -479,7 +479,7 @@ export function StudentHomeView({
         />
 
         {/* Dynamic Dot Indicators (Top-right corner) */}
-        <div className="absolute top-3 right-3 flex items-center gap-1 z-20 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10 dark:bg-[#090A0F]/90 dark:border-[#262836]">
+        <div className="absolute top-4 right-4 flex items-center gap-1 z-20 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10 dark:bg-[#090A0F]/90 dark:border-[#262836]">
           {PROMO_SLIDES.map((_, idx) => (
             <button
               key={idx}
@@ -503,13 +503,13 @@ export function StudentHomeView({
           {PROMO_SLIDES.map((slide, idx) => (
             <div
               key={slide.id}
-              className="min-w-full w-full shrink-0 relative p-5 flex flex-col justify-between min-h-[175px] sm:min-h-[190px] overflow-hidden"
+              className="min-w-full w-full shrink-0 relative px-6 py-6 sm:px-7 sm:py-7 flex flex-col justify-between min-h-[210px] sm:min-h-[235px] overflow-hidden"
             >
               {/* Slide Content: Left Text & CTA */}
-              <div className="relative z-10 flex flex-col justify-between h-full space-y-3">
-                <div className="max-w-[62%] sm:max-w-[68%] space-y-2">
+              <div className="relative z-10 flex flex-col justify-between h-full space-y-4">
+                <div className="max-w-[60%] sm:max-w-[66%] space-y-2.5 pt-1">
                   {/* Main headline */}
-                  <h3 className="font-headline text-2xl sm:text-[30px] font-bold text-[#f5efe4] dark:text-white uppercase leading-[0.95] tracking-tight font-display">
+                  <h3 className="font-headline text-2xl sm:text-[30px] font-bold text-[#f5efe4] dark:text-white uppercase leading-[1.0] tracking-tight font-display">
                     {slide.id === "homely-meals" ? (
                       <>
                         FOOD THAT <br />
@@ -521,13 +521,13 @@ export function StudentHomeView({
                   </h3>
 
                   {/* Subtitle */}
-                  <p className="font-body text-[12px] text-[#ded5c4]/80 dark:text-slate-300 line-clamp-2 pt-0.5 font-medium leading-snug">
+                  <p className="font-body text-[12px] sm:text-[13px] text-[#ded5c4]/80 dark:text-slate-300 line-clamp-2 pt-0.5 font-medium leading-relaxed">
                     {slide.subtitle}
                   </p>
                 </div>
 
                 {/* CTA Button */}
-                <div className="pt-1 flex items-center gap-2 flex-wrap">
+                <div className="pt-2 pb-0.5 flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={() => handleSlideCta(slide.mealTarget)}
@@ -540,7 +540,7 @@ export function StudentHomeView({
               </div>
 
               {/* Spotlight Decorative Circular Dish Frame on the Right (moves synchronously with this slide) */}
-              <div className="absolute -right-6 -bottom-6 w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden shadow-2xl border-2 border-[#d9531e]/40 dark:border-[#F59E0B]/50 bg-[#1b1917] dark:bg-[#090A0F] shrink-0 pointer-events-none">
+              <div className="absolute -right-5 -bottom-5 w-40 h-40 sm:w-50 sm:h-50 rounded-full overflow-hidden shadow-2xl border-2 border-[#d9531e]/40 dark:border-[#F59E0B]/50 bg-[#1b1917] dark:bg-[#090A0F] shrink-0 pointer-events-none">
                 {slideImages[idx] ? (
                   <img
                     src={slideImages[idx]}
