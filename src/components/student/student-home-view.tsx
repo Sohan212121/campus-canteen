@@ -435,20 +435,20 @@ export function StudentHomeView({
                 className={cn(
                   "w-14 h-14 rounded-2xl flex items-center justify-center p-2 text-2xl transition-all shadow-xs relative",
                   isSelected
-                    ? "bg-[#FFF7ED] dark:bg-[#28231D] border-2 border-[#EA580C] dark:border-[#FBBF24] shadow-md shadow-[#EA580C]/15 dark:shadow-[#FBBF24]/20 scale-105"
-                    : "bg-white dark:bg-[#1E2230] border border-[#e4dcce] dark:border-[#2D3142] hover:border-[#EA580C]/50 hover:bg-[#FAF8F5] dark:hover:bg-[#252A3B] hover:shadow-xs"
+                    ? "bg-white dark:bg-[#1E2230] border-2 border-[#DC2626] dark:border-[#EF4444] shadow-md shadow-[#DC2626]/20 dark:shadow-[#EF4444]/25 scale-105"
+                    : "bg-white dark:bg-[#1E2230] border border-black/20 dark:border-white/20 hover:border-[#DC2626]/50 hover:bg-[#FAF8F5] dark:hover:bg-[#252A3B] hover:shadow-xs"
                 )}
               >
                 <span className="filter drop-shadow-xs transition-transform duration-200 group-hover:scale-110">{tab.icon}</span>
                 {isSelected && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#EA580C] dark:bg-[#FBBF24] border-2 border-white dark:border-[#090A0F]" />
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#DC2626] dark:bg-[#EF4444] border-2 border-white dark:border-[#090A0F]" />
                 )}
               </div>
               <span
                 className={cn(
                   "font-headline text-[11px] uppercase tracking-wider font-bold transition-colors",
                   isSelected
-                    ? "text-[#EA580C] dark:text-[#FBBF24] font-black"
+                    ? "text-[#DC2626] dark:text-[#EF4444] font-black"
                     : "text-[#635e58] dark:text-slate-400 group-hover:text-[#181513] dark:group-hover:text-white"
                 )}
               >
