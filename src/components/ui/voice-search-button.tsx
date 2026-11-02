@@ -218,8 +218,8 @@ export function VoiceSearchButton({
         "relative flex items-center justify-center rounded-full transition-all cursor-pointer active:scale-95 select-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-red-500 shadow-xs",
         sizeClasses,
         isListening
-          ? "bg-black text-red-500 border border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]"
-          : "bg-black text-red-500 hover:bg-black/85 hover:scale-105 border border-black/80 dark:border-[#222533]",
+          ? "bg-white dark:bg-[#1E2230] text-red-500 border border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]"
+          : "bg-white dark:bg-[#1E2230] text-red-500 hover:bg-neutral-50 dark:hover:bg-[#252A3B] hover:scale-105 border border-black/15 dark:border-white/20",
         className
       )}
     >

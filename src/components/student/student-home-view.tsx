@@ -628,7 +628,7 @@ export function StudentHomeView({
               aria-label="Toggle pure vegetarian filter"
             >
               <div className="flex flex-col text-left font-headline">
-                <span className={`text-[11px] font-bold tracking-wider leading-none transition-colors ${isVegOnly ? "text-red-500 font-black" : "text-white"}`}>
+                <span className={`text-[11px] font-bold tracking-wider leading-none transition-colors ${isVegOnly ? "text-emerald-600 dark:text-emerald-400 font-black" : "text-emerald-700 dark:text-emerald-500 font-bold"}`}>
                   VEG
                 </span>
                 <span className={`text-[9px] leading-tight transition-colors ${isVegOnly ? "text-red-400 font-bold" : "text-red-500"}`}>
