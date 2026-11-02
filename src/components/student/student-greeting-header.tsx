@@ -561,16 +561,6 @@ export function StudentGreetingHeader({ fullName }: StudentGreetingHeaderProps) 
               }}
             />
 
-            {/* Top row: Status indicator */}
-            <div className="flex items-center justify-between gap-2 relative z-10">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] dark:bg-[#EF4444] dark:pulse-dot shrink-0"></span>
-                <span className="text-xs font-semibold text-[#635e58] dark:text-slate-300 font-headline uppercase tracking-wider text-[11px]">
-                  Ready for lunch rush?
-                </span>
-              </div>
-            </div>
-
             {/* Center: Welcome Heading with 'Yo,' Rising from Bottom and Falling Letter Cascade Name */}
             <div className="my-auto py-2 relative z-10">
               <div className="flex items-center gap-2">
