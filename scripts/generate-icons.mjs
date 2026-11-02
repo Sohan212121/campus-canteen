@@ -73,10 +73,30 @@ async function main() {
     const dest = path.join(ICONS_DIR, target.name);
 
     if (hasBrandLogo) {
-      await sharp(brandLogoPath)
-        .resize(target.size, target.size)
-        .png({ compressionLevel: 9 })
-        .toFile(dest);
+      if (target.maskable) {
+        // PWA maskable icons require a solid background (safe zone is the inner 80%)
+        const innerSize = Math.round(target.size * 0.78);
+        const innerBuffer = await sharp(brandLogoPath)
+          .resize(innerSize, innerSize, { fit: "inside" })
+          .toBuffer();
+
+        await sharp({
+          create: {
+            width: target.size,
+            height: target.size,
+            channels: 4,
+            background: { r: 24, g: 24, b: 27, alpha: 1 },
+          },
+        })
+          .composite([{ input: innerBuffer, gravity: "center" }])
+          .png({ compressionLevel: 9 })
+          .toFile(dest);
+      } else {
+        await sharp(brandLogoPath)
+          .resize(target.size, target.size)
+          .png({ compressionLevel: 9 })
+          .toFile(dest);
+      }
     } else {
       const svg = generateSvg({ size: target.size, isMaskable: target.maskable });
       await sharp(Buffer.from(svg))

@@ -139,13 +139,13 @@ export default function ForgotPasswordPage() {
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden shadow-sm">
+          <div className="mx-auto mb-2 relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden shadow-xs bg-[#FFFDF5] dark:bg-[#1E202B] p-1 border border-black/5 dark:border-white/10">
             <Image
               src="/brand/logo.png"
               alt="C@mpBite"
               width={48}
               height={48}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
               priority
             />
           </div>
