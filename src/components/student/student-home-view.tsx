@@ -508,12 +508,6 @@ export function StudentHomeView({
               {/* Slide Content: Left Text & CTA */}
               <div className="relative z-10 flex flex-col justify-between h-full space-y-3">
                 <div className="max-w-[62%] sm:max-w-[68%] space-y-2">
-                  {/* Eyebrow badge */}
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#36322e] dark:bg-[#1A1C24] border border-[#e5891e]/40 dark:border-[#F59E0B]/40 text-[#e5891e] dark:text-[#FBBF24] font-headline text-[11px] tracking-widest uppercase font-bold">
-                    <span>⚡</span>
-                    <span>{slide.badge}</span>
-                  </div>
-
                   {/* Main headline */}
                   <h3 className="font-headline text-2xl sm:text-[30px] font-bold text-[#f5efe4] dark:text-white uppercase leading-[0.95] tracking-tight font-display">
                     {slide.id === "homely-meals" ? (
