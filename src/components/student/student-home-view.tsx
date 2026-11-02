@@ -622,8 +622,8 @@ export function StudentHomeView({
               }}
               className={`min-h-[48px] h-12 px-3 rounded-2xl border transition-all duration-200 flex items-center gap-2 shadow-2xs cursor-pointer active:scale-95 select-none ${
                 isVegOnly
-                  ? "bg-black border-red-500 text-white ring-1 ring-red-500/40 shadow-sm shadow-red-500/30"
-                  : "bg-black border-[#222533] text-slate-300 hover:border-red-500/50"
+                  ? "bg-[#eae2d2] dark:bg-[#121319] border-red-500 text-white ring-1 ring-red-500/40 shadow-sm shadow-red-500/30"
+                  : "bg-[#eae2d2] dark:bg-[#121319] border-[#181513]/25 dark:border-[#222533] text-slate-300 hover:border-red-500/50"
               }`}
               aria-label="Toggle pure vegetarian filter"
             >
