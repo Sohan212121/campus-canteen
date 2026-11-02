@@ -52,7 +52,7 @@ const emptySubscribe = () => () => {};
 export interface VoiceSearchButtonProps {
   onSearch: (transcript: string) => void;
   className?: string;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   lang?: string;
 }
 
@@ -188,7 +188,19 @@ export function VoiceSearchButton({
     }
   };
 
-  const isSmall = size === "sm";
+  const sizeClasses =
+    size === "sm"
+      ? "h-6 w-6"
+      : size === "lg"
+      ? "h-10 w-10 sm:h-11 sm:w-11"
+      : "h-9 w-9 sm:h-9.5 sm:w-9.5";
+
+  const iconClasses =
+    size === "sm"
+      ? "h-3.5 w-3.5 text-red-500"
+      : size === "lg"
+      ? "h-5 w-5 sm:h-5.5 sm:w-5.5 text-red-500"
+      : "h-4.5 w-4.5 sm:h-5 sm:w-5 text-red-500";
 
   return (
     <button
@@ -204,7 +216,7 @@ export function VoiceSearchButton({
       }
       className={cn(
         "relative flex items-center justify-center rounded-full transition-all cursor-pointer active:scale-95 select-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-red-500 shadow-xs",
-        isSmall ? "h-6 w-6" : "h-7 w-7 sm:h-8 sm:w-8",
+        sizeClasses,
         isListening
           ? "bg-black text-red-500 border border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]"
           : "bg-black text-red-500 hover:bg-black/85 hover:scale-105 border border-black/80 dark:border-[#222533]",
@@ -214,10 +226,10 @@ export function VoiceSearchButton({
       {isListening ? (
         <>
           <span className="absolute inset-0 rounded-full bg-red-500/30 animate-ping" />
-          <Mic className={isSmall ? "h-3.5 w-3.5 text-red-500" : "h-4 w-4 text-red-500"} />
+          <Mic className={iconClasses} />
         </>
       ) : (
-        <Mic className={isSmall ? "h-3.5 w-3.5 text-red-500" : "h-4 w-4 text-red-500"} />
+        <Mic className={iconClasses} />
       )}
     </button>
   );

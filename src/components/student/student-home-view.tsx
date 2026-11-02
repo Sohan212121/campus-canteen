@@ -503,7 +503,7 @@ export function StudentHomeView({
           {PROMO_SLIDES.map((slide, idx) => (
             <div
               key={slide.id}
-              className="min-w-full w-full shrink-0 relative px-6 py-6 sm:px-7 sm:py-7 flex flex-col justify-between min-h-[210px] sm:min-h-[235px] overflow-hidden"
+              className="min-w-full w-full shrink-0 relative px-6 pt-6 pb-8 sm:px-7 sm:pt-7 sm:pb-9 flex flex-col justify-between min-h-[225px] sm:min-h-[250px] overflow-hidden"
             >
               {/* Slide Content: Left Text & CTA */}
               <div className="relative z-10 flex flex-col justify-between h-full space-y-4">
@@ -527,7 +527,7 @@ export function StudentHomeView({
                 </div>
 
                 {/* CTA Button */}
-                <div className="pt-2 pb-0.5 flex items-center gap-2 flex-wrap">
+                <div className="pt-2 pb-1.5 flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={() => handleSlideCta(slide.mealTarget)}
@@ -540,7 +540,7 @@ export function StudentHomeView({
               </div>
 
               {/* Spotlight Decorative Circular Dish Frame on the Right (moves synchronously with this slide) */}
-              <div className="absolute -right-5 -bottom-5 w-40 h-40 sm:w-50 sm:h-50 rounded-full overflow-hidden shadow-2xl border-2 border-[#d9531e]/40 dark:border-[#F59E0B]/50 bg-[#1b1917] dark:bg-[#090A0F] shrink-0 pointer-events-none">
+              <div className="absolute -right-5 -bottom-4 w-42 h-42 sm:w-52 sm:h-52 rounded-full overflow-hidden shadow-2xl border-2 border-[#d9531e]/40 dark:border-[#F59E0B]/50 bg-[#1b1917] dark:bg-[#090A0F] shrink-0 pointer-events-none">
                 {slideImages[idx] ? (
                   <img
                     src={slideImages[idx]}
@@ -574,9 +574,9 @@ export function StudentHomeView({
               onChange={(e) => setSearchQuery(e.target.value)}
               onClick={openTakeover}
               onFocus={openTakeover}
-              className="h-12 pl-10 pr-16 text-sm font-semibold bg-[#eae2d2] dark:bg-[#121319] border border-[#181513]/25 dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#181513] focus-visible:dark:ring-[#FBBF24] cursor-pointer"
+              className="h-12 pl-10 pr-20 text-sm font-semibold bg-[#eae2d2] dark:bg-[#121319] border border-[#181513]/25 dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#181513] focus-visible:dark:ring-[#FBBF24] cursor-pointer"
             />
-            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
               {searchQuery && (
                 <button
                   type="button"
