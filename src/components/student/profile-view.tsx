@@ -12,7 +12,6 @@ import {
   ArrowRight,
   Clock,
   CreditCard,
-  Lock,
   Mail,
   Award,
   MessageSquare,
@@ -172,10 +171,6 @@ export function ProfileView({
             <span className="text-[10px] text-[#ffdad6]/70 uppercase">
               {profile.college_id ? `CS-${profile.college_id}` : "CS-2024-ID"}
             </span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#ffb4ab]">
-            <Lock className="w-3.5 h-3.5 text-emerald-400" />
-            <span>RLS Encrypted • v2.4</span>
           </div>
         </div>
       </div>
