@@ -412,22 +412,22 @@ export function HealthyModeView({ canteenItems = [] }: HealthyModeViewProps) {
                     type="button"
                     onClick={() => handleAddToCart(item)}
                     size="sm"
-                    className="min-h-[40px] px-4 rounded-xl font-bold text-xs gap-1.5 active:scale-95 transition-transform"
+                    className="min-h-[40px] px-4 rounded-xl font-extrabold text-xs gap-1.5 active:scale-95 transition-transform bg-[#FACC15] hover:bg-[#EAB308] dark:bg-[#FBBF24] dark:hover:bg-[#F59E0B] text-[#181513] dark:text-[#181513] border border-[#EAB308] dark:border-[#F59E0B]"
                   >
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
                     <span>Add to Order</span>
                   </Button>
                 ) : (
-                  <div className="flex items-center rounded-xl border border-primary bg-primary/5 p-1 gap-2">
+                  <div className="flex items-center rounded-xl border border-[#EAB308] dark:border-[#FBBF24]/60 bg-[#FACC15] dark:bg-[#FBBF24] text-[#181513] p-1 gap-2 font-bold">
                     <button
                       type="button"
                       onClick={() => updateQuantity(resolvedId, currentQuantity - 1)}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg bg-card hover:bg-muted text-foreground transition-colors cursor-pointer"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-black/10 text-[#181513] transition-colors cursor-pointer"
                       aria-label="Decrease quantity"
                     >
-                      <Minus className="h-3.5 w-3.5" />
+                      <Minus className="h-3.5 w-3.5 stroke-[2.5]" />
                     </button>
-                    <span className="font-mono text-xs font-extrabold w-5 text-center text-foreground">
+                    <span className="font-mono text-xs font-extrabold w-5 text-center text-[#181513]">
                       {currentQuantity}
                     </span>
                     <button
@@ -438,10 +438,10 @@ export function HealthyModeView({ canteenItems = [] }: HealthyModeViewProps) {
                           Math.min(MAX_ITEM_QUANTITY, currentQuantity + 1)
                         )
                       }
-                      className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-black/10 text-[#181513] transition-colors cursor-pointer"
                       aria-label="Increase quantity"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
                     </button>
                   </div>
                 )}

@@ -268,7 +268,7 @@ function ItemDetailDialogContent({
               {/* Add to Cart button */}
               <Button
                 type="button"
-                className="flex-1 h-12 text-base font-semibold gap-2 shadow-sm"
+                className="flex-1 h-12 text-base font-extrabold gap-2 shadow-sm bg-[#FACC15] hover:bg-[#EAB308] dark:bg-[#FBBF24] hover:dark:bg-[#F59E0B] text-[#181513] dark:text-[#181513] border border-[#EAB308] dark:border-[#F59E0B]"
                 onClick={handleAddToCart}
               >
                 <ShoppingBag className="h-4 w-4" />

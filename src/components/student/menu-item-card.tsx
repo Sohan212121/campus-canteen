@@ -157,36 +157,36 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
             </Button>
           ) : currentQuantity > 0 ? (
             <div
-              className="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-[#362f2b] dark:border-[#2D3142] bg-[#181615] dark:bg-[#1C1F2B] text-[#ffb94e] dark:text-[#FBBF24] px-1 shadow-sm"
+              className="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-[#EAB308] dark:border-[#FBBF24]/60 bg-[#FACC15] dark:bg-[#FBBF24] text-[#181513] px-1 shadow-sm font-bold"
             >
               <button
                 type="button"
                 onClick={handleDecrement}
-                className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-white/10 text-[#ffb94e] dark:text-[#FBBF24] transition-colors cursor-pointer"
+                className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-black/10 text-[#181513] transition-colors cursor-pointer"
                 aria-label={`Decrease ${item.name} quantity`}
               >
-                <Minus className="h-4 w-4" />
+                <Minus className="h-4 w-4 stroke-[2.5]" />
               </button>
-              <span className="text-xs font-bold px-1 select-none font-headline dark:font-display text-base text-[#f6eedb] dark:text-white">
+              <span className="text-xs font-extrabold px-1 select-none font-headline dark:font-display text-base text-[#181513]">
                 {currentQuantity}
               </span>
               <button
                 type="button"
                 onClick={handleIncrement}
                 disabled={currentQuantity >= effectiveMax}
-                className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-white/10 text-[#ffb94e] dark:text-[#FBBF24] disabled:opacity-40 transition-colors cursor-pointer"
+                className="flex h-10 w-9 items-center justify-center rounded-lg hover:bg-black/10 text-[#181513] disabled:opacity-40 transition-colors cursor-pointer"
                 aria-label={`Increase ${item.name} quantity`}
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4 stroke-[2.5]" />
               </button>
             </div>
           ) : (
             <button
               type="button"
               onClick={handleQuickAdd}
-              className="min-h-[44px] w-full bg-[#181615] hover:bg-[#d96b27] dark:bg-[#1C1F2B] hover:dark:bg-[#FBBF24] text-[#ffb94e] hover:text-[#f6eedb] dark:text-white hover:dark:text-[#090A0F] border border-[#362f2b] dark:border-[#2D3142] hover:dark:border-transparent font-headline dark:font-sans uppercase tracking-wider rounded-lg shadow-sm transition-all active:scale-95 text-xs font-bold cursor-pointer flex items-center justify-center gap-1"
+              className="min-h-[44px] w-full bg-[#FACC15] hover:bg-[#EAB308] dark:bg-[#FBBF24] hover:dark:bg-[#F59E0B] text-[#181513] dark:text-[#181513] border border-[#EAB308] dark:border-[#F59E0B] font-headline dark:font-sans uppercase tracking-wider rounded-lg shadow-sm transition-all active:scale-95 text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
               <span>Add +</span>
             </button>
           )}
