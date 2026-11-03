@@ -1,0 +1,12 @@
+{
+  "json.schemas": [
+    {
+      "fileMatch": ["package.json"],
+      "url": "./.vscode/schemas/package.json"
+    },
+    {
+      "fileMatch": ["tsconfig.json"],
+      "url": "./.vscode/schemas/tsconfig.json"
+    }
+  ]
+}
