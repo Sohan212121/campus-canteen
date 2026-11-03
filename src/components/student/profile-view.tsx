@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import {
   User,
+  Camera,
   Shield,
   Copy,
   Check,
@@ -53,9 +54,31 @@ export function ProfileView({
 }: ProfileViewProps) {
   const [activeTab, setActiveTab] = useState<"overview" | "sso" | "feedback">("overview");
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const collegeIdDisplay = profile.college_id || "CS2024002";
   const fullNameDisplay = profile.full_name || "Campus Member";
+
+  const handlePhotoClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please select a valid image file");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setAvatarUrl(event.target?.result as string);
+        toast.success("Profile photo updated!");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleCopy = (text: string, fieldName: string, label: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -109,13 +132,46 @@ export function ProfileView({
         <div className="relative z-10 flex items-center gap-4 my-auto pt-3 pb-3">
           {/* Avatar with Camera Icon Overlay & Verified Badge */}
           <div className="relative group/avatar flex-shrink-0">
-            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-md border border-white/25 flex items-center justify-center text-white shadow-inner relative overflow-hidden">
-              <User className="w-9 h-9 sm:w-10 sm:h-10 text-[#ffdad6]" />
-            </div>
+            {/* Hidden native file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+              aria-label="Upload profile photo"
+            />
 
-            {/* Verified Checkmark Badge */}
+            <button
+              type="button"
+              onClick={handlePhotoClick}
+              className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-md border border-white/25 flex items-center justify-center text-white shadow-inner relative overflow-hidden group/btn cursor-pointer active:scale-95 transition-transform"
+              title="Click to upload profile photo"
+              aria-label="Upload profile photo"
+            >
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarUrl}
+                  alt={fullNameDisplay}
+                  className="w-full h-full object-cover rounded-2xl"
+                />
+              ) : (
+                <User className="w-9 h-9 sm:w-10 sm:h-10 text-[#ffdad6]" />
+              )}
+
+              {/* Hover / Tap Overlay */}
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-xs opacity-0 group-hover/btn:opacity-100 flex flex-col items-center justify-center text-white transition-opacity duration-200">
+                <Camera className="w-5 h-5 text-white" />
+                <span className="text-[9px] font-bold mt-1 tracking-wider uppercase font-mono">
+                  {avatarUrl ? "Change" : "Upload"}
+                </span>
+              </div>
+            </button>
+
+            {/* Verified Checkmark Badge (Bottom-Right) */}
             <div
-              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-[#480806] flex items-center justify-center shadow-md"
+              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-[#480806] flex items-center justify-center shadow-md pointer-events-none"
               title="Verified Student ID"
             >
               <svg
@@ -132,6 +188,17 @@ export function ProfileView({
                 />
               </svg>
             </div>
+
+            {/* Cool Camera Upload Action Button (Top-Right) */}
+            <button
+              type="button"
+              onClick={handlePhotoClick}
+              className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-gradient-to-tr from-[#ffdad6] to-white text-[#4e0606] border-2 border-[#480806] flex items-center justify-center shadow-md hover:scale-110 active:scale-95 transition-all cursor-pointer z-20 group/cam"
+              title="Upload profile photo"
+              aria-label="Upload profile photo"
+            >
+              <Camera className="w-3 h-3 text-[#4e0606] transition-transform group-hover/cam:rotate-12" />
+            </button>
           </div>
 
           {/* Identity Details */}
