@@ -153,16 +153,16 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
             }
           }}
           className={cn(
-            "relative flex h-10 w-10 sm:h-11 sm:w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full border transition-all active:scale-95 shadow-sm select-none cursor-pointer",
+            "relative flex h-10 w-10 sm:h-11 sm:w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full border transition-all active:scale-95 shadow-xs select-none cursor-pointer",
             isProfileActive
-              ? "bg-[#181615] text-[#fe7543] border-[#fe7543] dark:bg-[#121319] dark:text-[#FBBF24] dark:border-[#FBBF24] shadow-[0_0_12px_rgba(254,117,67,0.3)] dark:shadow-[0_0_12px_rgba(251,191,36,0.25)]"
-              : "bg-[#1b1917] dark:bg-[#121319] border-[#36322e] dark:border-[#222533] text-[#ded5c4] dark:text-slate-300 hover:text-[#f5efe4] dark:hover:text-white hover:border-[#d9531e]/70 dark:hover:border-[#FBBF24]/50"
+              ? "bg-[#FEE2E2] dark:bg-[#381B1B] text-[#DC2626] dark:text-[#EF4444] border-[#DC2626] dark:border-[#EF4444] shadow-[0_0_12px_rgba(220,38,38,0.25)]"
+              : "bg-[#FFFDF5] dark:bg-[#231F1C] border-[#ded0be] dark:border-[#3D352B] text-[#DC2626] dark:text-[#EF4444] hover:border-[#DC2626]/60 dark:hover:border-[#EF4444]/60"
           )}
           aria-label="Profile"
           title="Profile"
           aria-current={isProfileActive ? "page" : undefined}
         >
-          <User className="h-4 w-4 sm:h-5 sm:w-5" />
+          <User className="h-4 w-4 sm:h-5 sm:w-5 text-[#DC2626] dark:text-[#EF4444]" />
           <span className="sr-only">Profile</span>
         </Link>
       </div>

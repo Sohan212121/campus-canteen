@@ -34,21 +34,21 @@ export function NotificationBell({ unreadCount }: NotificationBellProps) {
       onMouseEnter={triggerRing}
       onClick={triggerRing}
       className={cn(
-        "group/bell relative flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-[#1b1917] dark:bg-[#121319] border border-[#36322e] dark:border-[#222533] text-[#ded5c4] dark:text-slate-300 hover:text-[#f5efe4] dark:hover:text-white hover:border-[#d9531e]/70 dark:hover:border-[#FBBF24]/50 transition-colors shadow-sm active:scale-95",
-        isRinging && "border-[#d9531e] dark:border-[#FBBF24] shadow-[0_0_12px_rgba(217,83,30,0.4)] text-[#d9531e] dark:text-[#FBBF24]"
+        "group/bell relative flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-[#FFFDF5] dark:bg-[#231F1C] border border-[#ded0be] dark:border-[#3D352B] text-[#DC2626] dark:text-[#EF4444] hover:border-[#DC2626]/60 dark:hover:border-[#EF4444]/60 transition-colors shadow-xs active:scale-95 cursor-pointer",
+        isRinging && "border-[#DC2626] dark:border-[#EF4444] shadow-[0_0_12px_rgba(220,38,38,0.35)]"
       )}
       aria-label={`Notifications (${unreadCount} unread)`}
     >
       <Bell
         className={cn(
-          "h-4 w-4 sm:h-5 sm:w-5 origin-top transition-colors duration-200 group-hover/bell:text-[#d9531e] dark:group-hover/bell:text-[#FBBF24] group-hover/bell:animate-bell-ring",
-          isRinging && "animate-bell-ring text-[#d9531e] dark:text-[#FBBF24]"
+          "h-4 w-4 sm:h-5 sm:w-5 origin-top transition-transform duration-200 text-[#DC2626] dark:text-[#EF4444] group-hover/bell:animate-bell-ring",
+          isRinging && "animate-bell-ring"
         )}
       />
       {unreadCount > 0 && (
         <span
           className={cn(
-            "absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#d9531e] dark:bg-red-600 px-1 text-[10px] font-bold text-[#f5efe4] dark:text-white ring-2 ring-[#1b1917] dark:ring-[#090A0F] shadow-xs animate-in zoom-in-75 group-hover/bell:animate-bell-badge",
+            "absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#DC2626] dark:bg-red-600 px-1 text-[10px] font-bold text-white ring-2 ring-[#FFFDF5] dark:ring-[#231F1C] shadow-xs animate-in zoom-in-75 group-hover/bell:animate-bell-badge",
             isRinging && "animate-bell-badge"
           )}
         >
