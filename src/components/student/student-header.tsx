@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { getNotificationsAction } from "@/server/actions/notifications";
 import { NotificationBell } from "@/components/student/notification-bell";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
 import { isProfileHeaderActive } from "@/lib/student-nav";
 import { cn } from "@/lib/utils";
@@ -141,9 +140,6 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
       </Link>
 
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-        {/* Light & Dark Theme Toggle Button */}
-        <ThemeToggle />
-
         {/* Notification Bell with unread badge */}
         <NotificationBell unreadCount={unreadCount} />
 

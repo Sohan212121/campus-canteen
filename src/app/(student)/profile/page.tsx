@@ -2,6 +2,7 @@ import { User, LogOut, Shield } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { requireRole } from "@/server/auth";
 import { signOutAction } from "@/server/actions/auth";
 
@@ -77,6 +78,17 @@ export default async function ProfilePage() {
             Sign Out
           </Button>
         </form>
+      </div>
+
+      {/* Theme & Appearance Preference Card */}
+      <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-2xs flex items-center justify-between">
+        <div className="space-y-0.5">
+          <h3 className="font-bold text-sm text-foreground">Theme &amp; Appearance</h3>
+          <p className="text-xs text-muted-foreground">
+            Switch between Light and Dark mode for C@mpBite.
+          </p>
+        </div>
+        <ThemeToggle />
       </div>
 
       <p className="text-center text-xs text-muted-foreground">

@@ -7,6 +7,7 @@ describe("Light and Dark Theme Toggle Feature", () => {
   const providerPath = path.resolve(__dirname, "../../components/theme-provider.tsx");
   const headerPath = path.resolve(__dirname, "../../components/student/student-header.tsx");
   const layoutPath = path.resolve(__dirname, "../../app/layout.tsx");
+  const profilePath = path.resolve(__dirname, "../../app/(student)/profile/page.tsx");
 
   it("exports a client ThemeToggle component with Sun and Moon icons", () => {
     expect(fs.existsSync(togglePath)).toBe(true);
@@ -39,23 +40,28 @@ describe("Light and Dark Theme Toggle Feature", () => {
     expect(content).toContain("suppressHydrationWarning");
   });
 
-  it("places ThemeToggle, NotificationBell, and Profile button in exact sequence in StudentHeader", () => {
+  it("renders ThemeToggle inside the Profile section", () => {
+    expect(fs.existsSync(profilePath)).toBe(true);
+    const content = fs.readFileSync(profilePath, "utf-8");
+
+    expect(content).toContain("ThemeToggle");
+    expect(content).toContain("Theme & Appearance");
+  });
+
+  it("ensures StudentHeader contains NotificationBell and Profile button without ThemeToggle or Healthy pill", () => {
     expect(fs.existsSync(headerPath)).toBe(true);
     const content = fs.readFileSync(headerPath, "utf-8");
 
-    expect(content).toContain("ThemeToggle");
+    expect(content).not.toContain("<ThemeToggle");
+    expect(content).not.toContain('aria-label="Healthy Mode"');
     expect(content).toContain("NotificationBell");
     expect(content).toContain('aria-label="Profile"');
-    expect(content).not.toContain('aria-label="Healthy Mode"');
 
-    // Ensure order is ThemeToggle, NotificationBell, Profile (Profile at the far right)
-    const toggleIndex = content.indexOf("<ThemeToggle");
+    // Ensure order is NotificationBell, Profile (Profile at the far right)
     const bellIndex = content.indexOf("<NotificationBell");
     const profileIndex = content.indexOf('aria-label="Profile"');
 
-    expect(toggleIndex).toBeGreaterThan(-1);
-    expect(bellIndex).toBeGreaterThan(toggleIndex);
+    expect(bellIndex).toBeGreaterThan(-1);
     expect(profileIndex).toBeGreaterThan(bellIndex);
   });
 });
-
