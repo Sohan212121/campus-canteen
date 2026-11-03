@@ -23,6 +23,10 @@ import { toast } from "sonner";
 
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { signOutAction } from "@/server/actions/auth";
+import {
+  PreorderedItemsReviewSection,
+  type PreorderedFoodItem,
+} from "@/components/student/preordered-items-review-section";
 
 export interface ProfileViewProps {
   profile: {
@@ -42,6 +46,7 @@ export interface ProfileViewProps {
     total_paise: number;
     items_summary: string;
   }>;
+  preorderedItems?: PreorderedFoodItem[];
   themeToggleSection?: React.ReactNode;
 }
 
@@ -50,9 +55,11 @@ export function ProfileView({
   email,
   ordersCount,
   recentOrders = [],
+  preorderedItems = [],
   themeToggleSection,
 }: ProfileViewProps) {
   const [activeTab, setActiveTab] = useState<"overview" | "sso" | "feedback">("overview");
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -274,7 +281,7 @@ export function ProfileView({
         >
           <MessageSquare className="w-3.5 h-3.5" />
           <span className="truncate">
-            Feedback {ordersCount > 0 ? `(${ordersCount})` : ""}
+            Feedback {preorderedItems.length > 0 ? `(${preorderedItems.length})` : ordersCount > 0 ? `(${ordersCount})` : ""}
           </span>
         </button>
       </div>
@@ -515,24 +522,36 @@ export function ProfileView({
           </div>
 
           {/* Prominent Action Button */}
-          <Link
-            href="/orders"
+          <button
+            type="button"
+            onClick={() => setIsReviewModalOpen(true)}
             className="relative z-10 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#6c1d18] to-[#4e0606] hover:from-[#591612] hover:to-[#3b0404] text-white text-xs font-bold flex items-center justify-between transition-all active:scale-[0.98] shadow-md group/btn cursor-pointer"
           >
             <span className="flex items-center gap-2">
-              <span className="text-amber-300">★</span>
               <span>Rate Pickup &amp; Food Quality</span>
             </span>
             <div className="flex items-center gap-1.5 text-[#ffdad6] group-hover/btn:translate-x-1 transition-transform">
               <span className="text-[11px] font-semibold font-mono">Give Feedback</span>
               <ArrowRight className="w-4 h-4" />
             </div>
-          </Link>
+          </button>
         </div>
       )}
 
       {/* =========================================================================
-          8. FEEDBACK & ORDER HISTORY SECTION
+          8. PRE-ORDERED FOOD ITEMS REVIEW SECTION (DEDICATED INTERFACE)
+          ========================================================================= */}
+      {activeTab === "feedback" && (
+        <section
+          className="bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-4 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col gap-3"
+          data-purpose="preordered-feedback-section"
+        >
+          <PreorderedItemsReviewSection items={preorderedItems} />
+        </section>
+      )}
+
+      {/* =========================================================================
+          9. FEEDBACK & ORDER HISTORY SECTION
           ========================================================================= */}
       {(activeTab === "overview" || activeTab === "feedback") && (
         <section
@@ -647,6 +666,31 @@ export function ProfileView({
           mpBite &bull; Smart Pre-Order System
         </p>
       </footer>
+
+      {/* =========================================================================
+          11. DEDICATED PRE-ORDERED FOOD REVIEW MODAL INTERFACE
+          ========================================================================= */}
+      {isReviewModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-xs p-0 sm:items-center sm:p-4 animate-in fade-in duration-200"
+          onClick={() => setIsReviewModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="w-full max-w-lg max-h-[88vh] rounded-t-3xl sm:rounded-3xl bg-[#f8f5ee] dark:bg-[#121319] border border-[#e6e2da] dark:border-[#222533] shadow-2xl p-4 sm:p-5 flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="overflow-y-auto pr-1">
+              <PreorderedItemsReviewSection
+                items={preorderedItems}
+                isModal
+                onClose={() => setIsReviewModalOpen(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

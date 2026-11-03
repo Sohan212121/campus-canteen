@@ -2,15 +2,26 @@ import { requireRole } from "@/server/auth";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { ProfileView } from "@/components/student/profile-view";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { extractMenuItemImageUrl } from "@/lib/image-utils";
+import type { PreorderedFoodItem } from "@/components/student/preordered-items-review-section";
 
-interface RecentOrderRow {
+type RawOrderItem = {
+  id: string;
+  menu_item_id: string;
+  name_snapshot: string;
+  quantity: number;
+  unit_price_paise: number;
+  menu_items?: { image_url?: string | null } | Array<{ image_url?: string | null }> | null;
+};
+
+type RawOrder = {
   id: string;
   order_code: number;
   status: string;
   placed_at: string;
   total_paise: number;
-  order_items: Array<{ name_snapshot: string; quantity: number }> | null;
-}
+  order_items: RawOrderItem[] | null;
+};
 
 export default async function ProfilePage() {
   const profile = await requireRole(["student"]);
@@ -21,8 +32,8 @@ export default async function ProfilePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Fetch user orders count and 2 most recent orders
-  const { count: ordersCount, data: recentOrdersData } = await supabase
+  // Fetch user orders count and orders with items for the pre-ordered food review section
+  const { count: ordersCount, data: ordersWithItemsData } = await supabase
     .from("orders")
     .select(
       `
@@ -32,19 +43,45 @@ export default async function ProfilePage() {
       placed_at,
       total_paise,
       order_items (
+        id,
+        menu_item_id,
         name_snapshot,
-        quantity
+        quantity,
+        unit_price_paise,
+        menu_items (
+          image_url
+        )
       )
     `,
       { count: "exact" }
     )
     .eq("user_id", profile.id)
     .order("placed_at", { ascending: false })
-    .limit(2);
+    .limit(30);
 
-  const typedOrders = (recentOrdersData || []) as unknown as RecentOrderRow[];
+  const typedOrders = (ordersWithItemsData || []) as unknown as RawOrder[];
 
-  const recentOrders = typedOrders.map((o) => {
+  // Flatten pre-ordered items for the dedicated review section
+  const preorderedItems: PreorderedFoodItem[] = [];
+  for (const order of typedOrders) {
+    for (const item of order.order_items || []) {
+      preorderedItems.push({
+        id: item.id,
+        order_id: order.id,
+        order_code: order.order_code,
+        order_status: order.status,
+        placed_at: order.placed_at,
+        menu_item_id: item.menu_item_id,
+        name_snapshot: item.name_snapshot,
+        quantity: item.quantity,
+        unit_price_paise: item.unit_price_paise,
+        image_url: extractMenuItemImageUrl(item.menu_items),
+      });
+    }
+  }
+
+  // Summary of 2 most recent orders for profile overview
+  const recentOrders = typedOrders.slice(0, 2).map((o) => {
     const rawItems = o.order_items || [];
     const summary = rawItems
       .map((item) =>
@@ -68,6 +105,7 @@ export default async function ProfilePage() {
       email={user?.email || ""}
       ordersCount={ordersCount ?? 0}
       recentOrders={recentOrders}
+      preorderedItems={preorderedItems}
       themeToggleSection={
         <section
           className="bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center justify-between"
