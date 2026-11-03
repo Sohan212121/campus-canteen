@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Star, MessageSquare, Trash2, Send, AlertCircle } from "lucide-react";
+import { Star, MessageSquare, Trash2, Send, AlertCircle, CheckCircle2, X, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
   submitReviewAction,
   deleteMyReviewAction,
   type ItemReviewsResult,
+  type ItemReviewData,
   type ReviewEligibilityItem,
 } from "@/server/actions/reviews";
 
@@ -36,6 +37,7 @@ export function ItemReviewsSection({ menuItemId, itemName }: ItemReviewsSectionP
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [activeReviewDetail, setActiveReviewDetail] = useState<ItemReviewData | null>(null);
 
   // Load reviews and eligibility lazily when section renders
   useEffect(() => {
@@ -394,10 +396,23 @@ export function ItemReviewsSection({ menuItemId, itemName }: ItemReviewsSectionP
             {reviewsData.reviews.map((rev, idx) => (
               <div
                 key={`${rev.display_name}-${rev.created_at}-${idx}`}
-                className="rounded-xl border border-border/60 bg-card p-3 space-y-1.5 shadow-2xs"
+                onClick={() => setActiveReviewDetail(rev)}
+                className="group rounded-xl border border-border/60 hover:border-primary/50 bg-card p-3.5 space-y-2 shadow-2xs hover:shadow-xs transition-all duration-200 cursor-pointer active:scale-[0.99] select-none"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setActiveReviewDetail(rev);
+                  }
+                }}
+                aria-label={`View full review from ${rev.display_name}`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold font-mono">
+                      {rev.display_name.charAt(0).toUpperCase()}
+                    </div>
                     <span className="text-xs font-bold text-foreground">
                       {rev.display_name}
                     </span>
@@ -423,9 +438,17 @@ export function ItemReviewsSection({ menuItemId, itemName }: ItemReviewsSectionP
                 <StarRatingDisplay rating={rev.rating} count={null} size="sm" showCount={false} />
 
                 {rev.comment && (
-                  <p className="text-xs text-muted-foreground leading-relaxed pt-0.5 whitespace-pre-wrap break-words">
-                    {rev.comment}
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed pt-0.5 whitespace-pre-wrap break-words">
+                      {rev.comment}
+                    </p>
+                    <div className="flex items-center justify-end text-[10px] font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="flex items-center gap-0.5">
+                        <span>Tap to view full review</span>
+                        <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
@@ -449,6 +472,129 @@ export function ItemReviewsSection({ menuItemId, itemName }: ItemReviewsSectionP
           </p>
         )}
       </div>
+
+      {/* Full Review Detail Modal with Smooth Transition */}
+      {activeReviewDetail && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-xs p-0 sm:items-center sm:p-4 animate-in fade-in duration-200"
+          onClick={() => setActiveReviewDetail(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-card border border-border shadow-2xl p-5 space-y-4 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-border/60">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 text-primary border border-primary/20 flex items-center justify-center font-bold text-sm">
+                  {activeReviewDetail.display_name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="font-bold text-sm text-foreground">
+                      {activeReviewDetail.display_name}
+                    </h3>
+                    {activeReviewDetail.is_mine && (
+                      <Badge variant="outline" className="text-[9px] py-0 px-1 font-semibold text-primary border-primary/30">
+                        You
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Verified Campus Purchase</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveReviewDetail(null)}
+                className="w-8 h-8 rounded-full bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close review details"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Context Item & Date */}
+            <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
+              <span className="font-semibold text-foreground truncate max-w-[200px]">
+                {itemName}
+              </span>
+              <span className="text-[11px] shrink-0">
+                {new Date(activeReviewDetail.created_at).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            </div>
+
+            {/* Rating Stars Showcase */}
+            <div className="rounded-xl bg-muted/30 p-3 border border-border/60 flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    className={`w-5 h-5 ${
+                      star <= activeReviewDetail.rating
+                        ? "fill-amber-400 text-amber-500"
+                        : "fill-muted text-muted-foreground/30"
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className="text-sm font-bold text-foreground">
+                {activeReviewDetail.rating}.0 / 5.0
+              </span>
+            </div>
+
+            {/* Complete Review Content */}
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider font-mono">
+                Review Feedback
+              </div>
+              <div className="rounded-xl bg-background p-4 border border-border/80 text-xs sm:text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words min-h-[80px]">
+                {activeReviewDetail.comment ? (
+                  activeReviewDetail.comment
+                ) : (
+                  <span className="text-muted-foreground italic">
+                    The reviewer gave a rating without adding written comments.
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 pt-1">
+              {activeReviewDetail.is_mine && (
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={() => {
+                    setActiveReviewDetail(null);
+                    setShowForm(true);
+                  }}
+                  className="flex-1 min-h-[44px] text-xs font-bold rounded-xl"
+                >
+                  Edit My Review
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant={activeReviewDetail.is_mine ? "outline" : "default"}
+                onClick={() => setActiveReviewDetail(null)}
+                className="flex-1 min-h-[44px] text-xs font-semibold rounded-xl"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

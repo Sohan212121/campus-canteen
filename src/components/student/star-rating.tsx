@@ -18,7 +18,8 @@ export function StarRatingDisplay({
   className = "",
 }: StarRatingDisplayProps) {
   const numRating = rating ? Number(rating) : null;
-  const numCount = count !== undefined && count !== null ? Number(count) : 0;
+  const hasCount = count !== undefined && count !== null;
+  const numCount = hasCount ? Number(count) : 0;
 
   const starSizes = {
     sm: "h-3.5 w-3.5",
@@ -32,7 +33,7 @@ export function StarRatingDisplay({
     lg: "text-base font-semibold",
   };
 
-  if (!numRating || numCount === 0) {
+  if (!numRating || numRating <= 0 || (showCount && hasCount && numCount === 0)) {
     return (
       <span className={`inline-flex items-center text-muted-foreground ${textSizes[size]} ${className}`}>
         No reviews yet
@@ -41,7 +42,7 @@ export function StarRatingDisplay({
   }
 
   const rounded = Math.round(numRating * 10) / 10;
-  const textAlternative = `${rounded} out of 5 stars${showCount ? `, ${numCount} reviews` : ""}`;
+  const textAlternative = `${rounded} out of 5 stars${showCount && hasCount ? `, ${numCount} reviews` : ""}`;
 
   return (
     <div className={`inline-flex items-center gap-1.5 ${className}`}>
@@ -72,7 +73,7 @@ export function StarRatingDisplay({
         <span aria-hidden="true">{rounded.toFixed(1)}</span>
       </span>
 
-      {showCount && numCount > 0 && (
+      {showCount && hasCount && numCount > 0 && (
         <span className={`text-muted-foreground ${textSizes[size]}`} aria-hidden="true">
           ({numCount})
         </span>

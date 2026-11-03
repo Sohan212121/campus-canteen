@@ -10,6 +10,7 @@ import {
   MessageSquare,
   CheckCircle2,
   ShoppingBag,
+  ChevronRight,
 } from "lucide-react";
 import { MenuItemImage } from "@/components/ui/menu-item-image";
 import { StarRatingInput } from "@/components/student/star-rating";
@@ -78,6 +79,12 @@ export function PreorderedItemsReviewSection({
   const [rating, setRating] = useState<number>(5);
   const [comment, setComment] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFullReview, setSelectedFullReview] = useState<{
+    item: PreorderedFoodItem;
+    rating: number;
+    comment: string | null;
+    date: string;
+  } | null>(null);
 
   // Extract distinct valid menu item IDs for review eligibility check
   const distinctMenuItemIds = useMemo(() => {
@@ -325,6 +332,32 @@ export function PreorderedItemsReviewSection({
                   </div>
                 </div>
 
+                {/* User's Existing Review Comment */}
+                {hasReviewed && reviewInfo.my_comment && (
+                  <div
+                    onClick={() =>
+                      setSelectedFullReview({
+                        item,
+                        rating: reviewInfo.my_rating || 5,
+                        comment: reviewInfo.my_comment,
+                        date: reviewInfo.my_updated_at || item.placed_at,
+                      })
+                    }
+                    className="rounded-xl bg-[#f8f5ee] dark:bg-[#121319] p-2.5 border border-[#e6e2da] dark:border-[#222533] cursor-pointer hover:border-[#dcc0bd] dark:hover:border-[#383d52] transition-all group/rev"
+                    title="Click to view full review"
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <p className="text-xs text-[#564240] dark:text-stone-300 leading-relaxed italic line-clamp-2">
+                      &ldquo;{reviewInfo.my_comment}&rdquo;
+                    </p>
+                    <div className="flex items-center justify-end text-[10px] font-semibold text-[#6c1d18] dark:text-[#ffb4ab] mt-1 gap-0.5 group-hover/rev:underline">
+                      <span>View full review</span>
+                      <ChevronRight className="w-3 h-3 group-hover/rev:translate-x-0.5 transition-transform" />
+                    </div>
+                  </div>
+                )}
+
                 {/* Footer with Rating Status and Action Button */}
                 <div className="pt-2 border-t border-[#e6e2da]/70 dark:border-[#262836] flex items-center justify-between gap-2">
                   <div className="min-w-0">
@@ -512,6 +545,118 @@ export function PreorderedItemsReviewSection({
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Full Review Detail Modal with Smooth Transition */}
+      {selectedFullReview && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-xs p-0 sm:items-center sm:p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedFullReview(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-[#ffffff] dark:bg-[#181a24] border border-[#e6e2da] dark:border-[#262836] shadow-2xl p-5 space-y-4 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#e6e2da]/70 dark:border-[#262836]">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-[#f5f1eb] dark:bg-[#1a1c26] border border-[#e6e2da] dark:border-[#262836]">
+                  <MenuItemImage
+                    src={selectedFullReview.item.image_url}
+                    alt={selectedFullReview.item.name_snapshot}
+                    aspect="square"
+                    sizes="48px"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-[#1c1c17] dark:text-white leading-tight">
+                    {selectedFullReview.item.name_snapshot}
+                  </h3>
+                  <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Your Verified Review</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedFullReview(null)}
+                className="w-8 h-8 rounded-full bg-[#f1ede6] dark:bg-[#202330] hover:bg-[#e6e2da] dark:hover:bg-[#2d3142] text-[#564240] dark:text-stone-300 flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close review details"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Context Item & Date */}
+            <div className="flex items-center justify-between text-xs text-[#89726f] dark:text-stone-400 font-mono">
+              <span>Order #{selectedFullReview.item.order_code}</span>
+              <span>{formatOrderDate(selectedFullReview.date)}</span>
+            </div>
+
+            {/* Rating Stars Showcase */}
+            <div className="rounded-xl bg-[#f8f5ee] dark:bg-[#121319] p-3 border border-[#e6e2da] dark:border-[#222533] flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    className={`w-5 h-5 ${
+                      star <= selectedFullReview.rating
+                        ? "fill-amber-400 text-amber-500"
+                        : "text-stone-300 dark:text-stone-600"
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className="text-sm font-bold text-[#1c1c17] dark:text-white">
+                {selectedFullReview.rating}.0 / 5.0
+              </span>
+            </div>
+
+            {/* Complete Review Content */}
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-bold text-[#89726f] dark:text-stone-400 uppercase tracking-wider font-mono">
+                Your Feedback
+              </div>
+              <div className="rounded-xl bg-[#f8f5ee] dark:bg-[#121319] p-4 border border-[#e6e2da] dark:border-[#222533] text-xs sm:text-sm text-[#1c1c17] dark:text-white leading-relaxed whitespace-pre-wrap break-words min-h-[80px]">
+                {selectedFullReview.comment ? (
+                  selectedFullReview.comment
+                ) : (
+                  <span className="text-[#89726f] dark:text-stone-400 italic">
+                    Rated without additional written comments.
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const item = selectedFullReview.item;
+                  setSelectedFullReview(null);
+                  handleOpenReview(item);
+                }}
+                className="flex-1 min-h-[44px] text-xs font-semibold rounded-xl border-[#e6e2da] dark:border-[#262836]"
+              >
+                Edit Review
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setSelectedFullReview(null)}
+                className="flex-1 min-h-[44px] text-xs font-bold rounded-xl bg-[#6c1d18] hover:bg-[#591612] dark:bg-[#9e4300] text-white"
+              >
+                Close
+              </Button>
+            </div>
           </div>
         </div>
       )}
