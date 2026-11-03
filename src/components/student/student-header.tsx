@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
-import { Leaf } from "lucide-react";
+import { User } from "lucide-react";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
@@ -12,6 +12,8 @@ import { getNotificationsAction } from "@/server/actions/notifications";
 import { NotificationBell } from "@/components/student/notification-bell";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
+import { isProfileHeaderActive } from "@/lib/student-nav";
+import { cn } from "@/lib/utils";
 
 interface StudentHeaderProps {
   userId: string;
@@ -22,7 +24,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
   const router = useRouter();
   const pathname = usePathname();
   const { startTransition } = useNavigationTransition();
-  const isHealthy = pathname === "/healthy";
+  const isProfileActive = isProfileHeaderActive(pathname);
   const [unreadCount, setUnreadCount] = useState<number>(initialUnreadCount);
   const toastedNotificationIds = useRef<Set<string>>(new Set());
 
@@ -101,8 +103,8 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
 
   return (
     <header className="flex items-center justify-between pb-3.5 mb-2 border-b border-[#ded5c4] dark:border-[#1E202B]">
-      <Link href="/" prefetch={true} className="flex items-center gap-2.5 sm:gap-3 group min-h-[44px] py-1 select-none">
-        <div className="relative flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl overflow-hidden shadow-xs group-hover:scale-105 transition-transform bg-[#FFFDF5] dark:bg-[#1E202B] p-0.5 border border-black/5 dark:border-white/10">
+      <Link href="/" prefetch={true} className="flex items-center gap-2 sm:gap-3 group min-h-[44px] py-1 select-none min-w-0">
+        <div className="relative flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl overflow-hidden shadow-xs group-hover:scale-105 transition-transform bg-[#FFFDF5] dark:bg-[#1E202B] p-0.5 border border-black/5 dark:border-white/10">
           <Image
             src="/brand/campbite-logo.png"
             alt="C@mpBite"
@@ -113,7 +115,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
           />
         </div>
         <div className="flex flex-col justify-center min-w-0">
-          <span className="text-[10.5px] sm:text-xs font-brand tracking-[0.08em] sm:tracking-[0.12em] text-[#7a4500] dark:text-[#FACC15] font-medium leading-none uppercase select-none truncate">
+          <span className="text-[9.5px] xs:text-[10.5px] sm:text-xs font-brand tracking-[0.05em] sm:tracking-[0.12em] text-[#7a4500] dark:text-[#FACC15] font-medium leading-none uppercase select-none truncate">
             SKIP THE QUEUE, GRAB THE FOOD
           </span>
           <h1 className="select-none pt-1 leading-none">
@@ -123,7 +125,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
               alt="C@MPBITE"
               width={180}
               height={29}
-              className="h-6 sm:h-7 w-auto object-contain dark:hidden"
+              className="h-5 xs:h-6 sm:h-7 w-auto object-contain dark:hidden"
               priority
             />
             <Image
@@ -131,43 +133,42 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
               alt="C@MPBITE"
               width={180}
               height={29}
-              className="h-6 sm:h-7 w-auto object-contain hidden dark:block"
+              className="h-5 xs:h-6 sm:h-7 w-auto object-contain hidden dark:block"
               priority
             />
           </h1>
         </div>
       </Link>
 
-      <div className="flex items-center gap-1.5 sm:gap-2">
-        <Link
-          href={isHealthy ? "/" : "/healthy"}
-          prefetch={true}
-          onClick={() => {
-            startTransition(isHealthy ? "/" : "/healthy", isHealthy ? "Campus Dining" : "Healthy Mode");
-          }}
-          className={`group/healthy h-10 sm:h-11 px-2.5 sm:px-3.5 rounded-xl border font-bold text-xs flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all select-none cursor-pointer ${
-            isHealthy
-              ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-              : "border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 hover:border-emerald-500/60 hover:shadow-[0_0_12px_rgba(16,185,129,0.2)]"
-          }`}
-          title={isHealthy ? "Back to C@mpBite menu" : "Healthy Mode & High-Protein Fuel"}
-          aria-label="Healthy Mode"
-        >
-          <Leaf
-            className={`h-4 w-4 shrink-0 transition-transform duration-300 group-hover/healthy:rotate-12 ${
-              isHealthy ? "text-white" : "text-emerald-600 dark:text-emerald-400"
-            }`}
-          />
-          <span className="font-extrabold tracking-tight">Healthy</span>
-          <span className="hidden sm:inline font-extrabold tracking-tight">
-            {isHealthy ? "Active" : "Mode"}
-          </span>
-        </Link>
-
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         {/* Light & Dark Theme Toggle Button */}
         <ThemeToggle />
 
+        {/* Notification Bell with unread badge */}
         <NotificationBell unreadCount={unreadCount} />
+
+        {/* Profile Button (far right) */}
+        <Link
+          href="/profile"
+          prefetch={true}
+          onClick={() => {
+            if (!isProfileActive) {
+              startTransition("/profile", "Student Profile");
+            }
+          }}
+          className={cn(
+            "relative flex h-10 w-10 sm:h-11 sm:w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full border transition-all active:scale-95 shadow-sm select-none cursor-pointer",
+            isProfileActive
+              ? "bg-[#181615] text-[#fe7543] border-[#fe7543] dark:bg-[#121319] dark:text-[#FBBF24] dark:border-[#FBBF24] shadow-[0_0_12px_rgba(254,117,67,0.3)] dark:shadow-[0_0_12px_rgba(251,191,36,0.25)]"
+              : "bg-[#1b1917] dark:bg-[#121319] border-[#36322e] dark:border-[#222533] text-[#ded5c4] dark:text-slate-300 hover:text-[#f5efe4] dark:hover:text-white hover:border-[#d9531e]/70 dark:hover:border-[#FBBF24]/50"
+          )}
+          aria-label="Profile"
+          title="Profile"
+          aria-current={isProfileActive ? "page" : undefined}
+        >
+          <User className="h-4 w-4 sm:h-5 sm:w-5" />
+          <span className="sr-only">Profile</span>
+        </Link>
       </div>
     </header>
   );

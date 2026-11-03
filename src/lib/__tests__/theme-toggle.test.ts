@@ -39,20 +39,23 @@ describe("Light and Dark Theme Toggle Feature", () => {
     expect(content).toContain("suppressHydrationWarning");
   });
 
-  it("places ThemeToggle directly adjacent to the Healthy Mode button in StudentHeader", () => {
+  it("places ThemeToggle, NotificationBell, and Profile button in exact sequence in StudentHeader", () => {
     expect(fs.existsSync(headerPath)).toBe(true);
     const content = fs.readFileSync(headerPath, "utf-8");
 
     expect(content).toContain("ThemeToggle");
-    expect(content).toContain('aria-label="Healthy Mode"');
-    // Ensure ThemeToggle appears right after the Healthy Mode Link
-    const healthyIndex = content.indexOf('aria-label="Healthy Mode"');
+    expect(content).toContain("NotificationBell");
+    expect(content).toContain('aria-label="Profile"');
+    expect(content).not.toContain('aria-label="Healthy Mode"');
+
+    // Ensure order is ThemeToggle, NotificationBell, Profile (Profile at the far right)
     const toggleIndex = content.indexOf("<ThemeToggle");
     const bellIndex = content.indexOf("<NotificationBell");
+    const profileIndex = content.indexOf('aria-label="Profile"');
 
-    expect(healthyIndex).toBeGreaterThan(-1);
-    expect(toggleIndex).toBeGreaterThan(healthyIndex);
+    expect(toggleIndex).toBeGreaterThan(-1);
     expect(bellIndex).toBeGreaterThan(toggleIndex);
+    expect(profileIndex).toBeGreaterThan(bellIndex);
   });
 });
 

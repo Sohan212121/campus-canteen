@@ -5,13 +5,14 @@ import { usePathname } from "next/navigation";
 import {
   Home,
   UtensilsCrossed,
+  Leaf,
   ShoppingCart,
   Receipt,
-  User,
 } from "lucide-react";
 
 import { useCartStore } from "@/lib/cart-store";
 import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
+import { isBottomNavActive } from "@/lib/student-nav";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -19,14 +20,15 @@ interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   isCart?: boolean;
+  transitionTitle?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Home", href: "/", icon: Home },
-  { label: "Menu", href: "/menu", icon: UtensilsCrossed },
-  { label: "Cart", href: "/cart", icon: ShoppingCart, isCart: true },
-  { label: "Orders", href: "/orders", icon: Receipt },
-  { label: "Profile", href: "/profile", icon: User },
+  { label: "Home", href: "/", icon: Home, transitionTitle: "Campus Dining" },
+  { label: "Menu", href: "/menu", icon: UtensilsCrossed, transitionTitle: "Canteen Menu" },
+  { label: "Healthy", href: "/healthy", icon: Leaf, transitionTitle: "Healthy Mode" },
+  { label: "Cart", href: "/cart", icon: ShoppingCart, isCart: true, transitionTitle: "Your Cart" },
+  { label: "Orders", href: "/orders", icon: Receipt, transitionTitle: "Active Orders" },
 ];
 
 export function StudentBottomNav() {
@@ -42,11 +44,7 @@ export function StudentBottomNav() {
     >
       <div className="mx-auto flex max-w-md items-center justify-around px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {NAV_ITEMS.map((item) => {
-          const isActive =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.href);
-
+          const isActive = isBottomNavActive(item.href, pathname);
           const Icon = item.icon;
 
           return (
@@ -54,9 +52,10 @@ export function StudentBottomNav() {
               key={item.href}
               href={item.href}
               prefetch={true}
+              aria-current={isActive ? "page" : undefined}
               onClick={() => {
                 if (!isActive) {
-                  startTransition(item.href, item.label);
+                  startTransition(item.href, item.transitionTitle || item.label);
                 }
               }}
               className={cn(
