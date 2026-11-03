@@ -207,6 +207,7 @@ export function StudentHomeView({
   const [selectedMeal, setSelectedMeal] = useState<MealType>("all");
   const [isVegOnly, setIsVegOnly] = useState(false);
   const [inStockOnly, setInStockOnly] = useState(false);
+  const [under50Only, setUnder50Only] = useState(false);
   const [under100Only, setUnder100Only] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [activeCategoryTile, setActiveCategoryTile] = useState<FoodCategory | null>(null);
@@ -359,6 +360,11 @@ export function StudentHomeView({
         return false;
       }
 
+      // Under ₹50 filter (5,000 paise)
+      if (under50Only && item.price_paise > 5000) {
+        return false;
+      }
+
       // Under ₹100 filter (10,000 paise)
       if (under100Only && item.price_paise > 10000) {
         return false;
@@ -384,6 +390,7 @@ export function StudentHomeView({
     selectedCategory,
     isVegOnly,
     inStockOnly,
+    under50Only,
     under100Only,
     searchQuery,
     categoryMap,
@@ -396,6 +403,7 @@ export function StudentHomeView({
     selectedCategory !== "all" ||
     isVegOnly ||
     inStockOnly ||
+    under50Only ||
     under100Only;
 
   const handleResetFilters = useCallback(() => {
@@ -405,6 +413,7 @@ export function StudentHomeView({
     setSelectedCategory("all");
     setIsVegOnly(false);
     setInStockOnly(false);
+    setUnder50Only(false);
     setUnder100Only(false);
   }, []);
 
@@ -658,7 +667,7 @@ export function StudentHomeView({
           </div>
         </div>
 
-        {/* Smart Quick Filter Chips (In Stock, Under ₹100, Healthy Mode) */}
+        {/* Smart Quick Filter Chips (In Stock, Under ₹50, Under ₹100, Healthy Mode) */}
         <div className="flex items-center gap-2 flex-wrap pt-0.5">
           <Link
             href="/healthy"
@@ -666,7 +675,7 @@ export function StudentHomeView({
             onClick={() => {
               startTransition("/healthy", "Healthy Mode");
             }}
-            className="min-h-[36px] h-9 px-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs font-headline tracking-wide uppercase border-2 border-emerald-900/40"
+            className="min-h-[36px] h-9 px-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs font-headline tracking-wide uppercase border border-emerald-900/40"
             aria-label="Healthy Mode & High-Protein Fuel"
           >
             <Leaf className="h-3.5 w-3.5" />
@@ -679,10 +688,10 @@ export function StudentHomeView({
               setInStockOnly((prev) => !prev);
               scrollToFoodSection();
             }}
-            className={`min-h-[36px] h-9 px-3.5 rounded-xl border-2 text-xs font-headline uppercase tracking-wider font-extrabold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+            className={`min-h-[36px] h-9 px-3.5 rounded-xl border text-xs font-headline uppercase tracking-wider font-extrabold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               inStockOnly
                 ? "bg-[#1b1917] dark:bg-[#1C1F2B] border-[#181513] dark:border-[#FBBF24] text-[#d97706] dark:text-[#FBBF24] shadow-xs"
-                : "bg-[#eae2d2] dark:bg-[#121319] border-[#181513]/40 dark:border-[#222533] text-[#181513] dark:text-slate-100 hover:border-[#181513]"
+                : "bg-[#eae2d2] dark:bg-[#121319] border-[#181513]/35 dark:border-[#222533] text-[#181513] dark:text-slate-100 hover:border-[#181513]"
             }`}
           >
             <span className={`h-2.5 w-2.5 rounded-full ${inStockOnly ? "bg-[#d97706] dark:bg-[#FBBF24]" : "bg-emerald-600"}`} />
@@ -692,16 +701,38 @@ export function StudentHomeView({
           <button
             type="button"
             onClick={() => {
-              setUnder100Only((prev) => !prev);
+              setUnder50Only((prev) => {
+                const next = !prev;
+                if (next) setUnder100Only(false);
+                return next;
+              });
               scrollToFoodSection();
             }}
-            className={`min-h-[36px] h-9 px-3.5 rounded-xl border-2 text-xs font-headline uppercase tracking-wider font-extrabold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
-              under100Only
+            className={`min-h-[36px] h-9 px-3.5 rounded-xl border text-xs font-headline uppercase tracking-wider font-extrabold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+              under50Only
                 ? "bg-[#1b1917] dark:bg-[#1C1F2B] border-[#181513] dark:border-[#FBBF24] text-[#d97706] dark:text-[#FBBF24] shadow-xs"
-                : "bg-[#eae2d2] dark:bg-[#121319] border-[#181513]/40 dark:border-[#222533] text-[#181513] dark:text-slate-100 hover:border-[#181513]"
+                : "bg-[#eae2d2] dark:bg-[#121319] border-[#181513]/35 dark:border-[#222533] text-[#181513] dark:text-slate-100 hover:border-[#181513]"
             }`}
           >
-            <span>💰</span>
+            <span>Under ₹50</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setUnder100Only((prev) => {
+                const next = !prev;
+                if (next) setUnder50Only(false);
+                return next;
+              });
+              scrollToFoodSection();
+            }}
+            className={`min-h-[36px] h-9 px-3.5 rounded-xl border text-xs font-headline uppercase tracking-wider font-extrabold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+              under100Only
+                ? "bg-[#1b1917] dark:bg-[#1C1F2B] border-[#181513] dark:border-[#FBBF24] text-[#d97706] dark:text-[#FBBF24] shadow-xs"
+                : "bg-[#eae2d2] dark:bg-[#121319] border-[#181513]/35 dark:border-[#222533] text-[#181513] dark:text-slate-100 hover:border-[#181513]"
+            }`}
+          >
             <span>Under ₹100</span>
           </button>
 
@@ -713,7 +744,7 @@ export function StudentHomeView({
                 handleResetFilters();
                 scrollToFoodSection();
               }}
-              className="min-h-[36px] h-9 px-3 rounded-xl border-2 border-red-600/50 bg-red-600/10 hover:bg-red-600/20 text-red-700 dark:text-red-400 text-xs font-headline uppercase tracking-wider font-black transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+              className="min-h-[36px] h-9 px-3 rounded-xl border border-red-600/50 bg-red-600/10 hover:bg-red-600/20 text-red-700 dark:text-red-400 text-xs font-headline uppercase tracking-wider font-black transition-all flex items-center gap-1 cursor-pointer active:scale-95"
             >
               <X className="h-3.5 w-3.5 stroke-[3]" />
               <span>Reset</span>
