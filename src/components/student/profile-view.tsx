@@ -115,47 +115,8 @@ export function ProfileView({
           <span className="text-7xl font-black text-white/[0.05]">@</span>
         </div>
 
-        {/* Top Pass Header: NFC & Live State */}
-        <div className="relative z-10 flex items-center justify-between pb-3.5 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            {/* Contactless Wave Icon */}
-            <div className="w-6 h-6 rounded-lg bg-white/10 backdrop-blur-md flex items-center justify-center text-[#ffdad6] border border-white/10">
-              <svg
-                className="w-3.5 h-3.5 text-[#ffdad6]"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  d="M8.5 14.5A5 5 0 0115.5 14.5M6 11a8.5 8.5 0 0112 0M3.5 7.5a12 12 0 0117 0"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                />
-              </svg>
-            </div>
-            <div>
-              <span className="text-[9px] font-bold tracking-widest text-[#ffdad6] uppercase font-mono block leading-none">
-                CAMPUS DIGITAL PASS
-              </span>
-              <span className="text-[8px] text-[#ffdad6]/60 font-mono tracking-wider">
-                TAP TO PICKUP
-              </span>
-            </div>
-          </div>
-
-          {/* Live Pulse Status Badge */}
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/80 border border-emerald-400/40 text-emerald-300 text-[10px] font-semibold backdrop-blur-md shadow-xs">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-            </span>
-            <span className="font-mono">Active Pre-Order Pass</span>
-          </div>
-        </div>
-
         {/* Student Identity Row */}
-        <div className="relative z-10 flex items-center gap-3.5 pt-4">
+        <div className="relative z-10 flex items-center gap-3.5 pt-1 pb-1">
           {/* Avatar with Camera Icon Overlay & Verified Badge */}
           <div className="relative group/avatar flex-shrink-0">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-md border border-white/25 flex items-center justify-center text-white shadow-inner relative overflow-hidden">
