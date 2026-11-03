@@ -81,7 +81,7 @@ export function ProfileView({
           2. DIGITAL STUDENT ID PASS (APPLE WALLET / NEO-FINTECH ELEVATION)
           ========================================================================= */}
       <div
-        className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#5c0d08] via-[#480806] to-[#260202] text-white p-5 shadow-[0_16px_40px_-8px_rgba(78,6,6,0.38),0_4px_12px_rgba(0,0,0,0.12)] border border-white/20 select-none group transition-all"
+        className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#5c0d08] via-[#480806] to-[#260202] text-white p-6 sm:p-7 min-h-[215px] flex flex-col justify-between shadow-[0_16px_40px_-8px_rgba(78,6,6,0.38),0_4px_12px_rgba(0,0,0,0.12)] border border-white/20 select-none group transition-all"
         data-purpose="digital-id-pass"
       >
         {/* Holographic Sheen & Geometric Radial Accents */}
@@ -106,20 +106,20 @@ export function ProfileView({
         </div>
 
         {/* Student Identity Row */}
-        <div className="relative z-10 flex items-center gap-3.5 pt-1 pb-1">
+        <div className="relative z-10 flex items-center gap-4 my-auto pt-3 pb-3">
           {/* Avatar with Camera Icon Overlay & Verified Badge */}
           <div className="relative group/avatar flex-shrink-0">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-md border border-white/25 flex items-center justify-center text-white shadow-inner relative overflow-hidden">
-              <User className="w-8 h-8 text-[#ffdad6]" />
+            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-md border border-white/25 flex items-center justify-center text-white shadow-inner relative overflow-hidden">
+              <User className="w-9 h-9 sm:w-10 sm:h-10 text-[#ffdad6]" />
             </div>
 
             {/* Verified Checkmark Badge */}
             <div
-              className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-[#480806] flex items-center justify-center shadow-md"
+              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-[#480806] flex items-center justify-center shadow-md"
               title="Verified Student ID"
             >
               <svg
-                className="w-3 h-3 text-white"
+                className="w-3.5 h-3.5 text-white"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -135,31 +135,31 @@ export function ProfileView({
           </div>
 
           {/* Identity Details */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-black text-white tracking-tight leading-none truncate font-headline">
+              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight truncate font-headline">
                 {fullNameDisplay}
               </h2>
             </div>
-            <div className="flex items-center gap-2 mt-1.5 font-mono text-xs text-[#ffdad6]/90">
-              <span className="font-bold">ID: {collegeIdDisplay}</span>
+            <div className="flex items-center gap-2 font-mono text-xs sm:text-sm text-[#ffdad6]/90">
+              <span className="font-bold tracking-wide">ID: {collegeIdDisplay}</span>
             </div>
           </div>
         </div>
 
         {/* Card Bottom Strip with Micro Barcode Strip */}
-        <div className="relative z-10 mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-[#ffdad6]/80 font-mono">
-          <div className="flex items-center gap-2">
+        <div className="relative z-10 mt-4 pt-3.5 border-t border-white/15 flex items-center justify-between text-[11px] text-[#ffdad6]/80 font-mono">
+          <div className="flex items-center gap-2.5">
             {/* Barcode micro-strip accent */}
             <div
-              className="w-14 h-4 text-[#ffdad6]/70 rounded-xs"
+              className="w-16 h-5 text-[#ffdad6]/70 rounded-xs"
               style={{
                 background:
                   "repeating-linear-gradient(90deg, currentColor 0, currentColor 2px, transparent 2px, transparent 4px, currentColor 4px, currentColor 7px, transparent 7px, transparent 9px, currentColor 9px, currentColor 10px)",
               }}
               title={`Barcode ${collegeIdDisplay}`}
             />
-            <span className="text-[10px] text-[#ffdad6]/70 uppercase">
+            <span className="text-[11px] font-bold text-[#ffdad6]/80 uppercase tracking-wider">
               {profile.college_id ? `CS-${profile.college_id}` : "CS-2024-ID"}
             </span>
           </div>
