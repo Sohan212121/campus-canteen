@@ -410,10 +410,6 @@ export function ProfileView({
                 <Mail className="w-3.5 h-3.5 text-[#9e4300] dark:text-[#FBBF24]" />
                 Campus Account &amp; Login Email
               </span>
-              <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-100/80 dark:bg-emerald-950/80 px-2 py-0.5 rounded font-mono border border-emerald-400/30 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Single Sign-On
-              </span>
             </div>
 
             <div className="bg-[#ffffff] dark:bg-[#181a24] rounded-xl p-3 border border-[#e6e2da] dark:border-[#262836] flex items-center justify-between shadow-2xs">
