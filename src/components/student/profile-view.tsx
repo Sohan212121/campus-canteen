@@ -193,11 +193,11 @@ export function ProfileView({
             <button
               type="button"
               onClick={handlePhotoClick}
-              className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-gradient-to-tr from-[#ffdad6] to-white text-[#4e0606] border-2 border-[#480806] flex items-center justify-center shadow-md hover:scale-110 active:scale-95 transition-all cursor-pointer z-20 group/cam"
+              className="absolute -top-2 -right-2 w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-full bg-gradient-to-tr from-[#ffdad6] via-white to-white text-[#4e0606] border-2 border-[#480806] flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all cursor-pointer z-20 group/cam"
               title="Upload profile photo"
               aria-label="Upload profile photo"
             >
-              <Camera className="w-3 h-3 text-[#4e0606] transition-transform group-hover/cam:rotate-12" />
+              <Camera className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-[#4e0606] stroke-[2.2] transition-transform group-hover/cam:rotate-12" />
             </button>
           </div>
 
