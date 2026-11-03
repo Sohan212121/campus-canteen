@@ -69,21 +69,12 @@ export function ProfileView({
   return (
     <div className="space-y-4 pt-2">
       {/* =========================================================================
-          1. TITLE SECTION WITH SUBHEADING BADGE
+          1. TITLE SECTION
           ========================================================================= */}
-      <section className="space-y-1" data-purpose="title-section">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-extrabold tracking-tight text-[#1c1c17] dark:text-[#f4f0e8]">
-            Your Profile
-          </h1>
-          <span className="text-[10px] font-mono font-semibold px-2.5 py-0.5 bg-[#f1ede6] dark:bg-[#16171E] rounded-full text-[#6c1d18] dark:text-[#ffb4ab] border border-[#e6e2da] dark:border-[#262836] shadow-xs flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Student Portal
-          </span>
-        </div>
-        <p className="text-xs text-[#564240] dark:text-stone-400 font-medium leading-relaxed">
-          Manage your campus account credentials, contactless pass &amp; session.
-        </p>
+      <section data-purpose="title-section">
+        <h1 className="text-2xl font-extrabold tracking-tight text-[#1c1c17] dark:text-[#f4f0e8]">
+          Your Profile
+        </h1>
       </section>
 
       {/* =========================================================================
