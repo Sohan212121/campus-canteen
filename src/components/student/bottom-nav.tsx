@@ -45,6 +45,7 @@ export function StudentBottomNav() {
       <div className="mx-auto flex max-w-md items-center justify-around px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {NAV_ITEMS.map((item) => {
           const isActive = isBottomNavActive(item.href, pathname);
+          const isHealthyItem = item.href === "/healthy";
           const Icon = item.icon;
 
           return (
@@ -61,16 +62,26 @@ export function StudentBottomNav() {
               className={cn(
                 "relative flex flex-1 flex-col items-center justify-center min-h-[50px] min-w-[50px] py-0.5 rounded-xl transition-colors",
                 isActive
-                  ? "text-[#1d1713] dark:text-[#FBBF24] font-bold"
-                  : "text-[#635549] dark:text-slate-400 hover:text-[#1d1713] dark:hover:text-[#FBBF24] active:scale-95"
+                  ? isHealthyItem
+                    ? "text-emerald-700 dark:text-emerald-400 font-bold"
+                    : "text-[#1d1713] dark:text-[#FBBF24] font-bold"
+                  : isHealthyItem
+                    ? "text-[#635549] dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 active:scale-95"
+                    : "text-[#635549] dark:text-slate-400 hover:text-[#1d1713] dark:hover:text-[#FBBF24] active:scale-95"
               )}
             >
               <div className="relative">
                 {isActive ? (
-                  <div className="w-8 h-8 rounded-full bg-[#181615] dark:bg-[#121319] dark:border dark:border-[#222533] flex items-center justify-center text-[#fe7543] dark:text-[#FBBF24] shadow-sm relative">
-                    <Icon className="h-4 w-4 stroke-[2.25]" />
-                    <span className="hidden dark:block absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#EF4444]" />
-                  </div>
+                  isHealthyItem ? (
+                    <div className="w-8 h-8 rounded-full bg-emerald-600 dark:bg-emerald-500 flex items-center justify-center text-white shadow-sm shadow-emerald-600/30 dark:shadow-emerald-500/20 relative">
+                      <Icon className="h-4 w-4 stroke-[2.25] text-white" />
+                    </div>
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-[#181615] dark:bg-[#121319] dark:border dark:border-[#222533] flex items-center justify-center text-[#fe7543] dark:text-[#FBBF24] shadow-sm relative">
+                      <Icon className="h-4 w-4 stroke-[2.25]" />
+                      <span className="hidden dark:block absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#EF4444]" />
+                    </div>
+                  )
                 ) : (
                   <div className="w-8 h-8 flex items-center justify-center">
                     <Icon className="h-5 w-5 stroke-[1.75]" />
