@@ -7,64 +7,69 @@ export default async function OrdersPage() {
   const profile = await requireRole(["student"]);
   const supabase = await createReadOnlyClient();
 
-  // 1. Fetch active orders (PLACED, ACCEPTED, PREPARING, READY)
-  const { data: activeData } = await supabase
-    .from("orders")
-    .select(`
-      id,
-      order_code,
-      status,
-      total_paise,
-      placed_at,
-      estimated_ready_at,
-      pickup_window_end,
-      canteens (
-        name,
-        location
-      ),
-      order_items (
+  // Fetch active and past orders in parallel for instant loading
+  const [activeRes, pastRes] = await Promise.all([
+    supabase
+      .from("orders")
+      .select(`
         id,
-        name_snapshot,
-        quantity,
-        unit_price_paise,
-        menu_items (
-          image_url
+        order_code,
+        status,
+        total_paise,
+        placed_at,
+        estimated_ready_at,
+        pickup_window_end,
+        canteens (
+          name,
+          location
+        ),
+        order_items (
+          id,
+          name_snapshot,
+          quantity,
+          unit_price_paise,
+          menu_items (
+            image_url
+          )
         )
-      )
-    `)
-    .eq("user_id", profile.id)
-    .in("status", ["PLACED", "ACCEPTED", "PREPARING", "READY"])
-    .order("placed_at", { ascending: false });
+      `)
+      .eq("user_id", profile.id)
+      .in("status", ["PLACED", "ACCEPTED", "PREPARING", "READY"])
+      .order("placed_at", { ascending: false }),
 
-  // 2. Fetch past orders (first 20) with total count for pagination
-  const { data: pastData, count: pastCount } = await supabase
-    .from("orders")
-    .select(`
-      id,
-      order_code,
-      status,
-      total_paise,
-      placed_at,
-      estimated_ready_at,
-      pickup_window_end,
-      canteens (
-        name,
-        location
-      ),
-      order_items (
+    supabase
+      .from("orders")
+      .select(`
         id,
-        name_snapshot,
-        quantity,
-        unit_price_paise,
-        menu_items (
-          image_url
+        order_code,
+        status,
+        total_paise,
+        placed_at,
+        estimated_ready_at,
+        pickup_window_end,
+        canteens (
+          name,
+          location
+        ),
+        order_items (
+          id,
+          name_snapshot,
+          quantity,
+          unit_price_paise,
+          menu_items (
+            image_url
+          )
         )
-      )
-    `, { count: "exact" })
-    .eq("user_id", profile.id)
-    .not("status", "in", '("PLACED","ACCEPTED","PREPARING","READY")')
-    .order("placed_at", { ascending: false })
-    .range(0, 19);
+      `, { count: "exact" })
+      .eq("user_id", profile.id)
+      .not("status", "in", '("PLACED","ACCEPTED","PREPARING","READY")')
+      .order("placed_at", { ascending: false })
+      .range(0, 19),
+  ]);
+
+  const activeData = activeRes.data;
+  const pastData = pastRes.data;
+  const pastCount = pastRes.count;
 
   type RawItemRow = {
     id: string;

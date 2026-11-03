@@ -27,37 +27,39 @@ export default async function ProfilePage() {
   const profile = await requireRole(["student"]);
   const supabase = await createReadOnlyClient();
 
-  // Fetch auth user email
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Fetch user orders count and orders with items for the pre-ordered food review section
-  const { count: ordersCount, data: ordersWithItemsData } = await supabase
-    .from("orders")
-    .select(
-      `
-      id,
-      order_code,
-      status,
-      placed_at,
-      total_paise,
-      order_items (
+  // Fetch auth user and orders data in parallel for instant loading
+  const [userRes, ordersRes] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase
+      .from("orders")
+      .select(
+        `
         id,
-        menu_item_id,
-        name_snapshot,
-        quantity,
-        unit_price_paise,
-        menu_items (
-          image_url
+        order_code,
+        status,
+        placed_at,
+        total_paise,
+        order_items (
+          id,
+          menu_item_id,
+          name_snapshot,
+          quantity,
+          unit_price_paise,
+          menu_items (
+            image_url
+          )
         )
+      `,
+        { count: "exact" }
       )
-    `,
-      { count: "exact" }
-    )
-    .eq("user_id", profile.id)
-    .order("placed_at", { ascending: false })
-    .limit(30);
+      .eq("user_id", profile.id)
+      .order("placed_at", { ascending: false })
+      .limit(30),
+  ]);
+
+  const user = userRes.data?.user;
+  const ordersCount = ordersRes.count;
+  const ordersWithItemsData = ordersRes.data;
 
   const typedOrders = (ordersWithItemsData || []) as unknown as RawOrder[];
 
@@ -108,6 +110,7 @@ export default async function ProfilePage() {
       preorderedItems={preorderedItems}
       themeToggleSection={
         <section
+          key="theme-toggle"
           className="bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center justify-between"
           data-purpose="theme-toggle"
         >

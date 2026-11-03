@@ -60,14 +60,14 @@ export function StudentBottomNav() {
                 }
               }}
               className={cn(
-                "relative flex flex-1 flex-col items-center justify-center min-h-[50px] min-w-[50px] py-0.5 rounded-xl transition-colors",
+                "relative flex flex-1 flex-col items-center justify-center min-h-[50px] min-w-[50px] py-0.5 rounded-xl transition-all duration-100 active:scale-95 select-none",
                 isActive
                   ? isHealthyItem
                     ? "text-emerald-700 dark:text-emerald-400 font-bold"
                     : "text-[#1d1713] dark:text-[#FBBF24] font-bold"
                   : isHealthyItem
-                    ? "text-[#635549] dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 active:scale-95"
-                    : "text-[#635549] dark:text-slate-400 hover:text-[#1d1713] dark:hover:text-[#FBBF24] active:scale-95"
+                    ? "text-[#635549] dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400"
+                    : "text-[#635549] dark:text-slate-400 hover:text-[#1d1713] dark:hover:text-[#FBBF24]"
               )}
             >
               <div className="relative">
