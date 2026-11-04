@@ -66,4 +66,3 @@ describe("Navigation Transition & Tab Highlighting (Phase 2)", () => {
     });
   });
 });
-
