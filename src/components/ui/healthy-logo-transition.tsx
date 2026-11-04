@@ -15,89 +15,55 @@ export function HealthyLogoTransition({
   return (
     <div
       key="healthy-logo-transition-overlay"
-      className={`fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden pointer-events-auto select-none ${
-        isExiting ? "cb-backdrop-exit" : "cb-backdrop-enter"
+      className={`fixed inset-0 z-30 flex items-center justify-center overflow-hidden pointer-events-none select-none transition-opacity duration-180 ease-out ${
+        isExiting ? "opacity-0" : "opacity-100 animate-in fade-in duration-150"
       }`}
       role="status"
       aria-live="polite"
-      aria-label={`Loading ${destinationLabel}`}
+      aria-label={`Opening ${destinationLabel}`}
+      data-testid="healthy-logo-transition-overlay"
     >
-      {/* 100% Solid Deep Obsidian Jade Backdrop (prevents any background bleed) */}
-      <div className="absolute inset-0 bg-[#04120c]" />
-
-      {/* Stage Container with smooth enter/exit choreography */}
+      {/* Light brand-tinted translucent veil: keeps shell and skeleton visible beneath */}
       <div
-        className={`relative z-10 flex flex-col items-center ${
-          isExiting ? "cb-stage-exit" : "cb-stage-enter"
+        className="absolute inset-0 bg-emerald-950/15 dark:bg-emerald-950/40 backdrop-blur-[2px] pointer-events-none transition-opacity duration-180"
+        aria-hidden="true"
+      />
+
+      {/* Stage Container: Single non-looping entrance pop, completes within 280ms */}
+      <div
+        className={`relative z-10 flex flex-col items-center pointer-events-none transition-all duration-180 ease-out ${
+          isExiting ? "scale-95 opacity-0" : "scale-100 opacity-100 animate-in zoom-in-95 duration-250"
         }`}
       >
-        {/* Ambient radial emerald lighting centered behind the badge */}
-        <div
-          className="absolute -top-16 w-72 h-72 sm:w-84 sm:h-84 rounded-full bg-gradient-to-tr from-emerald-500/30 via-teal-500/20 to-transparent blur-3xl pointer-events-none cb-ambient-glow"
-          aria-hidden="true"
-        />
-
-        {/* Liquid Ripple Wave 1 (Emerald pulse ring) */}
-        <div
-          className="absolute top-2 w-36 h-36 sm:w-40 sm:h-40 rounded-3xl border border-emerald-400/25 pointer-events-none cb-ripple-1"
-          aria-hidden="true"
-        />
-
-        {/* Liquid Ripple Wave 2 (Teal secondary pulse ring) */}
-        <div
-          className="absolute top-2 w-36 h-36 sm:w-40 sm:h-40 rounded-3xl border border-teal-400/15 pointer-events-none cb-ripple-2"
-          aria-hidden="true"
-        />
-
-        {/* The Official Healthy Mode Logo Badge */}
-        <div className="relative group">
-          {/* Backlight halo casting on the obsidian backdrop */}
+        {/* Botanical Glass Badge (static non-looping glow) */}
+        <div className="relative group pointer-events-none">
           <div
-            className="absolute -inset-3.5 rounded-3xl bg-emerald-500/25 blur-xl opacity-90 animate-pulse"
-            aria-hidden="true"
-          />
+            className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-3xl overflow-hidden bg-gradient-to-br from-[#063b2c] via-[#092920] to-[#041a14] border border-emerald-500/40 shadow-lg flex items-center justify-center pointer-events-none"
+          >
+            <Leaf className="h-12 w-12 sm:h-14 sm:w-14 text-emerald-400 stroke-[2.2] select-none pointer-events-none drop-shadow-[0_0_12px_rgba(52,211,153,0.6)]" />
 
-          {/* Botanical Glass Badge */}
-          <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-[28px] overflow-hidden bg-gradient-to-br from-[#063b2c] via-[#092920] to-[#041a14] border border-emerald-500/40 shadow-[0_20px_50px_rgba(0,0,0,0.85),0_0_35px_rgba(16,185,129,0.25)] flex items-center justify-center">
-            <Leaf className="h-14 w-14 sm:h-16 sm:w-16 text-emerald-400 stroke-[2.2] select-none pointer-events-none drop-shadow-[0_0_18px_rgba(52,211,153,0.7)]" />
-
-            {/* Fluid Emerald Light Sweep Across the Surface */}
+            {/* Inner Bevel Highlight */}
             <div
-              className="absolute inset-y-0 w-24 -skew-x-25 bg-gradient-to-r from-transparent via-emerald-200/35 to-transparent pointer-events-none cb-light-sweep"
-              aria-hidden="true"
-            />
-
-            {/* Subtle Inner Bevel Highlight */}
-            <div
-              className="absolute inset-0 rounded-[28px] ring-1 ring-inset ring-emerald-400/30 pointer-events-none"
+              className="absolute inset-0 rounded-3xl ring-1 ring-inset ring-emerald-400/30 pointer-events-none"
               aria-hidden="true"
             />
           </div>
-
-          {/* Floating emerald bio-motes */}
-          <div
-            className="absolute -top-2 left-3 w-1.5 h-1.5 rounded-full bg-emerald-300 blur-[0.5px] pointer-events-none cb-mote-1"
-            aria-hidden="true"
-          />
-          <div
-            className="absolute -top-3 right-4 w-2 h-2 rounded-full bg-teal-300 blur-[0.5px] pointer-events-none cb-mote-2"
-            aria-hidden="true"
-          />
         </div>
 
-        {/* Premium Botanical Typography & Status Label */}
-        <div className="mt-7 flex flex-col items-center gap-1.5 text-center">
-          <span className="text-xs sm:text-sm font-brand tracking-[0.15em] text-emerald-400">
+        {/* High-contrast typography: 
+            Light mode: #064e3b on cream (6.8:1 ratio)
+            Dark mode: emerald-400 on dark (10.4:1 ratio) */}
+        <div className="mt-5 flex flex-col items-center gap-1.5 text-center pointer-events-none">
+          <span className="text-xs sm:text-sm font-brand tracking-[0.15em] text-[#064e3b] dark:text-emerald-400 font-bold">
             C@MPBITE • NUTRITION
           </span>
-          <div className="flex items-center gap-2 text-xs font-medium text-emerald-100">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-emerald-300/80">Entering</span>
-            <span className="text-white font-extrabold tracking-tight">{destinationLabel}</span>
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] border border-black/10 dark:border-white/15 shadow-xs backdrop-blur-xs text-xs font-medium">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400" />
+            <span className="text-emerald-950 dark:text-emerald-200">Opening</span>
+            <span className="text-[#064e3b] dark:text-white font-extrabold tracking-tight">
+              {destinationLabel}
+            </span>
           </div>
-          <span className="text-[10px] text-emerald-400/60 font-medium tracking-wide pt-0.5">
-            Calibrating fresh protein & nutrient fuel...
-          </span>
         </div>
       </div>
     </div>

@@ -35,7 +35,9 @@ export function StudentBottomNav() {
   const pathname = usePathname();
   const totalItemCount = useCartStore((s) => s.getTotalItemCount());
   const hasHydrated = useCartStore((s) => s.hasHydrated);
-  const { startTransition } = useNavigationTransition();
+  const { startTransition, activeNavPath } = useNavigationTransition();
+
+  const currentPath = activeNavPath || pathname;
 
   return (
     <nav
@@ -44,7 +46,7 @@ export function StudentBottomNav() {
     >
       <div className="mx-auto flex max-w-md items-center justify-around px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {NAV_ITEMS.map((item) => {
-          const isActive = isBottomNavActive(item.href, pathname);
+          const isActive = isBottomNavActive(item.href, currentPath);
           const isHealthyItem = item.href === "/healthy";
           const Icon = item.icon;
 
