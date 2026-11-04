@@ -37,8 +37,8 @@ export function LogoTransition({
   return (
     <div
       key="logo-transition-overlay"
-      className={`fixed inset-0 z-30 flex items-center justify-center overflow-hidden select-none ${
-        isExiting ? "cb-backdrop-exit pointer-events-none" : "cb-backdrop-enter"
+      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-hidden pointer-events-auto select-none ${
+        isExiting ? "cb-backdrop-exit" : "cb-backdrop-enter"
       }`}
       role="status"
       aria-live="polite"

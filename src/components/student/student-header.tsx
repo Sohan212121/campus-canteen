@@ -22,9 +22,8 @@ interface StudentHeaderProps {
 export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { startTransition, activeNavPath } = useNavigationTransition();
-  const currentPath = activeNavPath || pathname;
-  const isProfileActive = isProfileHeaderActive(currentPath);
+  const { startTransition } = useNavigationTransition();
+  const isProfileActive = isProfileHeaderActive(pathname);
   const [unreadCount, setUnreadCount] = useState<number>(initialUnreadCount);
   const toastedNotificationIds = useRef<Set<string>>(new Set());
 
