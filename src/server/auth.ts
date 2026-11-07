@@ -11,6 +11,7 @@ export type UserProfile = {
   role: "student" | "staff" | "admin";
   canteen_id: string | null;
   is_active: boolean;
+  email?: string | null;
 };
 
 /**
@@ -42,7 +43,12 @@ export const getCurrentUser = cache(async (): Promise<UserProfile | null> => {
 
   if (!profile) return null;
 
-  return profile as UserProfile;
+  const userProfile: UserProfile = { ...(profile as UserProfile) };
+  if (user.email) {
+    userProfile.email = user.email;
+  }
+
+  return userProfile;
 });
 
 export const ROLE_HOME = {

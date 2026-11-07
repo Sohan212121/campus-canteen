@@ -27,37 +27,34 @@ export default async function ProfilePage() {
   const profile = await requireRole(["student"]);
   const supabase = await createReadOnlyClient();
 
-  // Fetch auth user and orders data in parallel for instant loading
-  const [userRes, ordersRes] = await Promise.all([
-    supabase.auth.getUser(),
-    supabase
-      .from("orders")
-      .select(
-        `
+  // Fetch orders data for student profile (email is already available on profile from auth)
+  const ordersRes = await supabase
+    .from("orders")
+    .select(
+      `
+      id,
+      order_code,
+      status,
+      placed_at,
+      total_paise,
+      order_items (
         id,
-        order_code,
-        status,
-        placed_at,
-        total_paise,
-        order_items (
-          id,
-          menu_item_id,
-          name_snapshot,
-          quantity,
-          unit_price_paise,
-          menu_items (
-            image_url
-          )
+        menu_item_id,
+        name_snapshot,
+        quantity,
+        unit_price_paise,
+        menu_items (
+          image_url
         )
-      `,
-        { count: "exact" }
       )
-      .eq("user_id", profile.id)
-      .order("placed_at", { ascending: false })
-      .limit(30),
-  ]);
+    `,
+      { count: "exact" }
+    )
+    .eq("user_id", profile.id)
+    .order("placed_at", { ascending: false })
+    .limit(30);
 
-  const user = userRes.data?.user;
+  const email = profile.email || "";
   const ordersCount = ordersRes.count;
   const ordersWithItemsData = ordersRes.data;
 
@@ -104,7 +101,7 @@ export default async function ProfilePage() {
   return (
     <ProfileView
       profile={profile}
-      email={user?.email || ""}
+      email={email}
       ordersCount={ordersCount ?? 0}
       recentOrders={recentOrders}
       preorderedItems={preorderedItems}

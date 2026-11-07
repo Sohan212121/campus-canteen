@@ -83,6 +83,7 @@ describe("Sub-Step 3A: Per-request memoisation with React cache()", () => {
       // Request 2 (different request context: must not use Request 1's cache)
       await requestStorage.run(new Map(), async () => {
         const p3 = await fetchProfile("user-100");
+        expect(p3).toBeDefined();
         expect(queryCounter).toBe(2);
       });
     });
