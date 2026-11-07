@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { VoiceSearchButton } from "@/components/ui/voice-search-button";
 import { VegIndicator } from "@/components/student/veg-indicator";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
+import { formatPaise } from "@/lib/money";
 import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +45,7 @@ export interface SearchTakeoverProps {
   onOpenItem?: (item: MenuItemData) => void;
   triggerRect?: DOMRect | null;
   initialQuery?: string;
+  stayOnCurrentPage?: boolean;
 }
 
 export function SearchTakeover({
@@ -56,6 +58,7 @@ export function SearchTakeover({
   onOpenItem,
   triggerRect,
   initialQuery = "",
+  stayOnCurrentPage = false,
 }: SearchTakeoverProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -117,6 +120,13 @@ export function SearchTakeover({
     return getSearchSuggestions(effectiveItems, FOOD_CATEGORIES, debouncedQuery, 6);
   }, [effectiveItems, debouncedQuery]);
 
+  // Curated suggested food items with name & image
+  const suggestedDishes = useMemo(() => {
+    return effectiveItems
+      .filter((dish) => dish.is_active && dish.is_available)
+      .slice(0, 6);
+  }, [effectiveItems]);
+
   // Safe close handler that dismisses takeover and returns to the home screen
   const handleSafeClose = useCallback(() => {
     // 1. Immediately invoke onClose to close/unmount the takeover dialog
@@ -143,13 +153,15 @@ export function SearchTakeover({
       }
     }
 
-    // 5. Always ensure the user returns/redirects to the home screen ("/")
-    if (pathname !== "/") {
-      router.push("/");
-    } else {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    // 5. Always ensure the user returns/redirects to the home screen ("/") unless stayOnCurrentPage is true
+    if (!stayOnCurrentPage) {
+      if (pathname !== "/") {
+        router.push("/");
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     }
-  }, [onClose, pathname, router]);
+  }, [onClose, pathname, router, stayOnCurrentPage]);
 
   // Body scroll lock & data-search-takeover-open attribute management
   useEffect(() => {
@@ -178,7 +190,7 @@ export function SearchTakeover({
         document.body.removeAttribute("data-search-takeover-open");
         document.body.style.overflow = "";
       }
-      if (window.location.pathname !== "/") {
+      if (!stayOnCurrentPage && window.location.pathname !== "/") {
         router.push("/");
       }
     };
@@ -196,7 +208,7 @@ export function SearchTakeover({
       document.body.removeAttribute("data-search-takeover-open");
       document.body.style.overflow = originalOverflow;
     };
-  }, [isOpen, onClose, router]);
+  }, [isOpen, onClose, router, stayOnCurrentPage]);
 
   // FLIP animation: measure source bar rect and smoothly shift search box from old position to top slot
   useEffect(() => {
@@ -486,18 +498,56 @@ export function SearchTakeover({
                             : "hover:bg-black/5 dark:hover:bg-white/5 text-[#181513] dark:text-white"
                         )}
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           {suggestion.type === "category" ? (
-                            <Utensils className="h-4 w-4 text-primary shrink-0" />
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 text-primary">
+                              <Utensils className="h-5 w-5" />
+                            </div>
                           ) : (
-                            suggestion.dish && <VegIndicator isVeg={suggestion.dish.is_veg} />
+                            <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 border border-border/40 bg-muted/20 relative">
+                              {suggestion.dish?.image_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={suggestion.dish.image_url}
+                                  alt={suggestion.dish.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-base">🍲</div>
+                              )}
+                            </div>
                           )}
-                          <span className="truncate">{suggestion.title}</span>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              {suggestion.dish && <VegIndicator isVeg={suggestion.dish.is_veg} />}
+                              <span className="truncate font-bold text-sm text-foreground">
+                                {suggestion.title}
+                              </span>
+                            </div>
+                            {suggestion.dish && (
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                                {suggestion.dish.protein_g != null && (
+                                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                    {suggestion.dish.protein_g}g protein
+                                  </span>
+                                )}
+                                {suggestion.dish.calories_kcal != null && (
+                                  <span>{suggestion.dish.calories_kcal} kcal</span>
+                                )}
+                              </div>
+                            )}
+                            {!suggestion.dish && suggestion.subtitle && (
+                              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                                {suggestion.subtitle}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        {suggestion.subtitle && (
-                          <span className="text-[11px] font-medium text-muted-foreground shrink-0 uppercase tracking-wider">
-                            {suggestion.subtitle}
+                        {suggestion.dish && (
+                          <span className="text-xs font-mono font-bold text-foreground shrink-0">
+                            {formatPaise(suggestion.dish.price_paise)}
                           </span>
                         )}
                       </button>
@@ -545,6 +595,70 @@ export function SearchTakeover({
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#eae2d2] dark:bg-[#16171E] border border-[#ded5c4] dark:border-[#262836] text-xs font-semibold text-[#181513] dark:text-[#f8fafc] hover:border-primary active:scale-95 transition-all cursor-pointer shadow-2xs"
                 >
                   <span>{term}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* SUGGESTED FOOD ITEMS (Showcases food items with name & image) */}
+        {!query.trim() && suggestedDishes.length > 0 && (
+          <section aria-label="Suggested dishes" className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 font-headline">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                <span>Suggested Dishes</span>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {suggestedDishes.map((dish) => (
+                <button
+                  key={dish.id}
+                  type="button"
+                  onClick={() => {
+                    if (onOpenItem) {
+                      onOpenItem(dish);
+                      handleSafeClose();
+                    } else {
+                      executeSearch(dish.name);
+                    }
+                  }}
+                  className="w-full p-2.5 rounded-2xl border border-border/70 bg-card hover:border-primary/50 transition-all flex items-center gap-3 text-left cursor-pointer group shadow-2xs active:scale-[0.98]"
+                >
+                  <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-border/40 bg-muted/20">
+                    {dish.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={dish.image_url}
+                        alt={dish.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-lg">🥗</div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <VegIndicator isVeg={dish.is_veg} />
+                      <h4 className="text-xs sm:text-sm font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                        {dish.name}
+                      </h4>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      {dish.protein_g != null && (
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          {dish.protein_g}g protein
+                        </span>
+                      )}
+                      {dish.calories_kcal != null && (
+                        <span>{dish.calories_kcal} kcal</span>
+                      )}
+                      <span className="font-bold text-foreground ml-auto font-mono">
+                        {formatPaise(dish.price_paise)}
+                      </span>
+                    </div>
+                  </div>
                 </button>
               ))}
             </div>

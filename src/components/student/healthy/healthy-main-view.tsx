@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -29,6 +29,7 @@ import { TopProteinRow } from "@/components/student/healthy/top-protein-row";
 import { HealthyPreferencesSheet } from "@/components/student/healthy/healthy-preferences-sheet";
 import { HealthyNutritionSheet } from "@/components/student/healthy/healthy-nutrition-sheet";
 import { ProteinGoalCelebration } from "@/components/student/healthy/protein-goal-celebration";
+import { SearchTakeover } from "@/components/student/search/search-takeover";
 import { enrichAndFilterProteinMenuItems } from "@/lib/real-menu-nutrition";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
 
@@ -61,6 +62,38 @@ export function HealthyMainView({
   const [sortBy, setSortBy] = useState<"protein-desc" | "calories-asc" | "rating-desc">("protein-desc");
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [selectedDish, setSelectedDish] = useState<MenuItemData | null>(null);
+
+  // Search Takeover & Smooth Scroll states
+  const [isTakeoverOpen, setIsTakeoverOpen] = useState(false);
+  const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+  const searchBarContainerRef = useRef<HTMLDivElement>(null);
+  const catalogSectionRef = useRef<HTMLElement>(null);
+  const isMountedRef = useRef(false);
+
+  const openTakeover = useCallback(() => {
+    if (searchBarContainerRef.current) {
+      setTriggerRect(searchBarContainerRef.current.getBoundingClientRect());
+    }
+    setIsTakeoverOpen(true);
+  }, []);
+
+  const scrollToCatalog = useCallback(() => {
+    if (catalogSectionRef.current) {
+      catalogSectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
+
+  // Smooth scroll down to catalog when minProtein slider value is fixed/settled
+  useEffect(() => {
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      return;
+    }
+    const timer = setTimeout(() => {
+      scrollToCatalog();
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [minProtein, scrollToCatalog]);
 
   // Celebration state when daily protein goal is reached
   const [showCelebration, setShowCelebration] = useState(false);
@@ -125,47 +158,56 @@ export function HealthyMainView({
     const result = activeItems.filter((dish) => {
       if (!dish.is_active || !dish.is_available) return false;
 
-      // Search query filter
+      // Search query filter (matches name, description, or ingredients)
       if (searchQuery.trim().length > 0) {
         const q = searchQuery.toLowerCase().trim();
         const matchesName = dish.name.toLowerCase().includes(q);
         const matchesDesc = dish.description?.toLowerCase().includes(q);
-        if (!matchesName && !matchesDesc) return false;
+        const matchesIngredients = dish.ingredients?.some((ing) => ing.toLowerCase().includes(q));
+        if (!matchesName && !matchesDesc && !matchesIngredients) return false;
       }
 
       // Wellness category filter
       if (selectedCategory !== "all") {
         const lowerName = dish.name.toLowerCase();
+        const lowerDesc = dish.description?.toLowerCase() || "";
+        const lowerIngredients = dish.ingredients?.join(" ").toLowerCase() || "";
+        const combined = `${lowerName} ${lowerDesc} ${lowerIngredients}`;
+
         if (selectedCategory === "chicken") {
-          if (!lowerName.includes("chicken")) return false;
+          if (!combined.includes("chicken")) return false;
         } else if (selectedCategory === "eggs") {
-          if (!lowerName.includes("egg") && !lowerName.includes("omelette")) return false;
+          if (!combined.includes("egg") && !combined.includes("omelette") && !combined.includes("bhurji")) return false;
         } else if (selectedCategory === "paneer") {
-          if (!lowerName.includes("paneer")) return false;
+          if (!combined.includes("paneer")) return false;
         } else if (selectedCategory === "dal") {
           if (
-            !lowerName.includes("dal") &&
-            !lowerName.includes("rajma") &&
-            !lowerName.includes("chole") &&
-            !lowerName.includes("soya")
+            !combined.includes("dal") &&
+            !combined.includes("rajma") &&
+            !combined.includes("chole") &&
+            !combined.includes("soya") &&
+            !combined.includes("lentil") &&
+            !combined.includes("bean")
           ) {
             return false;
           }
         } else if (selectedCategory === "combos") {
           if (
-            !lowerName.includes("combo") &&
-            !lowerName.includes("thali") &&
-            !lowerName.includes("rice") &&
-            !lowerName.includes("chilla")
+            !combined.includes("combo") &&
+            !combined.includes("thali") &&
+            !combined.includes("rice") &&
+            !combined.includes("chilla") &&
+            !combined.includes("bowl")
           ) {
             return false;
           }
         } else if (selectedCategory === "shakes") {
           if (
-            !lowerName.includes("shake") &&
-            !lowerName.includes("lassi") &&
-            !lowerName.includes("smoothie") &&
-            !lowerName.includes("milk")
+            !combined.includes("shake") &&
+            !combined.includes("lassi") &&
+            !combined.includes("smoothie") &&
+            !combined.includes("milk") &&
+            !combined.includes("whey")
           ) {
             return false;
           }
@@ -240,7 +282,7 @@ export function HealthyMainView({
     toast.success(`Logged ${dish.name} (+${dish.protein_g}g protein)`);
   };
 
-  const isSheetOpen = isPreferencesOpen || selectedDish !== null || showCelebration;
+  const isSheetOpen = isPreferencesOpen || selectedDish !== null || showCelebration || isTakeoverOpen;
 
   return (
     <div className="-mx-4 -mt-3 px-4 pt-3 pb-28 bg-[#fcf9f2] dark:bg-transparent min-h-screen text-[#1c1c18] dark:text-foreground selection:bg-[#c2f02e] selection:text-[#00241a] space-y-4">
@@ -289,32 +331,43 @@ export function HealthyMainView({
       </div>
 
       {/* =========================================================================
-          SEARCH & FILTER BAR
+          SEARCH & FILTER BAR (Tapping opens full-screen SearchTakeover)
           ========================================================================= */}
       <div className="flex items-center gap-2 pt-0.5">
-        <div className="flex-1 h-12 rounded-full bg-white dark:bg-[#161311] shadow-[0_8px_24px_-4px_rgba(11,59,46,0.06)] dark:shadow-none border border-[#c0c8c3]/40 dark:border-[#3b533a]/60 px-4 flex items-center gap-2.5">
+        <div
+          ref={searchBarContainerRef}
+          onClick={openTakeover}
+          className="flex-1 h-12 rounded-full bg-white dark:bg-[#161311] shadow-[0_8px_24px_-4px_rgba(11,59,46,0.06)] dark:shadow-none border border-[#c0c8c3]/40 dark:border-[#3b533a]/60 px-4 flex items-center gap-2.5 cursor-pointer hover:border-[#10b981]/50 transition-colors"
+          role="search"
+        >
           <Search className="h-4.5 w-4.5 text-[#00241a] dark:text-white shrink-0" />
           <input
             type="text"
+            readOnly
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={openTakeover}
             placeholder="Search chicken, paneer, eggs, whey…"
-            className="w-full bg-transparent text-[#00241a] dark:text-white placeholder-[#414945]/60 dark:placeholder-stone-500 text-xs sm:text-sm outline-none font-medium"
+            className="w-full bg-transparent text-[#00241a] dark:text-white placeholder-[#414945]/60 dark:placeholder-stone-500 text-xs sm:text-sm outline-none font-medium cursor-pointer"
           />
           {searchQuery ? (
             <button
               type="button"
-              onClick={() => setSearchQuery("")}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSearchQuery("");
+                setTimeout(scrollToCatalog, 50);
+              }}
               aria-label="Clear search"
-              className="text-[#414945] dark:text-stone-400 hover:text-[#00241a] p-1"
+              className="text-[#414945] dark:text-stone-400 hover:text-[#00241a] p-1 cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>
           ) : (
             <button
               type="button"
+              onClick={openTakeover}
               aria-label="Voice search"
-              className="text-[#414945] dark:text-stone-400 hover:text-[#00241a] p-1"
+              className="text-[#414945] dark:text-stone-400 hover:text-[#00241a] p-1 cursor-pointer"
             >
               <Mic className="h-4 w-4" />
             </button>
@@ -495,7 +548,10 @@ export function HealthyMainView({
               <button
                 key={cat.id}
                 type="button"
-                onClick={() => setSelectedCategory(cat.id)}
+                onClick={() => {
+                  setSelectedCategory(cat.id);
+                  setTimeout(scrollToCatalog, 50);
+                }}
                 className={`shrink-0 h-9 px-4 rounded-full font-headline text-xs uppercase flex items-center gap-1.5 transition-all duration-150 active:scale-95 cursor-pointer ${
                   isSelected
                     ? "bg-[#c2f02e] text-[#00241a] font-bold shadow-xs"
@@ -541,6 +597,10 @@ export function HealthyMainView({
             step="5"
             value={minProtein}
             onChange={(e) => setMinProtein(Number(e.target.value))}
+            onPointerUp={() => setTimeout(scrollToCatalog, 50)}
+            onTouchEnd={() => setTimeout(scrollToCatalog, 50)}
+            onMouseUp={() => setTimeout(scrollToCatalog, 50)}
+            onKeyUp={() => setTimeout(scrollToCatalog, 50)}
             className="w-full h-2 bg-[#ebe8e1] dark:bg-stone-800 rounded-full appearance-none accent-[#506600] dark:accent-[#4CAF50] cursor-pointer"
           />
         </div>
@@ -558,7 +618,10 @@ export function HealthyMainView({
           {/* Veg Only Toggle */}
           <button
             type="button"
-            onClick={() => setIsVegOnly((prev) => !prev)}
+            onClick={() => {
+              setIsVegOnly((prev) => !prev);
+              setTimeout(scrollToCatalog, 50);
+            }}
             className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer font-headline ${
               isVegOnly
                 ? "bg-[#c2f02e] text-[#00241a] shadow-xs"
@@ -576,7 +639,10 @@ export function HealthyMainView({
           {/* < 500 kcal Toggle */}
           <button
             type="button"
-            onClick={() => setIsUnder500Kcal((prev) => !prev)}
+            onClick={() => {
+              setIsUnder500Kcal((prev) => !prev);
+              setTimeout(scrollToCatalog, 50);
+            }}
             className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer font-headline ${
               isUnder500Kcal
                 ? "bg-[#c2f02e] text-[#00241a] shadow-xs"
@@ -589,7 +655,10 @@ export function HealthyMainView({
           {/* High Protein Toggle */}
           <button
             type="button"
-            onClick={() => setIsHighProtein((prev) => !prev)}
+            onClick={() => {
+              setIsHighProtein((prev) => !prev);
+              setTimeout(scrollToCatalog, 50);
+            }}
             className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer font-headline ${
               isHighProtein
                 ? "bg-[#c2f02e] text-[#00241a] shadow-xs"
@@ -603,7 +672,10 @@ export function HealthyMainView({
           <div className="shrink-0 flex items-center gap-1 bg-[#f0eee7] dark:bg-[#1e291c] text-[#00241a] dark:text-[#ede7e1] text-xs px-2.5 h-8 rounded-full">
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              onChange={(e) => {
+                setSortBy(e.target.value as typeof sortBy);
+                setTimeout(scrollToCatalog, 50);
+              }}
               className="bg-transparent outline-none text-xs font-bold text-[#00241a] dark:text-[#ede7e1] cursor-pointer font-headline pr-1"
             >
               <option value="protein-desc">Protein: High to Low</option>
@@ -629,7 +701,11 @@ export function HealthyMainView({
       {/* =========================================================================
           CATALOG: ALL HIGH-PROTEIN MEALS (2-COLUMN GRID)
           ========================================================================= */}
-      <section className="space-y-3 pt-2">
+      <section
+        ref={catalogSectionRef}
+        id="healthy-dishes-catalog"
+        className="space-y-3 pt-2 scroll-mt-6"
+      >
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
             <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#506600] dark:text-[#81c784] font-headline">
@@ -643,6 +719,120 @@ export function HealthyMainView({
             {filteredDishes.length} Dishes
           </span>
         </div>
+
+        {/* ACTIVE FILTER FEEDBACK PILLS */}
+        {(searchQuery || selectedCategory !== "all" || minProtein > 10 || isVegOnly || isUnder500Kcal || isHighProtein) && (
+          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+            <span className="text-[10px] uppercase font-bold text-[#414945] dark:text-stone-400 mr-1">
+              Active:
+            </span>
+            {searchQuery && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-[#c2f02e]/30 dark:bg-emerald-950/60 text-[#00241a] dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-[#c2f02e]/60">
+                &ldquo;{searchQuery}&rdquo;
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setTimeout(scrollToCatalog, 50);
+                  }}
+                  className="cursor-pointer hover:opacity-75"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {selectedCategory !== "all" && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-[#c2f02e]/30 dark:bg-emerald-950/60 text-[#00241a] dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-[#c2f02e]/60">
+                {CATEGORY_CHIPS.find((c) => c.id === selectedCategory)?.label}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory("all");
+                    setTimeout(scrollToCatalog, 50);
+                  }}
+                  className="cursor-pointer hover:opacity-75"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {minProtein > 10 && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-[#c2f02e]/30 dark:bg-emerald-950/60 text-[#00241a] dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-[#c2f02e]/60">
+                {minProtein}g+ protein
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMinProtein(10);
+                    setTimeout(scrollToCatalog, 50);
+                  }}
+                  className="cursor-pointer hover:opacity-75"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {isVegOnly && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-[#c2f02e]/30 dark:bg-emerald-950/60 text-[#00241a] dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-[#c2f02e]/60">
+                Veg only
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsVegOnly(false);
+                    setTimeout(scrollToCatalog, 50);
+                  }}
+                  className="cursor-pointer hover:opacity-75"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {isUnder500Kcal && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-[#c2f02e]/30 dark:bg-emerald-950/60 text-[#00241a] dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-[#c2f02e]/60">
+                &lt; 500 kcal
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUnder500Kcal(false);
+                    setTimeout(scrollToCatalog, 50);
+                  }}
+                  className="cursor-pointer hover:opacity-75"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {isHighProtein && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-[#c2f02e]/30 dark:bg-emerald-950/60 text-[#00241a] dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-[#c2f02e]/60">
+                High protein (25g+)
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHighProtein(false);
+                    setTimeout(scrollToCatalog, 50);
+                  }}
+                  className="cursor-pointer hover:opacity-75"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setSelectedCategory("all");
+                setMinProtein(10);
+                setIsVegOnly(false);
+                setIsUnder500Kcal(false);
+                setIsHighProtein(false);
+                setTimeout(scrollToCatalog, 50);
+              }}
+              className="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline cursor-pointer ml-1"
+            >
+              Reset all
+            </button>
+          </div>
+        )}
 
         {filteredDishes.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[#c0c8c3]/60 dark:border-[#3b533a]/60 bg-white/60 dark:bg-[#1e291c]/40 p-8 text-center space-y-3 shadow-2xs">
@@ -817,6 +1007,35 @@ export function HealthyMainView({
         item={selectedDish}
         isOpen={selectedDish !== null}
         onClose={() => setSelectedDish(null)}
+      />
+
+      {/* =========================================================================
+          FULL-SCREEN SEARCH TAKEOVER: SUGGESTED DISHES WITH NAME & IMAGE
+          ========================================================================= */}
+      <SearchTakeover
+        isOpen={isTakeoverOpen}
+        onClose={() => {
+          setIsTakeoverOpen(false);
+          setTriggerRect(null);
+        }}
+        items={activeItems}
+        stayOnCurrentPage={true}
+        onSelectCategory={(category) => {
+          setIsTakeoverOpen(false);
+          setSearchQuery(category.label);
+          setTimeout(scrollToCatalog, 150);
+        }}
+        onSearchSubmit={(q) => {
+          setIsTakeoverOpen(false);
+          setSearchQuery(q);
+          setTimeout(scrollToCatalog, 150);
+        }}
+        onOpenItem={(dish) => {
+          setIsTakeoverOpen(false);
+          setSelectedDish(dish);
+        }}
+        triggerRect={triggerRect}
+        initialQuery={searchQuery}
       />
 
       {/* =========================================================================
