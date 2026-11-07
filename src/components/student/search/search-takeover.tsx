@@ -544,7 +544,7 @@ export function SearchTakeover({
           </section>
         )}
 
-        {/* SUGGESTED FOOD ITEMS (Showcases food items with name & image) */}
+        {/* SUGGESTED FOOD ITEMS (Showcases food items with name & image in square tiles) */}
         {!query.trim() && suggestedDishes.length > 0 && (
           <section aria-label="Suggested dishes" className="space-y-2.5">
             <div className="flex items-center justify-between">
@@ -554,7 +554,7 @@ export function SearchTakeover({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {suggestedDishes.map((dish) => (
                 <button
                   key={dish.id}
@@ -567,40 +567,31 @@ export function SearchTakeover({
                       executeSearch(dish.name);
                     }
                   }}
-                  className="w-full p-2.5 rounded-2xl border border-border/70 bg-card hover:border-primary/50 transition-all flex items-center gap-3 text-left cursor-pointer group shadow-2xs active:scale-[0.98]"
+                  className="group relative aspect-square w-full overflow-hidden rounded-2xl border border-[#ded5c4] dark:border-[#262836] bg-[#eae2d2] dark:bg-[#121319] shadow-xs active:scale-95 transition-all cursor-pointer text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                 >
-                  <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-border/40 bg-muted/20">
-                    {dish.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={dish.image_url}
-                        alt={dish.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-lg">🥗</div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <VegIndicator isVeg={dish.is_veg} />
-                      <h4 className="text-xs sm:text-sm font-bold text-foreground truncate group-hover:text-primary transition-colors">
-                        {dish.name}
-                      </h4>
+                  {/* Dish Image */}
+                  {dish.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={dish.image_url}
+                      alt={dish.name}
+                      loading="lazy"
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#eae2d2] via-[#e2d8c3] to-[#ded2ba] dark:from-[#181922] dark:to-[#101116] text-4xl">
+                      <span className="transform -translate-y-2">🥗</span>
                     </div>
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      {dish.protein_g != null && (
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                          {dish.protein_g}g protein
-                        </span>
-                      )}
-                      {dish.calories_kcal != null && (
-                        <span>{dish.calories_kcal} kcal</span>
-                      )}
-                      <span className="font-bold text-foreground ml-auto font-mono">
-                        {formatPaise(dish.price_paise)}
-                      </span>
-                    </div>
+                  )}
+
+                  {/* Gradient Vignette for Dish Name Legibility */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
+
+                  {/* Dish Name Only */}
+                  <div className="absolute inset-x-0 bottom-0 p-3 pointer-events-none">
+                    <span className="block text-xs sm:text-sm font-bold text-white line-clamp-2 leading-tight drop-shadow-sm font-headline">
+                      {dish.name}
+                    </span>
                   </div>
                 </button>
               ))}
