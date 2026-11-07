@@ -551,51 +551,47 @@ export async function getStaffBoardDataAction(): Promise<StaffBoardData> {
     // Non-blocking background sweep
   }
 
-  // Fetch canteen name
-  const { data: canteenData } = await supabase
-    .from("canteens")
-    .select("name")
-    .eq("id", canteenId)
-    .maybeSingle();
-
-  // Today's date in Asia/Kolkata (YYYY-MM-DD)
-  const todayIst = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-
+  // Fetch canteen name and orders concurrently
   // NOTE ON TOKEN SECURITY:
   // We strictly omit pickup_token here to prevent any leakage onto staff displays.
-  const { data: ordersData, error: ordersError } = await supabase
-    .from("orders")
-    .select(`
-      id,
-      order_code,
-      status,
-      total_paise,
-      payment_method,
-      payment_status,
-      placed_at,
-      estimated_ready_at,
-      pickup_window_end,
-      prep_minutes_total,
-      profiles!orders_user_id_fkey (
-        full_name
-      ),
-      order_items (
+  const [canteenRes, ordersRes] = await Promise.all([
+    supabase
+      .from("canteens")
+      .select("name")
+      .eq("id", canteenId)
+      .maybeSingle(),
+    supabase
+      .from("orders")
+      .select(`
         id,
-        name_snapshot,
-        quantity,
-        unit_price_paise,
-        menu_items (
-          image_url
+        order_code,
+        status,
+        total_paise,
+        payment_method,
+        payment_status,
+        placed_at,
+        estimated_ready_at,
+        pickup_window_end,
+        prep_minutes_total,
+        profiles!orders_user_id_fkey (
+          full_name
+        ),
+        order_items (
+          id,
+          name_snapshot,
+          quantity,
+          unit_price_paise,
+          menu_items (
+            image_url
+          )
         )
-      )
-    `)
-    .eq("canteen_id", canteenId)
-    .order("estimated_ready_at", { ascending: true });
+      `)
+      .eq("canteen_id", canteenId)
+      .order("estimated_ready_at", { ascending: true }),
+  ]);
+
+  const canteenData = canteenRes.data;
+  const { data: ordersData, error: ordersError } = ordersRes;
 
   if (ordersError || !ordersData) {
     return {
@@ -607,6 +603,14 @@ export async function getStaffBoardDataAction(): Promise<StaffBoardData> {
       completedOrders: [],
     };
   }
+
+  // Today's date in Asia/Kolkata (YYYY-MM-DD)
+  const todayIst = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 
   const newOrders: BoardOrder[] = [];
   const preparingOrders: BoardOrder[] = [];
@@ -716,31 +720,35 @@ export async function getStaffInventoryItemsAction(): Promise<{
 
   const supabase = await createClient();
 
-  const { data: canteenData } = await supabase
-    .from("canteens")
-    .select("name")
-    .eq("id", canteenId)
-    .maybeSingle();
+  const [canteenRes, itemsRes] = await Promise.all([
+    supabase
+      .from("canteens")
+      .select("name")
+      .eq("id", canteenId)
+      .maybeSingle(),
+    supabase
+      .from("menu_items")
+      .select(`
+        id,
+        name,
+        description,
+        price_paise,
+        image_url,
+        is_veg,
+        is_available,
+        stock,
+        prep_minutes,
+        categories (
+          name
+        )
+      `)
+      .eq("canteen_id", canteenId)
+      .eq("is_active", true)
+      .order("name", { ascending: true }),
+  ]);
 
-  const { data: itemsData } = await supabase
-    .from("menu_items")
-    .select(`
-      id,
-      name,
-      description,
-      price_paise,
-      image_url,
-      is_veg,
-      is_available,
-      stock,
-      prep_minutes,
-      categories (
-        name
-      )
-    `)
-    .eq("canteen_id", canteenId)
-    .eq("is_active", true)
-    .order("name", { ascending: true });
+  const canteenData = canteenRes.data;
+  const itemsData = itemsRes.data;
 
   interface RawCategoryRelation {
     name?: string;
