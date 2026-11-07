@@ -70,10 +70,9 @@ export function SearchTakeover({
   const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
 
-  // Missing dish inline polite notice state
-  const [unmatchedNotice, setUnmatchedNotice] = useState<{
-    categoryLabel: string;
-    timestamp: number;
+  // Food item not available popup dialog state
+  const [unavailableItem, setUnavailableItem] = useState<{
+    name: string;
   } | null>(null);
   const [shakingCategoryId, setShakingCategoryId] = useState<string | null>(null);
 
@@ -307,10 +306,9 @@ export function SearchTakeover({
         onSelectCategory(category);
         handleSafeClose();
       } else {
-        // Zero matches on current menu: stay in takeover, show polite live notice & shake
-        setUnmatchedNotice({
-          categoryLabel: category.label,
-          timestamp: Date.now(),
+        // Zero matches on current menu: trigger popped out unavailable message & shake tile
+        setUnavailableItem({
+          name: category.label,
         });
         setShakingCategoryId(category.id);
         setTimeout(() => {
@@ -327,6 +325,12 @@ export function SearchTakeover({
       if (suggestion.type === "category" && suggestion.category) {
         handleTileSelect(suggestion.category);
       } else if (suggestion.type === "dish" && suggestion.dish) {
+        if (!suggestion.dish.is_available || (suggestion.dish.stock !== null && suggestion.dish.stock <= 0)) {
+          setUnavailableItem({
+            name: suggestion.dish.name,
+          });
+          return;
+        }
         if (onOpenItem) {
           // Open item detail sheet directly above or from takeover
           onOpenItem(suggestion.dish);
@@ -344,6 +348,10 @@ export function SearchTakeover({
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") {
       e.preventDefault();
+      if (unavailableItem) {
+        setUnavailableItem(null);
+        return;
+      }
       if (query) {
         setQuery("");
       } else {
@@ -560,6 +568,10 @@ export function SearchTakeover({
                   key={dish.id}
                   type="button"
                   onClick={() => {
+                    if (!dish.is_available || (dish.stock !== null && dish.stock <= 0)) {
+                      setUnavailableItem({ name: dish.name });
+                      return;
+                    }
                     if (onOpenItem) {
                       onOpenItem(dish);
                       handleSafeClose();
@@ -599,23 +611,6 @@ export function SearchTakeover({
           </section>
         )}
 
-        {/* POLITE LIVE REGION: NOT ON OUR MENU INLINE NOTICE */}
-        <div aria-live="polite" aria-atomic="true" className="w-full">
-          {unmatchedNotice && (
-            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 flex items-start gap-3 animate-in fade-in duration-200">
-              <Sparkles className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div className="space-y-0.5 text-xs sm:text-sm">
-                <p className="font-bold">
-                  Sorry, {unmatchedNotice.categoryLabel} isn&rsquo;t on our menu right now.
-                </p>
-                <p className="text-amber-800/80 dark:text-amber-300/80 text-xs">
-                  Try another category or search by dish name above.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* WHAT'S ON YOUR MIND? 3-COLUMN CATEGORY GRID */}
         <section aria-label="What's on your mind categories" className="space-y-3">
           <div className="flex items-center justify-between">
@@ -639,6 +634,74 @@ export function SearchTakeover({
           </div>
         </section>
       </main>
+
+      {/* =========================================================================
+          CUSTOM POPPED-OUT "FOOD ITEM NOT AVAILABLE" MODAL DIALOG
+          ========================================================================= */}
+      {unavailableItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={() => setUnavailableItem(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="unavailable-modal-title"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-[340px] sm:max-w-[380px] bg-white dark:bg-[#16171E] rounded-3xl p-6 shadow-2xl border border-amber-500/25 dark:border-amber-500/35 text-center relative overflow-hidden animate-in zoom-in-95 duration-200"
+          >
+            {/* Ambient Top Glow Accent Line */}
+            <div className="absolute top-0 inset-x-8 h-[2px] bg-gradient-to-r from-transparent via-amber-500/50 to-transparent pointer-events-none" />
+
+            {/* Top Close Button */}
+            <button
+              type="button"
+              onClick={() => setUnavailableItem(null)}
+              aria-label="Close message"
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Hero Icon */}
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400/20 via-orange-400/15 to-red-400/10 border border-amber-500/30 flex items-center justify-center mb-4 shadow-inner">
+              <div className="relative">
+                <Utensils className="w-8 h-8 text-amber-600 dark:text-amber-400 stroke-[2.2]" />
+                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-white dark:border-[#16171E] flex items-center justify-center">
+                  <span className="w-1.5 h-0.5 bg-white rounded-full" />
+                </span>
+              </div>
+            </div>
+
+            {/* Headline Badge */}
+            <span className="inline-block px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-[11px] font-extrabold uppercase tracking-wider mb-2 font-headline">
+              Item Currently Unavailable
+            </span>
+
+            {/* Headline */}
+            <h3
+              id="unavailable-modal-title"
+              className="text-lg font-extrabold text-[#181513] dark:text-[#f8fafc] font-headline tracking-tight mb-2"
+            >
+              Food Item Not Available
+            </h3>
+
+            {/* Custom Body Message */}
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed mb-6 font-medium">
+              Sorry, <span className="font-bold text-foreground underline decoration-amber-500/40">{unavailableItem.name}</span> is not available on our campus menu right now. Fresh preparations and restocks happen throughout the day!
+            </p>
+
+            {/* Action CTA Button */}
+            <button
+              type="button"
+              onClick={() => setUnavailableItem(null)}
+              className="w-full py-3 px-5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm shadow-lg shadow-amber-500/25 active:scale-95 transition-all cursor-pointer font-headline tracking-wide"
+            >
+              Explore Available Food
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
