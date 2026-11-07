@@ -554,7 +554,7 @@ export function SearchTakeover({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 sm:gap-2.5">
               {suggestedDishes.map((dish) => (
                 <button
                   key={dish.id}
@@ -567,7 +567,7 @@ export function SearchTakeover({
                       executeSearch(dish.name);
                     }
                   }}
-                  className="group relative aspect-square w-full overflow-hidden rounded-2xl border border-[#ded5c4] dark:border-[#262836] bg-[#eae2d2] dark:bg-[#121319] shadow-xs active:scale-95 transition-all cursor-pointer text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
+                  className="group relative aspect-square w-full overflow-hidden rounded-xl sm:rounded-2xl border border-[#ded5c4] dark:border-[#262836] bg-[#eae2d2] dark:bg-[#121319] shadow-xs active:scale-95 transition-all cursor-pointer text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   {/* Dish Image */}
                   {dish.image_url ? (
@@ -579,17 +579,17 @@ export function SearchTakeover({
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#eae2d2] via-[#e2d8c3] to-[#ded2ba] dark:from-[#181922] dark:to-[#101116] text-4xl">
-                      <span className="transform -translate-y-2">🥗</span>
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#eae2d2] via-[#e2d8c3] to-[#ded2ba] dark:from-[#181922] dark:to-[#101116] text-2xl sm:text-3xl">
+                      <span className="transform -translate-y-1">🥗</span>
                     </div>
                   )}
 
                   {/* Gradient Vignette for Dish Name Legibility */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent pointer-events-none" />
 
                   {/* Dish Name Only */}
-                  <div className="absolute inset-x-0 bottom-0 p-3 pointer-events-none">
-                    <span className="block text-xs sm:text-sm font-bold text-white line-clamp-2 leading-tight drop-shadow-sm font-headline">
+                  <div className="absolute inset-x-0 bottom-0 p-1.5 sm:p-2 pointer-events-none">
+                    <span className="block text-[11px] sm:text-xs font-bold text-white line-clamp-2 leading-tight drop-shadow-sm font-headline tracking-tight">
                       {dish.name}
                     </span>
                   </div>
