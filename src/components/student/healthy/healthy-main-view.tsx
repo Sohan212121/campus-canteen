@@ -257,17 +257,6 @@ export function HealthyMainView({
             Protein Picks
           </h1>
         </div>
-
-        {/* HARVEST HEALTHY ACTIVE PILL BADGE */}
-        <div className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full bg-[#1b2e1a] border border-[#3b533a] shadow-[0_0_16px_rgba(76,175,80,0.3)] select-none">
-          <span className="w-2 h-2 rounded-full bg-[#4CAF50] animate-pulse" />
-          <span className="text-[10px] text-[#81c784] font-bold tracking-wider uppercase font-headline">
-            HARVEST HEALTHY
-          </span>
-          <div className="w-5 h-5 rounded-full bg-[#2E7D32] flex items-center justify-center text-white shadow-xs ml-0.5">
-            <Zap className="h-3 w-3 fill-current" />
-          </div>
-        </div>
       </header>
 
       {/* SUBTITLE & QUICK CART ACTION ROW */}
