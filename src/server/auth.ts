@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { createReadOnlyClient } from "@/lib/supabase/server";
@@ -15,6 +16,8 @@ export type UserProfile = {
 /**
  * Read-only auth check for Server Components.
  *
+ * - Wrapped with React cache() for per-request memoisation across Server Components
+ *   within the same request lifecycle.
  * - Uses `auth.getUser()` (validates the JWT against Supabase Auth, never trusts
  *   the token alone) instead of `auth.getSession()`.
  * - Uses the read-only Supabase client — no cookie writes, no signOut.
@@ -22,7 +25,7 @@ export type UserProfile = {
  *   never from user_metadata or JWT claims).
  * - Returns `null` when there is no authenticated user or no matching profile.
  */
-export async function getCurrentUser(): Promise<UserProfile | null> {
+export const getCurrentUser = cache(async (): Promise<UserProfile | null> => {
   const supabase = await createReadOnlyClient();
 
   const {
@@ -40,7 +43,7 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
   if (!profile) return null;
 
   return profile as UserProfile;
-}
+});
 
 export const ROLE_HOME = {
   student: "/",

@@ -1,5 +1,5 @@
 import { requireRole } from "@/server/auth";
-import { createReadOnlyClient } from "@/lib/supabase/server";
+import { getCanteenById } from "@/server/canteen";
 import { StaffNav } from "@/components/staff/staff-nav";
 
 export default async function StaffLayout({
@@ -13,15 +13,9 @@ export default async function StaffLayout({
   let canteenName: string | null = null;
 
   if (canteenId) {
-    const supabase = await createReadOnlyClient();
-    const { data } = await supabase
-      .from("canteens")
-      .select("name")
-      .eq("id", canteenId)
-      .maybeSingle();
-
-    if (data) {
-      canteenName = data.name;
+    const canteen = await getCanteenById(canteenId);
+    if (canteen) {
+      canteenName = canteen.name;
     }
   }
 
