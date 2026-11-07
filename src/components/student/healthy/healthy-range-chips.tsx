@@ -5,7 +5,7 @@ import { Dumbbell, Flame, Info, Check } from "lucide-react";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
 
 export type MetricTab = "protein" | "calories";
-export type ProteinRange = "20-30" | "30-40" | "40+" | null;
+export type ProteinRange = "10-20" | "20-30" | "30-40" | "40+" | null;
 export type CalorieRange = "under-300" | "300-500" | "500+" | null;
 
 interface HealthyRangeChipsProps {
@@ -29,9 +29,10 @@ export function HealthyRangeChips({
 }: HealthyRangeChipsProps) {
   // Count matching dishes per range
   const counts = useMemo(() => {
-    const active = items.filter((i) => i.is_active);
+    const active = items.filter((i) => i.is_active && i.is_available);
     return {
-      p20_30: active.filter((i) => i.protein_g != null && i.protein_g >= 20 && i.protein_g <= 30).length,
+      p10_20: active.filter((i) => i.protein_g != null && i.protein_g >= 10 && i.protein_g <= 20).length,
+      p20_30: active.filter((i) => i.protein_g != null && i.protein_g > 20 && i.protein_g <= 30).length,
       p30_40: active.filter((i) => i.protein_g != null && i.protein_g > 30 && i.protein_g <= 40).length,
       p40_plus: active.filter((i) => i.protein_g != null && i.protein_g > 40).length,
       cUnder300: active.filter((i) => i.calories_kcal != null && i.calories_kcal < 300).length,
@@ -89,6 +90,24 @@ export function HealthyRangeChips({
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
         {selectedMetric === "protein" ? (
           <>
+            <button
+              type="button"
+              onClick={() =>
+                onSelectProteinRange(proteinRange === "10-20" ? null : "10-20")
+              }
+              className={`min-h-[38px] px-4 rounded-full border text-xs font-black transition-all duration-200 flex items-center gap-1.5 cursor-pointer select-none ${
+                proteinRange === "10-20"
+                  ? "bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white border-transparent shadow-[0_4px_14px_rgba(76,175,80,0.3)] scale-[1.02]"
+                  : "bg-card dark:bg-[#1e291c] border-border/80 dark:border-[#3b533a]/60 text-muted-foreground dark:text-stone-300 hover:border-emerald-500/40 dark:hover:border-[#4CAF50]/40 hover:text-foreground dark:hover:text-[#81c784]"
+              }`}
+            >
+              {proteinRange === "10-20" && <Check className="h-3.5 w-3.5" />}
+              <span>10 - 20 g</span>
+              <span className={`text-[10px] font-semibold opacity-80 ${proteinRange === "10-20" ? "text-emerald-100" : "text-muted-foreground dark:text-stone-400"}`}>
+                ({counts.p10_20})
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={() =>

@@ -19,7 +19,6 @@ import { CartShortcut } from "@/components/student/cart-shortcut";
 import { calculateEstimatedCartTotal } from "@/lib/cart-shortcut";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
 import { formatPaise } from "@/lib/money";
-import { isValidMenuImageUrl } from "@/lib/image-utils";
 import { HealthyCarousel } from "@/components/student/healthy/healthy-carousel";
 import {
   HealthyRangeChips,
@@ -30,10 +29,7 @@ import {
 import { TopProteinRow } from "@/components/student/healthy/top-protein-row";
 import { HealthyPreferencesSheet } from "@/components/student/healthy/healthy-preferences-sheet";
 import { HealthyNutritionSheet } from "@/components/student/healthy/healthy-nutrition-sheet";
-import {
-  HealthySampleToggle,
-  SAMPLE_HEALTHY_ITEMS,
-} from "@/components/student/healthy/healthy-sample-toggle";
+import { enrichAndFilterProteinMenuItems } from "@/lib/real-menu-nutrition";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
 
 interface HealthyMainViewProps {
@@ -42,23 +38,20 @@ interface HealthyMainViewProps {
 }
 
 const BOTANICAL_CATEGORIES = [
-  { id: "salads", label: "Farm Fresh Salads", emoji: "🥗" },
-  { id: "millets", label: "Steamed Millets", emoji: "🌾" },
-  { id: "protein", label: "High-Protein Tofu & Paneer", emoji: "💪" },
-  { id: "elixirs", label: "Zero-Sugar Elixirs", emoji: "🥤" },
+  { id: "all", label: "All Protein Fuel", emoji: "⚡" },
+  { id: "meals", label: "Power Meals & Thali", emoji: "🍛" },
+  { id: "rolls", label: "Protein Wraps & Rolls", emoji: "🌯" },
+  { id: "dairy", label: "Paneer & Probiotics", emoji: "🧀" },
+  { id: "combos", label: "Combos & Light Fuel", emoji: "🍱" },
 ];
 
 export function HealthyMainView({
   initialItems = [],
-  migrationPending = false,
 }: HealthyMainViewProps) {
-  const [useSampleData, setUseSampleData] = useState(
-    process.env.NODE_ENV !== "production" && initialItems.length === 0
-  );
   const [selectedMetric, setSelectedMetric] = useState<MetricTab>("protein");
   const [proteinRange, setProteinRange] = useState<ProteinRange>(null);
   const [calorieRange, setCalorieRange] = useState<CalorieRange>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [selectedDish, setSelectedDish] = useState<MenuItemData | null>(null);
 
@@ -69,38 +62,10 @@ export function HealthyMainView({
   const totalItemCount = useCartStore((s) => s.getTotalItemCount());
   const cartItems = useCartStore((s) => s.items);
 
-  // Active items (DB or Sample Data, ensuring every dish gets a real food image from available canteen photos)
+  // Active items: strictly real menu items filtered for protein content (>= 10g) & availability
   const activeItems = useMemo(() => {
-    const availableCanteenImages = initialItems
-      .map((i) => i.image_url)
-      .filter((url): url is string => Boolean(url && isValidMenuImageUrl(url)));
-
-    if (useSampleData) {
-      return SAMPLE_HEALTHY_ITEMS.map((sample, idx) => {
-        const sampleWords = sample.name.toLowerCase().split(/[\s()]+/);
-        const match = initialItems.find((i) => {
-          if (!i.image_url || !isValidMenuImageUrl(i.image_url)) return false;
-          const itemWords = i.name.toLowerCase().split(/[\s()]+/);
-          return sampleWords.some((w) => w.length > 3 && itemWords.includes(w));
-        });
-
-        if (match?.image_url) {
-          return { ...sample, image_url: match.image_url };
-        }
-
-        if (availableCanteenImages.length > 0) {
-          return {
-            ...sample,
-            image_url: availableCanteenImages[idx % availableCanteenImages.length],
-          };
-        }
-
-        return sample;
-      });
-    }
-
-    return initialItems;
-  }, [useSampleData, initialItems]);
+    return enrichAndFilterProteinMenuItems(initialItems);
+  }, [initialItems]);
 
   // Estimated cart total for docked tray
   const estimatedTotal = useMemo(() => {
@@ -110,33 +75,55 @@ export function HealthyMainView({
     );
   }, [cartItems, activeItems]);
 
-  // Filter dishes by metric range and botanical category
+  // Filter dishes by metric range and wellness category
   const filteredDishes = useMemo(() => {
     return activeItems.filter((dish) => {
-      if (!dish.is_active) return false;
+      if (!dish.is_active || !dish.is_available) return false;
 
-      // Filter by category if selected
-      if (selectedCategory) {
+      // Filter by wellness category if selected
+      if (selectedCategory && selectedCategory !== "all") {
         const lowerName = dish.name.toLowerCase();
-        const lowerDesc = (dish.description || "").toLowerCase();
-        if (selectedCategory === "salads") {
-          if (!lowerName.includes("salad") && !lowerName.includes("bowl") && !lowerDesc.includes("salad")) return false;
-        } else if (selectedCategory === "millets") {
-          if (!lowerName.includes("idli") && !lowerName.includes("millet") && !lowerDesc.includes("millet") && !lowerDesc.includes("ragi")) return false;
-        } else if (selectedCategory === "protein") {
-          if ((dish.protein_g ?? 0) < 20 && !lowerName.includes("paneer") && !lowerName.includes("tofu") && !lowerName.includes("chicken")) return false;
-        } else if (selectedCategory === "elixirs") {
-          if (!lowerName.includes("elixir") && !lowerName.includes("juice") && !lowerName.includes("chai") && !lowerDesc.includes("drink")) return false;
+        if (selectedCategory === "meals") {
+          if (
+            !lowerName.includes("thali") &&
+            !lowerName.includes("rajma") &&
+            !lowerName.includes("chole")
+          ) {
+            return false;
+          }
+        } else if (selectedCategory === "rolls") {
+          if (
+            !lowerName.includes("kathi") &&
+            !lowerName.includes("roll") &&
+            !lowerName.includes("wrap")
+          ) {
+            return false;
+          }
+        } else if (selectedCategory === "dairy") {
+          if (!lowerName.includes("paneer") && !lowerName.includes("lassi")) {
+            return false;
+          }
+        } else if (selectedCategory === "combos") {
+          if (
+            !lowerName.includes("combo") &&
+            !lowerName.includes("rice") &&
+            !lowerName.includes("sandwich")
+          ) {
+            return false;
+          }
         }
       }
 
+      // Filter by protein metric
       if (selectedMetric === "protein") {
         if (!proteinRange) return true;
         if (dish.protein_g == null) return false;
-        if (proteinRange === "20-30") return dish.protein_g >= 20 && dish.protein_g <= 30;
+        if (proteinRange === "10-20") return dish.protein_g >= 10 && dish.protein_g <= 20;
+        if (proteinRange === "20-30") return dish.protein_g > 20 && dish.protein_g <= 30;
         if (proteinRange === "30-40") return dish.protein_g > 30 && dish.protein_g <= 40;
         if (proteinRange === "40+") return dish.protein_g > 40;
       } else {
+        // Filter by calorie metric
         if (!calorieRange) return true;
         if (dish.calories_kcal == null) return false;
         if (calorieRange === "under-300") return dish.calories_kcal < 300;
@@ -168,17 +155,11 @@ export function HealthyMainView({
 
   return (
     <div className="relative space-y-6 pb-28 text-foreground selection:bg-emerald-500 selection:text-white">
-      {/* Ambient Moss & Warm Amber Backlights (Dark Harvest Edition) */}
+      {/* Ambient Moss & Warm Amber Backlights */}
       <div className="absolute -top-10 left-1/4 -translate-x-1/2 w-80 h-80 bg-[#2E7D32]/15 rounded-full blur-3xl pointer-events-none -z-10" />
       <div className="absolute top-64 right-0 w-72 h-72 bg-[#ffb74d]/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
-      {/* Dev preview sample toggle (compiled out in prod) */}
-      <HealthySampleToggle
-        useSampleData={useSampleData}
-        onToggle={(next) => setUseSampleData(next)}
-      />
-
-      {/* Screen Header Sub-Bar: Wellness Mode & Harvest Toggle Badge */}
+      {/* Screen Header Sub-Bar: Wellness Mode & Harvest Badge */}
       <header className="flex items-center justify-between gap-3 pt-1">
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
@@ -200,7 +181,7 @@ export function HealthyMainView({
           </h1>
         </div>
 
-        {/* Active HARVEST HEALTHY Toggle Badge */}
+        {/* Active HARVEST HEALTHY Badge */}
         <div className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full bg-[#1b2e1a] border border-[#3b533a] shadow-[0_0_16px_rgba(76,175,80,0.3)] select-none">
           <span className="w-2 h-2 rounded-full bg-[#4CAF50] animate-pulse" />
           <span className="text-[10px] text-[#81c784] font-bold tracking-wider uppercase font-headline">
@@ -212,18 +193,18 @@ export function HealthyMainView({
         </div>
       </header>
 
-      {/* Migration 0020 unavailable state (when no sample data and migration pending) */}
-      {migrationPending && !useSampleData ? (
+      {/* Empty State when no protein items are available */}
+      {activeItems.length === 0 ? (
         <div className="rounded-3xl border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 p-8 text-center space-y-4 shadow-sm">
           <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
             <Leaf className="h-7 w-7" />
           </div>
           <div className="space-y-1.5 max-w-sm mx-auto">
             <h2 className="text-base font-bold text-foreground">
-              Nutrition Details Updating
+              No Protein Dishes Available Right Now
             </h2>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Nutrition details are being updated by the canteen. Check back soon!
+              All high-protein canteen items are currently being prepared or out of stock. Please check the full menu for other available options!
             </p>
           </div>
           <div className="pt-2">
@@ -238,7 +219,7 @@ export function HealthyMainView({
       ) : (
         <>
           {/* =========================================================================
-              SECTION 2: BOTANICAL HARVEST CATEGORIES CAROUSEL
+              SECTION 1: BOTANICAL HARVEST CATEGORIES CAROUSEL
               ========================================================================= */}
           <section className="flex flex-col gap-1.5 -mx-4 px-4 overflow-x-auto no-scrollbar">
             <div className="flex items-center justify-between px-1">
@@ -256,7 +237,11 @@ export function HealthyMainView({
                   <button
                     key={cat.id}
                     type="button"
-                    onClick={() => setSelectedCategory((prev) => (prev === cat.id ? null : cat.id))}
+                    onClick={() =>
+                      setSelectedCategory((prev) =>
+                        prev === cat.id && cat.id !== "all" ? "all" : cat.id
+                      )
+                    }
                     className={`shrink-0 px-3.5 py-2 rounded-full font-headline text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
                       isCatSelected
                         ? "bg-gradient-to-r from-[#2E7D32] to-[#4CAF50] text-white shadow-[0_4px_14px_rgba(76,175,80,0.3)]"
@@ -319,7 +304,7 @@ export function HealthyMainView({
           </div>
 
           {/* =========================================================================
-              SECTION 3: TOP PROTEIN FUEL (FEATURED NUTRITION HARVEST SLIDER)
+              SECTION 2: TOP PROTEIN FUEL (FEATURED NUTRITION HARVEST SLIDER)
               ========================================================================= */}
           <TopProteinRow
             items={activeItems}
@@ -328,7 +313,7 @@ export function HealthyMainView({
           />
 
           {/* =========================================================================
-              SECTION 4: HEALTHY CAMPUS PICKS (WITH STEPPER BUTTONS & DIETARY TAGS)
+              SECTION 3: HEALTHY CAMPUS PICKS (WITH STEPPER BUTTONS & DIETARY TAGS)
               ========================================================================= */}
           <section className="space-y-4 pt-1">
             <div className="flex items-baseline justify-between">
@@ -360,7 +345,7 @@ export function HealthyMainView({
               onSelectCalorieRange={(r) => setCalorieRange(r)}
             />
 
-            {/* Filtered Dishes List formatted according to Dark Harvest Edition */}
+            {/* Filtered Dishes List */}
             {filteredDishes.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-border/80 dark:border-[#3b533a]/60 bg-card/60 dark:bg-[#1e291c]/40 p-8 text-center space-y-3 shadow-2xs">
                 <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-muted dark:bg-[#2E7D32]/20 text-muted-foreground dark:text-[#81c784]">
@@ -382,7 +367,7 @@ export function HealthyMainView({
                     onClick={() => {
                       setProteinRange(null);
                       setCalorieRange(null);
-                      setSelectedCategory(null);
+                      setSelectedCategory("all");
                     }}
                     className="h-8 text-xs font-bold rounded-xl"
                   >
@@ -532,7 +517,7 @@ export function HealthyMainView({
       )}
 
       {/* =========================================================================
-          SECTION 7: PERSISTENT DOCKED HEALTHY CART TRAY (MATCHA ACCENT)
+          PERSISTENT DOCKED HEALTHY CART TRAY (MATCHA ACCENT)
           ========================================================================= */}
       {totalItemCount > 0 && !isSheetOpen && (
         <aside

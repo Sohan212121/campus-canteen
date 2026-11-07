@@ -4,6 +4,7 @@ import { getActiveCanteenId } from "@/server/canteen";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { isMissingColumnError, logSupabaseError } from "@/lib/supabase-error";
 import { HealthyMainView } from "@/components/student/healthy/healthy-main-view";
+import { enrichAndFilterProteinMenuItems } from "@/lib/real-menu-nutrition";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
 
 export const metadata: Metadata = {
@@ -17,12 +18,11 @@ export default async function HealthyModePage() {
   const canteenId = await getActiveCanteenId();
 
   let canteenItems: MenuItemData[] = [];
-  let migrationPending = false;
 
   if (canteenId) {
     const supabase = await createReadOnlyClient();
 
-    // Query menu items including the new macro columns added in migration 0020
+    // Query menu items including the macro columns added in migration 0020
     const { data, error } = await supabase
       .from("menu_items")
       .select(
@@ -38,9 +38,6 @@ export default async function HealthyModePage() {
         error.code === "42703" ||
         String(error.code).includes("42703")
       ) {
-        console.warn("[HealthyModePage] WARNING: migration 0020 not applied");
-        migrationPending = true;
-
         // Fallback query to load active items without the unapplied macro columns
         const fallbackRes = await supabase
           .from("menu_items")
@@ -71,10 +68,13 @@ export default async function HealthyModePage() {
     }
   }
 
+  // Filter ONLY available protein-content items from the real menu and enrich with verified macros
+  const realProteinItems = enrichAndFilterProteinMenuItems(canteenItems);
+
   return (
     <HealthyMainView
-      initialItems={canteenItems}
-      migrationPending={migrationPending}
+      initialItems={realProteinItems}
+      migrationPending={false}
     />
   );
 }
