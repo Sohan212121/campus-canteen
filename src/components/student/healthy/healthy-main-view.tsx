@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -14,6 +14,7 @@ import {
   X,
   Mic,
   ShoppingBag,
+  Flame,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,11 +28,13 @@ import { formatPaise } from "@/lib/money";
 import { TopProteinRow } from "@/components/student/healthy/top-protein-row";
 import { HealthyPreferencesSheet } from "@/components/student/healthy/healthy-preferences-sheet";
 import { HealthyNutritionSheet } from "@/components/student/healthy/healthy-nutrition-sheet";
+import { ProteinGoalCelebration } from "@/components/student/healthy/protein-goal-celebration";
 import { enrichAndFilterProteinMenuItems } from "@/lib/real-menu-nutrition";
 import type { MenuItemData } from "@/components/student/item-detail-sheet";
 
 interface HealthyMainViewProps {
   initialItems: MenuItemData[];
+  initialOrderedProteinToday?: number;
   migrationPending?: boolean;
 }
 
@@ -47,6 +50,7 @@ const CATEGORY_CHIPS = [
 
 export function HealthyMainView({
   initialItems = [],
+  initialOrderedProteinToday = 0,
 }: HealthyMainViewProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -57,6 +61,10 @@ export function HealthyMainView({
   const [sortBy, setSortBy] = useState<"protein-desc" | "calories-asc" | "rating-desc">("protein-desc");
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [selectedDish, setSelectedDish] = useState<MenuItemData | null>(null);
+
+  // Celebration state when daily protein goal is reached
+  const [showCelebration, setShowCelebration] = useState(false);
+  const celebratedRef = useRef<boolean>(false);
 
   const addItem = useCartStore((s) => s.addItem);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
@@ -78,7 +86,7 @@ export function HealthyMainView({
     );
   }, [cartItems, activeItems]);
 
-  // Total protein in cart
+  // Total protein in currently active cart
   const totalCartProtein = useMemo(() => {
     return cartItems.reduce((acc, cartItem) => {
       const match = activeItems.find((d) => d.id === cartItem.menu_item_id);
@@ -86,13 +94,31 @@ export function HealthyMainView({
     }, 0);
   }, [cartItems, activeItems]);
 
-  // Daily target and HUD values
+  // Daily target and protein progress calculation
+  // Progress is 0 if no protein food was ordered today and nothing is in cart
   const targetProteinGoal = 100;
-  const hudConsumed = Math.min(100, 42 + totalCartProtein);
-  const hudToGo = Math.max(0, targetProteinGoal - hudConsumed);
-  const progressRatio = hudConsumed / targetProteinGoal;
+  const totalProtein = Math.round(initialOrderedProteinToday + totalCartProtein);
+  const hudConsumed = Math.min(targetProteinGoal, totalProtein);
+  const hudToGo = Math.max(0, targetProteinGoal - totalProtein);
+  const isGoalHit = totalProtein >= targetProteinGoal;
+  const progressRatio = isGoalHit ? 1 : totalProtein / targetProteinGoal;
+
   // Circumference = 2 * PI * 29 = 182.2
+  // When totalProtein === 0: progressDashoffset = 182.2 (ring is 0% filled)
   const progressDashoffset = 182.2 * (1 - progressRatio);
+
+  // Trigger celebration modal when protein goal is hit
+  useEffect(() => {
+    if (isGoalHit && !celebratedRef.current) {
+      celebratedRef.current = true;
+      const timer = setTimeout(() => {
+        setShowCelebration(true);
+      }, 400);
+      return () => clearTimeout(timer);
+    } else if (!isGoalHit && celebratedRef.current) {
+      celebratedRef.current = false;
+    }
+  }, [isGoalHit]);
 
   // Filter dishes by category, search query, protein slider, dietary flags, and sort
   const filteredDishes = useMemo(() => {
@@ -214,7 +240,7 @@ export function HealthyMainView({
     toast.success(`Logged ${dish.name} (+${dish.protein_g}g protein)`);
   };
 
-  const isSheetOpen = isPreferencesOpen || selectedDish !== null;
+  const isSheetOpen = isPreferencesOpen || selectedDish !== null || showCelebration;
 
   return (
     <div className="-mx-4 -mt-3 px-4 pt-3 pb-28 bg-[#fcf9f2] dark:bg-transparent min-h-screen text-[#1c1c18] dark:text-foreground selection:bg-[#c2f02e] selection:text-[#00241a] space-y-4">
@@ -317,7 +343,7 @@ export function HealthyMainView({
         </button>
       </div>
 
-      {/* SHARED-ELEMENT TRANSITION ANNOTATION TAG */}
+      {/* SHARED-ELEMENT ANNOTATION TAG */}
       <div className="flex items-center gap-1.5 bg-[#f6f3ec] dark:bg-[#1e291c]/60 px-3 py-1.5 rounded-xl border border-[#c0c8c3]/30 dark:border-white/5">
         <Zap className="h-3.5 w-3.5 text-[#506600] dark:text-[#81c784] shrink-0" />
         <span className="text-[10px] sm:text-[11px] font-bold text-[#414945] dark:text-stone-400 uppercase tracking-wider truncate font-headline">
@@ -326,7 +352,7 @@ export function HealthyMainView({
       </div>
 
       {/* =========================================================================
-          AI ATHLETIC HUD HERO CARD
+          DAILY PROTEIN GOAL HERO CARD (LAYOUT SIZE & HEIGHT KEPT ROCK-SOLID CONSTANT)
           ========================================================================= */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#050d0a] via-[#071b12] to-[#0a1410] text-white p-4 sm:p-5 shadow-[0_20px_45px_-10px_rgba(0,0,0,0.7),0_0_25px_rgba(210,248,36,0.12)] border border-[#10b981]/30 transition-all select-none">
         {/* Glow Spheres */}
@@ -348,22 +374,24 @@ export function HealthyMainView({
 
         {/* Top Tag & Circular Radial Progress Ring */}
         <div className="relative z-10 flex flex-col gap-2 max-w-[210px] sm:max-w-[240px]">
+          {/* Daily Protein Target Badge (Replaces AI Athletic HUD with identical size & height) */}
           <div className="inline-flex items-center gap-1.5 self-start bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 shadow-xs">
             <span className="flex h-2 w-2 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c5f331] opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[#c5f331] shadow-[0_0_8px_#c5f331]" />
             </span>
-            <span className="text-[10px] uppercase text-[#c5f331] tracking-wider font-bold font-headline">
-              ✦ AI ATHLETIC HUD
+            <span className="text-[10px] uppercase text-[#c5f331] tracking-wider font-bold font-headline flex items-center gap-1">
+              <Flame className="h-3 w-3 fill-current text-[#c5f331]" />
+              <span>Daily Protein Target</span>
             </span>
           </div>
 
           <div className="flex items-center gap-3 pt-0.5">
-            {/* SVG Ring Dial */}
+            {/* SVG Ring Dial (Starts at 0% and fills as protein items are added/ordered) */}
             <div className="relative w-20 h-20 shrink-0 flex items-center justify-center">
               <svg className="w-20 h-20 -rotate-90 transform" viewBox="0 0 72 72">
                 <defs>
-                  <linearGradient id="aiRingGrad" x1="0%" x2="100%" y1="0%" y2="100%">
+                  <linearGradient id="proteinRingGrad" x1="0%" x2="100%" y1="0%" y2="100%">
                     <stop offset="0%" stopColor="#d2f824" />
                     <stop offset="100%" stopColor="#06b6d4" />
                   </linearGradient>
@@ -381,7 +409,7 @@ export function HealthyMainView({
                   cy="36"
                   fill="none"
                   r="29"
-                  stroke="url(#aiRingGrad)"
+                  stroke="url(#proteinRingGrad)"
                   strokeDasharray="182.2"
                   strokeDashoffset={progressDashoffset}
                   strokeLinecap="round"
@@ -403,18 +431,40 @@ export function HealthyMainView({
               </div>
             </div>
 
+            {/* Protein Target Messaging & Goal Status */}
             <div className="flex flex-col">
-              <span className="text-lg sm:text-xl text-[#d2f824] tracking-tight font-bold drop-shadow-[0_0_12px_rgba(210,248,36,0.35)] font-headline">
-                {hudToGo}g to go
-              </span>
-              <span className="text-xs text-stone-300 leading-tight mt-0.5 font-medium">
-                Reach your daily muscle protein synthesis threshold
-              </span>
+              {isGoalHit ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowCelebration(true)}
+                    className="text-left group cursor-pointer"
+                  >
+                    <span className="text-lg sm:text-xl text-[#d2f824] tracking-tight font-black drop-shadow-[0_0_12px_rgba(210,248,36,0.35)] font-headline flex items-center gap-1 group-hover:underline">
+                      Goal Crushed! ⚡
+                    </span>
+                    <span className="text-xs text-stone-300 leading-tight mt-0.5 font-medium block">
+                      Target achieved! Tap to view celebration 🎉
+                    </span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-lg sm:text-xl text-[#d2f824] tracking-tight font-bold drop-shadow-[0_0_12px_rgba(210,248,36,0.35)] font-headline">
+                    {hudToGo}g to go
+                  </span>
+                  <span className="text-xs text-stone-300 leading-tight mt-0.5 font-medium">
+                    {totalProtein === 0
+                      ? "Add high-protein meals to begin your daily fuel streak"
+                      : "Reach your daily muscle protein synthesis threshold"}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* 3 Micro-Metric Boxes */}
+        {/* 3 Micro-Metric Summary Boxes */}
         <div className="relative z-10 grid grid-cols-3 gap-2 pt-3.5 mt-3 border-t border-white/10">
           <div className="bg-white/5 backdrop-blur-md rounded-xl p-2 flex flex-col items-center justify-center text-center border border-white/10 shadow-xs">
             <span className="text-[9px] uppercase tracking-wider text-[#a2d0be] font-bold font-headline">
@@ -749,6 +799,17 @@ export function HealthyMainView({
           </div>
         )}
       </section>
+
+      {/* =========================================================================
+          PROTEIN GOAL CELEBRATION MODAL (TRANSITION MANNER)
+          ========================================================================= */}
+      <ProteinGoalCelebration
+        isOpen={showCelebration}
+        onClose={() => setShowCelebration(false)}
+        proteinGrams={totalProtein}
+        targetGoal={targetProteinGoal}
+        cartCount={totalItemCount}
+      />
 
       {/* =========================================================================
           PREFERENCES & NUTRITION DETAIL BOTTOM SHEETS
