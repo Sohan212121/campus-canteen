@@ -14,6 +14,8 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 import { ROLE_HOME, type UserRole } from "@/server/auth";
+import { withTimeout } from "@/lib/timeout";
+import { renderServiceUnavailableHtml } from "@/lib/service-unavailable";
 
 export async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -69,12 +71,50 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // Refresh session via getUser()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Refresh session via getUser() with a 4-second timeout
+  let user = null;
+  let isAuthTimeout = false;
+  try {
+    const authRes = await withTimeout(supabase.auth.getUser(), 4000);
+    user = authRes?.data?.user ?? null;
+  } catch {
+    console.error("auth service unreachable");
+    isAuthTimeout = true;
+    user = null;
+  }
 
-  // Handle unauthenticated visitors
+  // Handle auth timeout explicitly: NEVER grant access, NEVER clear session cookies, and NEVER redirect to /login
+  if (isAuthTimeout) {
+    if (
+      pathname === "/login" ||
+      pathname === "/signup" ||
+      pathname === "/forgot-password" ||
+      pathname === "/set-password" ||
+      pathname === "/auth/confirm" ||
+      pathname === "/auth/pending-activation" ||
+      pathname === "/offline"
+    ) {
+      return supabaseResponse;
+    }
+
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { ok: false, code: "SERVICE_UNAVAILABLE", error: "Authentication service temporarily unreachable" },
+        { status: 503, headers: { "Retry-After": "5", "Cache-Control": "no-store" } }
+      );
+    }
+
+    return new NextResponse(renderServiceUnavailableHtml(), {
+      status: 503,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Retry-After": "5",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  // Handle unauthenticated visitors (standard non-timeout signed-out state)
   if (!user) {
     if (
       pathname === "/login" ||
@@ -95,12 +135,41 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Look up profile role & status for authenticated page navigation
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, is_active")
-    .eq("id", user.id)
-    .single();
+  // Look up profile role & status for authenticated page navigation with a 4-second timeout
+  let profile: { role: string; is_active: boolean } | null = null;
+  try {
+    const query = supabase
+      .from("profiles")
+      .select("role, is_active")
+      .eq("id", user.id);
+
+    const profileRes = await withTimeout(
+      async (signal) => {
+        if (typeof (query as { abortSignal?: (s: AbortSignal) => unknown }).abortSignal === "function") {
+          (query as { abortSignal: (s: AbortSignal) => unknown }).abortSignal(signal);
+        }
+        return await query.single();
+      },
+      4000
+    );
+    profile = profileRes?.data ?? null;
+  } catch {
+    console.error("auth service unreachable");
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { ok: false, code: "SERVICE_UNAVAILABLE", error: "Profile service temporarily unreachable" },
+        { status: 503, headers: { "Retry-After": "5", "Cache-Control": "no-store" } }
+      );
+    }
+    return new NextResponse(renderServiceUnavailableHtml(), {
+      status: 503,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Retry-After": "5",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
 
   if (!profile) {
     return supabaseResponse;

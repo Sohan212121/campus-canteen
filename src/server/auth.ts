@@ -2,6 +2,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { withTimeout, TimeoutError } from "@/lib/timeout";
 
 /** The shape of a profile row returned by getCurrentUser(). */
 export type UserProfile = {
@@ -24,31 +25,53 @@ export type UserProfile = {
  * - Uses the read-only Supabase client — no cookie writes, no signOut.
  * - Returns the user's profile from `public.profiles` (role comes from here,
  *   never from user_metadata or JWT claims).
+ * - Enforces a 4-second timeout with AbortSignal. On timeout, logs one line
+ *   "auth service unreachable" without sensitive keys.
  * - Returns `null` when there is no authenticated user or no matching profile.
  */
 export const getCurrentUser = cache(async (): Promise<UserProfile | null> => {
-  const supabase = await createReadOnlyClient();
+  try {
+    const supabase = await createReadOnlyClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const authRes = (await withTimeout(
+      supabase.auth.getUser(),
+      4000
+    )) as Awaited<ReturnType<typeof supabase.auth.getUser>>;
+    const user = authRes?.data?.user;
 
-  if (!user) return null;
+    if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, full_name, college_id, role, canteen_id, is_active")
-    .eq("id", user.id)
-    .single();
+    const query = supabase
+      .from("profiles")
+      .select("id, full_name, college_id, role, canteen_id, is_active")
+      .eq("id", user.id);
 
-  if (!profile) return null;
+    const profileRes = await withTimeout(
+      async (signal) => {
+        if (typeof (query as { abortSignal?: (s: AbortSignal) => unknown }).abortSignal === "function") {
+          (query as { abortSignal: (s: AbortSignal) => unknown }).abortSignal(signal);
+        }
+        return await query.single();
+      },
+      4000
+    );
 
-  const userProfile: UserProfile = { ...(profile as UserProfile) };
-  if (user.email) {
-    userProfile.email = user.email;
+    const profile = profileRes?.data;
+    if (!profile) return null;
+
+    const userProfile: UserProfile = { ...(profile as UserProfile) };
+    if (user.email) {
+      userProfile.email = user.email;
+    }
+
+    return userProfile;
+  } catch (err) {
+    if (err instanceof TimeoutError || (err as Error)?.name === "TimeoutError") {
+      console.error("auth service unreachable");
+      throw err;
+    }
+    return null;
   }
-
-  return userProfile;
 });
 
 export const ROLE_HOME = {
@@ -69,13 +92,22 @@ export type UserRole = keyof typeof ROLE_HOME;
  * - If no user is found, redirects to `/login`.
  * - If the user's role is not in the allowed list, redirects to their own home:
  *   student -> /, staff -> /staff, admin -> /admin.
+ * - On timeout: NEVER grant access, NEVER clear session cookies, and NEVER redirect to /login.
  *
  * Role is always read from `public.profiles`, never from JWT claims.
  */
 export async function requireRole(
   allowedRoles: UserProfile["role"][]
 ): Promise<UserProfile> {
-  const profile = await getCurrentUser();
+  let profile: UserProfile | null = null;
+  try {
+    profile = await getCurrentUser();
+  } catch (err) {
+    if (err instanceof TimeoutError || (err as Error)?.name === "TimeoutError") {
+      throw new Error("We can't reach the service right now. Please try again.");
+    }
+    throw err;
+  }
 
   if (!profile) {
     redirect("/login");
