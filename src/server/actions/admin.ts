@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { safeRevalidateTag } from "@/lib/safe-cache";
 import * as z from "zod";
 
 import { requireRole } from "@/server/auth";
@@ -416,6 +417,8 @@ export async function adminUpdateCanteenSettingsAction(
   revalidatePath("/admin/settings");
   revalidatePath("/admin");
   revalidatePath("/menu");
+  safeRevalidateTag("canteen-details");
+  safeRevalidateTag("canteen-active");
   return { success: true, data: undefined };
 }
 
@@ -575,6 +578,7 @@ export async function adminCreateCategoryAction(
 
   revalidatePath("/admin/menu");
   revalidatePath("/menu");
+  safeRevalidateTag("categories");
   return { success: true, data: data as AdminCategory };
 }
 
@@ -614,6 +618,7 @@ export async function adminUpdateCategoryAction(
 
   revalidatePath("/admin/menu");
   revalidatePath("/menu");
+  safeRevalidateTag("categories");
   return { success: true, data: undefined };
 }
 
@@ -633,6 +638,7 @@ export async function adminArchiveCategoryAction(categoryId: string): Promise<Ac
 
   revalidatePath("/admin/menu");
   revalidatePath("/menu");
+  safeRevalidateTag("categories");
   return { success: true, data: undefined };
 }
 
@@ -872,6 +878,7 @@ export async function adminUpdateMenuItemAction(
 
   revalidatePath("/admin/menu");
   revalidatePath("/menu");
+  safeRevalidateTag("categories");
   return { success: true, data: undefined };
 }
 
@@ -891,6 +898,7 @@ export async function adminArchiveMenuItemAction(itemId: string): Promise<Action
 
   revalidatePath("/admin/menu");
   revalidatePath("/menu");
+  safeRevalidateTag("categories");
   return { success: true, data: undefined };
 }
 

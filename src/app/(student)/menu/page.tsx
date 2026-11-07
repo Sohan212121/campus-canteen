@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Leaf } from "lucide-react";
 import { requireRole } from "@/server/auth";
 import { getActiveCanteenId } from "@/server/canteen";
+import { getPublicCategories } from "@/server/categories";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { logSupabaseError, isMissingColumnError } from "@/lib/supabase-error";
 import { getBestSellersAction, type BestSellerItem } from "@/server/actions/best-sellers";
@@ -20,12 +21,7 @@ export default async function MenuPage() {
     const supabase = await createReadOnlyClient();
 
     const [categoriesRes, itemsRes, bestSellersRes] = await Promise.all([
-      supabase
-        .from("categories")
-        .select("id, name, display_order, is_active")
-        .eq("canteen_id", canteenId)
-        .eq("is_active", true)
-        .order("display_order", { ascending: true }),
+      getPublicCategories(canteenId),
 
       supabase
         .from("menu_items")
@@ -42,10 +38,10 @@ export default async function MenuPage() {
       }),
     ]);
 
-    if (categoriesRes.data) {
-      categories = categoriesRes.data as CategoryData[];
-    } else if (categoriesRes.error) {
-      logSupabaseError("MenuPage:categories", categoriesRes.error);
+    if (Array.isArray(categoriesRes)) {
+      categories = categoriesRes as CategoryData[];
+    } else if ((categoriesRes as { data?: unknown })?.data) {
+      categories = (categoriesRes as { data: CategoryData[] }).data;
     }
 
     if (itemsRes.data) {

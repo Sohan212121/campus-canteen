@@ -5,6 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { requireRole } from "@/server/auth";
 import { getActiveCanteenId } from "@/server/canteen";
+import { getPublicCategories } from "@/server/categories";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { logSupabaseError, isMissingColumnError } from "@/lib/supabase-error";
 import { getBestSellersAction, type BestSellerItem } from "@/server/actions/best-sellers";
@@ -44,13 +45,8 @@ export default async function StudentHomePage() {
       .maybeSingle(),
 
     canteenId
-      ? supabase
-          .from("categories")
-          .select("id, name, display_order, is_active")
-          .eq("canteen_id", canteenId)
-          .eq("is_active", true)
-          .order("display_order", { ascending: true })
-      : Promise.resolve({ data: null, error: null }),
+      ? getPublicCategories(canteenId)
+      : Promise.resolve([]),
 
     canteenId
       ? supabase
@@ -73,10 +69,10 @@ export default async function StudentHomePage() {
     latestActiveOrder = activeOrderRes.data;
   }
 
-  if (categoriesRes.data) {
-    categories = categoriesRes.data as CategoryData[];
-  } else if (categoriesRes.error) {
-    logSupabaseError("StudentHomePage:categories", categoriesRes.error);
+  if (Array.isArray(categoriesRes)) {
+    categories = categoriesRes as CategoryData[];
+  } else if ((categoriesRes as { data?: unknown })?.data) {
+    categories = (categoriesRes as { data: CategoryData[] }).data;
   }
 
   if (itemsRes.data) {

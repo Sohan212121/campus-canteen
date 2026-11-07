@@ -19,7 +19,7 @@ vi.mock("@/lib/timeout", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/timeout")>();
   return {
     ...actual,
-    withTimeout: vi.fn(async (promiseOrFactory: unknown, _timeoutMs?: number) => {
+    withTimeout: vi.fn(async (promiseOrFactory: unknown) => {
       // If mock signals a timeout test
       if ((globalThis as unknown as { __SIMULATE_TIMEOUT__?: boolean }).__SIMULATE_TIMEOUT__) {
         throw new actual.TimeoutError("auth service unreachable");
