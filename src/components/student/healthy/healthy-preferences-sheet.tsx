@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { X, Plus, Clock, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -59,9 +59,25 @@ export function HealthyPreferencesSheet({
   const [isCalculating, setIsCalculating] = useState(false);
   const [caloriePulse, setCaloriePulse] = useState(false);
   const [proteinPulse, setProteinPulse] = useState(false);
+  const [showMatches, setShowMatches] = useState(false);
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  // Reset suggestions visibility when modal closes (React pattern: adjusting state from prop during render)
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (!isOpen) {
+      setShowMatches(false);
+    }
+  }
 
   const addItem = useCartStore((s) => s.addItem);
   const getItemQuantity = useCartStore((s) => s.getItemQuantity);
+
+  const handleClose = useCallback(() => {
+    setShowMatches(false);
+    onClose();
+  }, [onClose]);
 
   // Prevent background scroll when sheet is open
   useEffect(() => {
@@ -76,12 +92,12 @@ export function HealthyPreferencesSheet({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
-        onClose();
+        handleClose();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, handleClose]);
 
   // Derive suggested dishes purely via useMemo to avoid cascading renders
   const suggestions = useMemo(() => {
@@ -94,6 +110,8 @@ export function HealthyPreferencesSheet({
   }, [items, targetCalories, targetProtein, tolerance]);
 
   const handleComputeSuggestions = (customTolerance = 0.2) => {
+    setShowMatches(true);
+
     // Save to localStorage
     try {
       localStorage.setItem(
@@ -114,6 +132,8 @@ export function HealthyPreferencesSheet({
     setTolerance(customTolerance);
     setTimeout(() => {
       setIsCalculating(false);
+      // Smoothly scroll results into view
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 350);
   };
 
@@ -180,7 +200,7 @@ export function HealthyPreferencesSheet({
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-xs transition-opacity duration-200 sm:items-center p-0 sm:p-4"
-      onClick={onClose}
+      onClick={handleClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="preferences-sheet-title"
@@ -251,7 +271,7 @@ export function HealthyPreferencesSheet({
               {/* Close Button */}
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 aria-label="Close preferences"
                 className="w-8 h-8 flex items-center justify-center bg-[#F4FAF6] dark:bg-stone-800 hover:bg-[#e8f5ed] dark:hover:bg-stone-700 border border-[#E2EBE5] dark:border-stone-700 rounded-full text-[#4B6354] dark:text-emerald-300 hover:text-[#132A1E] dark:hover:text-white transition-colors touch-spring shadow-xs shrink-0 cursor-pointer"
               >
@@ -418,141 +438,146 @@ export function HealthyPreferencesSheet({
           </section>
 
           {/* =========================================================================
-              SUGGESTED DISHES RESULTS SECTION
+              SUGGESTED DISHES RESULTS SECTION (Revealed only after clicking "Show Matches")
               ========================================================================= */}
-          <div className="space-y-3 pt-1">
-            <div className="flex justify-between items-center mb-1 px-1">
-              <div className="flex items-center space-x-2">
-                <div className="w-1.5 h-3.5 bg-emerald-600 rounded-full" />
-                <h2 className="text-xs font-extrabold tracking-wider text-[#132A1E] dark:text-emerald-50 uppercase">
-                  SUGGESTED DISHES ({suggestions.length})
-                </h2>
+          {showMatches && (
+            <div
+              ref={resultsRef}
+              className="space-y-3 pt-1 animate-in fade-in slide-in-from-bottom-2 duration-300"
+            >
+              <div className="flex justify-between items-center mb-1 px-1">
+                <div className="flex items-center space-x-2">
+                  <div className="w-1.5 h-3.5 bg-emerald-600 rounded-full" />
+                  <h2 className="text-xs font-extrabold tracking-wider text-[#132A1E] dark:text-emerald-50 uppercase">
+                    SUGGESTED DISHES ({suggestions.length})
+                  </h2>
+                </div>
+                <span className="text-xs text-[#64748B] dark:text-stone-400 font-mono font-medium">
+                  Sorted by best fit
+                </span>
               </div>
-              <span className="text-xs text-[#64748B] dark:text-stone-400 font-mono font-medium">
-                Sorted by best fit
-              </span>
-            </div>
 
-            {/* Shimmer Skeleton during computation */}
-            {isCalculating ? (
-              <div
-                className="space-y-3 mt-1"
-                data-purpose="unique-organic-shimmer-skeletons"
-              >
-                {[1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-[#E2EBE5] dark:border-stone-800 shadow-sm relative overflow-hidden flex items-center gap-4"
-                  >
-                    <div className="w-20 h-20 rounded-2xl shimmer-light dark:bg-stone-800 shrink-0 border border-[#E2EBE5] dark:border-stone-800" />
-                    <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5 space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-3.5 h-3.5 rounded shimmer-light dark:bg-stone-800" />
-                        <div className="w-20 h-4 rounded-full shimmer-light dark:bg-stone-800" />
-                      </div>
-                      <div className="w-3/5 h-4 rounded shimmer-light dark:bg-stone-800" />
-                      <div className="w-4/5 h-3 rounded shimmer-light dark:bg-stone-800 opacity-75" />
-                      <div className="flex justify-between items-end pt-1">
-                        <div className="w-10 h-3 rounded shimmer-light dark:bg-stone-800" />
+              {/* Shimmer Skeleton during computation */}
+              {isCalculating ? (
+                <div
+                  className="space-y-3 mt-1"
+                  data-purpose="unique-organic-shimmer-skeletons"
+                >
+                  {[1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-[#E2EBE5] dark:border-stone-800 shadow-sm relative overflow-hidden flex items-center gap-4"
+                    >
+                      <div className="w-20 h-20 rounded-2xl shimmer-light dark:bg-stone-800 shrink-0 border border-[#E2EBE5] dark:border-stone-800" />
+                      <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5 space-y-2">
                         <div className="flex items-center space-x-2">
-                          <div className="w-8 h-4 rounded shimmer-light dark:bg-stone-800" />
-                          <div className="w-16 h-8 rounded-full shimmer-light dark:bg-stone-800" />
+                          <div className="w-3.5 h-3.5 rounded shimmer-light dark:bg-stone-800" />
+                          <div className="w-20 h-4 rounded-full shimmer-light dark:bg-stone-800" />
+                        </div>
+                        <div className="w-3/5 h-4 rounded shimmer-light dark:bg-stone-800" />
+                        <div className="w-4/5 h-3 rounded shimmer-light dark:bg-stone-800 opacity-75" />
+                        <div className="flex justify-between items-end pt-1">
+                          <div className="w-10 h-3 rounded shimmer-light dark:bg-stone-800" />
+                          <div className="flex items-center space-x-2">
+                            <div className="w-8 h-4 rounded shimmer-light dark:bg-stone-800" />
+                            <div className="w-16 h-8 rounded-full shimmer-light dark:bg-stone-800" />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : suggestions.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-emerald-300/80 dark:border-emerald-800/80 bg-white/70 dark:bg-stone-900/60 p-6 text-center space-y-3">
-                <p className="text-xs text-[#4B6354] dark:text-stone-300 leading-relaxed font-medium">
-                  No active dishes currently match {targetCalories} kcal and {targetProtein}g protein within the target range.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => handleComputeSuggestions(0.35)}
-                  className="min-h-[40px] px-4 py-2 text-xs font-bold rounded-xl border border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 transition-colors cursor-pointer"
-                >
-                  Widen Range to ±35%
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {suggestions.map(({ item: dish, isCloseMatch, matchReason }) => {
-                  const isOutOfStock =
-                    !dish.is_active ||
-                    !dish.is_available ||
-                    (dish.stock !== null && dish.stock <= 0);
+                  ))}
+                </div>
+              ) : suggestions.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-emerald-300/80 dark:border-emerald-800/80 bg-white/70 dark:bg-stone-900/60 p-6 text-center space-y-3">
+                  <p className="text-xs text-[#4B6354] dark:text-stone-300 leading-relaxed font-medium">
+                    No active dishes currently match {targetCalories} kcal and {targetProtein}g protein within the target range.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleComputeSuggestions(0.35)}
+                    className="min-h-[40px] px-4 py-2 text-xs font-bold rounded-xl border border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 transition-colors cursor-pointer"
+                  >
+                    Widen Range to ±35%
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {suggestions.map(({ item: dish, isCloseMatch, matchReason }) => {
+                    const isOutOfStock =
+                      !dish.is_active ||
+                      !dish.is_available ||
+                      (dish.stock !== null && dish.stock <= 0);
 
-                  return (
-                    <article
-                      key={dish.id}
-                      onClick={() => onOpenDishDetail(dish)}
-                      className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-emerald-100/80 dark:border-emerald-900/50 shadow-md shadow-emerald-950/5 flex items-center gap-4 hover:shadow-lg transition-all group cursor-pointer"
-                    >
-                      {/* Dish Photo Thumbnail */}
-                      <div className="w-20 h-20 rounded-2xl object-cover shadow-xs border border-emerald-100 dark:border-emerald-900/60 shrink-0 overflow-hidden relative bg-emerald-50 dark:bg-stone-800 flex items-center justify-center">
-                        {dish.image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            alt={dish.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            src={dish.image_url}
-                          />
-                        ) : (
-                          <span className="text-2xl select-none">🥗</span>
-                        )}
-                      </div>
-
-                      {/* Dish Metadata */}
-                      <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5">
-                        <div>
-                          <div className="flex items-center space-x-1.5 mb-1 flex-wrap gap-y-1">
-                            <VegIndicator isVeg={dish.is_veg} />
-                            <span className="bg-emerald-100/80 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-medium text-xs px-2.5 py-0.5 rounded-full">
-                              {isCloseMatch ? "Close Match" : "Best Fit"}
-                            </span>
-                          </div>
-                          <h3 className="text-sm font-bold text-[#132A1E] dark:text-emerald-50 tracking-tight truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                            {dish.name}
-                          </h3>
-                          <p className="text-xs text-[#4B6354] dark:text-stone-300 font-normal leading-tight mt-0.5">
-                            {matchReason || `${dish.protein_g}g protein, ${dish.calories_kcal} kcal`}
-                          </p>
+                    return (
+                      <article
+                        key={dish.id}
+                        onClick={() => onOpenDishDetail(dish)}
+                        className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-emerald-100/80 dark:border-emerald-900/50 shadow-md shadow-emerald-950/5 flex items-center gap-4 hover:shadow-lg transition-all group cursor-pointer"
+                      >
+                        {/* Dish Photo Thumbnail */}
+                        <div className="w-20 h-20 rounded-2xl object-cover shadow-xs border border-emerald-100 dark:border-emerald-900/60 shrink-0 overflow-hidden relative bg-emerald-50 dark:bg-stone-800 flex items-center justify-center">
+                          {dish.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              alt={dish.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              src={dish.image_url}
+                            />
+                          ) : (
+                            <span className="text-2xl select-none">🥗</span>
+                          )}
                         </div>
 
-                        <div className="flex items-center justify-between mt-2 pt-0.5">
-                          <div className="flex items-center space-x-1.5 text-xs text-[#64748B] dark:text-stone-400 font-mono font-medium">
-                            <Clock className="w-3.5 h-3.5 text-[#64748B] dark:text-stone-400 stroke-[2]" />
-                            <span>~{dish.prep_minutes || 5}m</span>
+                        {/* Dish Metadata */}
+                        <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5">
+                          <div>
+                            <div className="flex items-center space-x-1.5 mb-1 flex-wrap gap-y-1">
+                              <VegIndicator isVeg={dish.is_veg} />
+                              <span className="bg-emerald-100/80 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-medium text-xs px-2.5 py-0.5 rounded-full">
+                                {isCloseMatch ? "Close Match" : "Best Fit"}
+                              </span>
+                            </div>
+                            <h3 className="text-sm font-bold text-[#132A1E] dark:text-emerald-50 tracking-tight truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                              {dish.name}
+                            </h3>
+                            <p className="text-xs text-[#4B6354] dark:text-stone-300 font-normal leading-tight mt-0.5">
+                              {matchReason || `${dish.protein_g}g protein, ${dish.calories_kcal} kcal`}
+                            </p>
                           </div>
 
-                          <div
-                            className="flex items-center space-x-2.5"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <span className="text-base font-mono font-extrabold text-[#132A1E] dark:text-emerald-100">
-                              {formatPaise(dish.price_paise)}
-                            </span>
+                          <div className="flex items-center justify-between mt-2 pt-0.5">
+                            <div className="flex items-center space-x-1.5 text-xs text-[#64748B] dark:text-stone-400 font-mono font-medium">
+                              <Clock className="w-3.5 h-3.5 text-[#64748B] dark:text-stone-400 stroke-[2]" />
+                              <span>~{dish.prep_minutes || 5}m</span>
+                            </div>
 
-                            <button
-                              type="button"
-                              disabled={isOutOfStock}
-                              onClick={() => handleAddToCart(dish)}
-                              className="rounded-full px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md shadow-emerald-600/25 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer touch-spring"
+                            <div
+                              className="flex items-center space-x-2.5"
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              <Plus className="w-3.5 h-3.5 stroke-[2.8] text-white" />
-                              <span>Add</span>
-                            </button>
+                              <span className="text-base font-mono font-extrabold text-[#132A1E] dark:text-emerald-100">
+                                {formatPaise(dish.price_paise)}
+                              </span>
+
+                              <button
+                                type="button"
+                                disabled={isOutOfStock}
+                                onClick={() => handleAddToCart(dish)}
+                                className="rounded-full px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md shadow-emerald-600/25 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer touch-spring"
+                              >
+                                <Plus className="w-3.5 h-3.5 stroke-[2.8] text-white" />
+                                <span>Add</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
