@@ -40,9 +40,9 @@ export function getSectionTitle(path: string): string {
 }
 
 const MIN_DISPLAY_MS = 650; // Standard routes: allows signature food bounce & typewriter to complete smoothly
-const HEALTHY_MIN_DISPLAY_MS = 800; // Healthy Mode: deliberate, premium showcase of botanical badge & light sweep
+const HEALTHY_MIN_DISPLAY_MS = 2100; // Healthy Mode: deliberate, complete showcase of healthy mode logo animation
 const EXIT_FADE_MS = 240;   // Matches cb-backdrop-exit & cb-stage-exit duration
-const MAX_FAILSAFE_MS = 2500; // Failsafe if route change completely stalls
+const MAX_FAILSAFE_MS = 3000; // Failsafe if route change completely stalls
 
 export function NavigationTransitionProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
