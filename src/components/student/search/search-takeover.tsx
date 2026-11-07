@@ -9,7 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { ArrowLeft, Search, X, Clock, Sparkles, Utensils } from "lucide-react";
+import { ArrowLeft, Search, X, Sparkles, Utensils } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { VoiceSearchButton } from "@/components/ui/voice-search-button";
@@ -26,13 +26,9 @@ import {
 import {
   matchCategoryItems,
   getSortedCategoryTiles,
-  loadRecentSearches,
-  saveRecentSearch,
-  clearRecentSearches,
   getSearchSuggestions,
   type SearchSuggestion,
 } from "@/lib/search/search-helpers";
-import { DEV_SAMPLE_ITEMS } from "@/lib/search/sample-data";
 import { CategoryTile } from "./category-tile";
 
 export interface SearchTakeoverProps {
@@ -72,9 +68,6 @@ export function SearchTakeover({
   // Search input state: initialized directly so no cascading render occurs on mount
   const [query, setQuery] = useState(initialQuery);
   const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
-  const [recentSearches, setRecentSearches] = useState<string[]>(() =>
-    typeof window !== "undefined" ? loadRecentSearches() : []
-  );
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
 
   // Missing dish inline polite notice state
@@ -83,9 +76,6 @@ export function SearchTakeover({
     timestamp: number;
   } | null>(null);
   const [shakingCategoryId, setShakingCategoryId] = useState<string | null>(null);
-
-  // Development sample data toggle
-  const [useSampleData, setUseSampleData] = useState(false);
 
   // DOM and animation references
   const inputRef = useRef<HTMLInputElement>(null);
@@ -97,13 +87,8 @@ export function SearchTakeover({
   const mainContentRef = useRef<HTMLElement>(null);
   const historyPushedRef = useRef(false);
 
-  // Effective items (incorporating dev sample switch if active in non-production)
-  const effectiveItems = useMemo(() => {
-    if (process.env.NODE_ENV !== "production" && useSampleData) {
-      return [...items, ...DEV_SAMPLE_ITEMS];
-    }
-    return items;
-  }, [items, useSampleData]);
+  // Effective items (using real menu items)
+  const effectiveItems = items;
 
   // Debounce query for live suggestions (~150ms)
   useEffect(() => {
@@ -306,8 +291,6 @@ export function SearchTakeover({
       const trimmed = textToSearch.trim();
       if (!trimmed) return;
 
-      const updated = saveRecentSearch(trimmed);
-      setRecentSearches(updated);
       onSearchSubmit(trimmed);
       handleSafeClose();
     },
@@ -320,8 +303,7 @@ export function SearchTakeover({
       const matching = matchCategoryItems(effectiveItems, category, categoryMap);
 
       if (matching.length > 0) {
-        // Matches found: save category to recent searches, close takeover, apply filter
-        saveRecentSearch(category.label);
+        // Matches found: close takeover, apply filter
         onSelectCategory(category);
         handleSafeClose();
       } else {
@@ -396,17 +378,6 @@ export function SearchTakeover({
         executeSearch(query);
       }
     }
-  };
-
-  // Recent search chip click
-  const handleRecentClick = (term: string) => {
-    executeSearch(term);
-  };
-
-  // Clear recent searches
-  const handleClearRecents = () => {
-    clearRecentSearches();
-    setRecentSearches([]);
   };
 
   if (!isOpen) return null;
@@ -573,39 +544,6 @@ export function SearchTakeover({
           </section>
         )}
 
-        {/* RECENT SEARCHES ROW (when query is empty and recent searches exist) */}
-        {!query.trim() && recentSearches.length > 0 && (
-          <section aria-label="Recent searches" className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 font-headline">
-                <Clock className="h-3.5 w-3.5 text-primary" />
-                <span>Your Recent Searches</span>
-              </span>
-
-              <button
-                type="button"
-                onClick={handleClearRecents}
-                className="text-xs font-bold text-red-600 dark:text-red-400 hover:underline cursor-pointer"
-              >
-                Clear
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {recentSearches.map((term) => (
-                <button
-                  key={term}
-                  type="button"
-                  onClick={() => handleRecentClick(term)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#eae2d2] dark:bg-[#16171E] border border-[#ded5c4] dark:border-[#262836] text-xs font-semibold text-[#181513] dark:text-[#f8fafc] hover:border-primary active:scale-95 transition-all cursor-pointer shadow-2xs"
-                >
-                  <span>{term}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
         {/* SUGGESTED FOOD ITEMS (Showcases food items with name & image) */}
         {!query.trim() && suggestedDishes.length > 0 && (
           <section aria-label="Suggested dishes" className="space-y-2.5">
@@ -693,23 +631,6 @@ export function SearchTakeover({
             <h2 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-muted-foreground font-headline">
               What&rsquo;s on your mind?
             </h2>
-
-            {/* Development-only sample switch (Compiled out in production) */}
-            {process.env.NODE_ENV !== "production" && (
-              <button
-                type="button"
-                onClick={() => setUseSampleData((prev) => !prev)}
-                className={cn(
-                  "px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase border transition-colors cursor-pointer",
-                  useSampleData
-                    ? "bg-emerald-600 text-white border-emerald-700"
-                    : "bg-muted text-muted-foreground border-border hover:text-foreground"
-                )}
-                title="Development preview: blends sample items to preview photo tiles"
-              >
-                Sample data: {useSampleData ? "ON" : "OFF"}
-              </button>
-            )}
           </div>
 
           {/* 3-Column Touch-Friendly Responsive Grid */}
