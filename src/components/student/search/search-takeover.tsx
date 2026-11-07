@@ -64,6 +64,11 @@ export function SearchTakeover({
   const pathname = usePathname();
   const prefersReducedMotion = usePrefersReducedMotion();
 
+  const stayOnCurrentPageRef = useRef(stayOnCurrentPage);
+  useEffect(() => {
+    stayOnCurrentPageRef.current = stayOnCurrentPage;
+  }, [stayOnCurrentPage]);
+
   // Search input state: initialized directly so no cascading render occurs on mount
   const [query, setQuery] = useState(initialQuery);
   const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
@@ -154,14 +159,14 @@ export function SearchTakeover({
     }
 
     // 5. Always ensure the user returns/redirects to the home screen ("/") unless stayOnCurrentPage is true
-    if (!stayOnCurrentPage) {
+    if (!stayOnCurrentPageRef.current) {
       if (pathname !== "/") {
         router.push("/");
       } else {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
     }
-  }, [onClose, pathname, router, stayOnCurrentPage]);
+  }, [onClose, pathname, router]);
 
   // Body scroll lock & data-search-takeover-open attribute management
   useEffect(() => {
@@ -190,7 +195,7 @@ export function SearchTakeover({
         document.body.removeAttribute("data-search-takeover-open");
         document.body.style.overflow = "";
       }
-      if (!stayOnCurrentPage && window.location.pathname !== "/") {
+      if (!stayOnCurrentPageRef.current && window.location.pathname !== "/") {
         router.push("/");
       }
     };
@@ -208,7 +213,7 @@ export function SearchTakeover({
       document.body.removeAttribute("data-search-takeover-open");
       document.body.style.overflow = originalOverflow;
     };
-  }, [isOpen, onClose, router, stayOnCurrentPage]);
+  }, [isOpen, onClose, router]);
 
   // FLIP animation: measure source bar rect and smoothly shift search box from old position to top slot
   useEffect(() => {
