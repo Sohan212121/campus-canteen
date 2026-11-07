@@ -193,6 +193,9 @@ export function NavigationTransitionProvider({ children }: { children: React.Rea
 
   return (
     <NavigationTransitionContext.Provider value={{ startTransition, isTransitioning }}>
+      {/* Background preloader tags for Healthy Mode transition assets */}
+      <link rel="preload" href="/brand/healthymode-poster.png" as="image" />
+      <link rel="preload" href="/brand/healthymode-logo-transition.mp4" as="video" type="video/mp4" />
       {children}
       {isTransitioning && (
         transitionTheme === "healthy" ? (
