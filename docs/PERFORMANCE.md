@@ -13,7 +13,7 @@ Phase 3 focused on optimizing server-side execution speed, eliminating redundant
 - **Parallel Query Execution**: Replaced sequential waterfalls on staff and student views with concurrent `Promise.all()` pipelines.
 - **Strict Column Projections**: Verified 0 wildcard `select('*')` queries across the application, saving serialization overhead and network bandwidth.
 - **Timeout Safety & Resilience**: Added a strict 4-second timeout (`AbortSignal`) on auth/profile resolutions. Latency spikes or Supabase degradation return an accessible, branded HTTP 503 "Service Unavailable" response with `Retry-After: 5` rather than hanging requests for 25+ seconds, and never trigger erroneous session logouts or redirect loops.
-- **Safe Public Data Caching**: Cached canteen status and category catalogs across requests using Next.js Data Cache (`unstable_cache`) with a 60-second TTL and instant tag invalidation on admin edits (`safeRevalidateTag`).
+- **Safe Public Data & Per-Request Caching**: Canteen settings and category catalogs are deduplicated per request using `React.cache()`. Next.js 16 dynamic data source restrictions prohibit accessing session `cookies()` inside `unstable_cache()`; since Supabase RLS policies require the authenticated session context, per-request memoisation via `React.cache()` guarantees single-query efficiency without dynamic data source conflicts.
 
 ---
 
@@ -22,8 +22,8 @@ Phase 3 focused on optimizing server-side execution speed, eliminating redundant
 | Dimension | Baseline (Pre-Phase 3) | Optimized (Phase 3) |
 | :--- | :--- | :--- |
 | **User & Profile Lookups** | Proxy checked session; Layout re-queried user profile; Page called `requireRole` and re-fetched profile. | Single `getCurrentUser()` execution shared across proxy, layout, and page via `React.cache()`. |
-| **Canteen Resolution** | Multiple independent queries for `canteens` table per page navigation. | Deduplicated within request via `React.cache()`, and cached across requests with 60s TTL (`canteen-active`, `canteen-details`). |
-| **Category Queries** | Every request to Home and Menu queried `public.categories`. | Cached cross-request with 60s TTL (`getPublicCategories`, tag `categories`), invalidated instantly on admin category mutations. |
+| **Canteen Resolution** | Multiple independent queries for `canteens` table per page navigation. | Deduplicated within request via `React.cache()` across layouts, components, and pages. |
+| **Category Queries** | Every request to Home and Menu queried `public.categories`. | Deduplicated within request via `React.cache()` (`getPublicCategories`), avoiding multiple queries per render pass. |
 | **Staff Dashboard Queries** | Sequential waterfall: Canteen resolved $\rightarrow$ Kitchen board orders fetched $\rightarrow$ Completed counts fetched. | Parallelized: Canteen lookup, active orders, and completion metrics execute concurrently via `Promise.all()`. |
 | **Wildcard Queries** | Risk of schema drift and fetching unneeded JSON/text columns. | 100% explicit column projections; verified by automated static analyzer (`no-wildcard-select.test.ts`). |
 | **Supabase Latency Spikes** | Unhandled `AuthRetryableFetchError` or 25s+ request hangs; false redirect to `/login` wiping state. | 4-second timeout boundary (`AbortSignal`). Public pages load instantly; protected pages render HTTP 503 with Retry button; session preserved. |
@@ -86,17 +86,14 @@ All developers and agents working on Campus Canteen must adhere to these server 
 3. **No Sequential Query Waterfalls**:
    - If a page requires multiple pieces of data (e.g. categories, menu items, active orders), execute them concurrently using `Promise.all([ ... ])`.
 
-4. **Never Cache User-Specific Data Across Requests**:
-   - `unstable_cache` or Data Cache must NEVER be used for personal user profiles, active cart state, user notifications, or order history.
-   - Cross-request caching is strictly reserved for public or non-user-specific, rarely changing data (e.g. active canteen metadata, category list).
+4. **Never Access Dynamic Data Sources Inside `unstable_cache`**:
+   - `unstable_cache` must NEVER be used with functions that call `cookies()`, `headers()`, or `createReadOnlyClient()`. Next.js 16 will throw a dynamic data source error.
+   - For all Supabase queries governed by RLS, use `React.cache()` for per-request memoisation instead.
 
-5. **Tag-Based Revalidation for Public Caches**:
-   - Any server action that mutates cached public data MUST invalidate the respective tag via `safeRevalidateTag("tag-name")`.
-   - Standard tags:
-     - `canteen-active`: Active canteen status.
-     - `canteen-details`: Canteen operational settings (name, location, hold time).
-     - `categories`: Public menu categories.
+5. **Tag-Based Revalidation for Static/Public Caches**:
+   - When public caches or static pages are used, ensure admin mutation actions call the appropriate path or tag invalidation (`revalidatePath` / `safeRevalidateTag`).
 
 6. **Enforce 4-Second Timeout on Upstream Services**:
    - When calling external or upstream authentication/database services, enforce a timeout boundary using `withTimeout(fn, 4000)`.
    - On timeout, log `"auth service unreachable"` without logging tokens or keys, render a 503 Service Unavailable page, and never clear user session cookies.
+
