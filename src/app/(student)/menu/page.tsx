@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { Leaf } from "lucide-react";
 import { requireRole } from "@/server/auth";
 import { getActiveCanteenId } from "@/server/canteen";
 import { getPublicCategories } from "@/server/categories";
@@ -80,23 +78,11 @@ export default async function MenuPage() {
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-xl font-bold tracking-tight">Canteen Menu</h1>
-          <p className="text-xs text-muted-foreground">
-            Select items and customize quantities before placing your pre-order.
-          </p>
-        </div>
-
-        <Link
-          href="/healthy"
-          prefetch={true}
-          className="shrink-0 min-h-[40px] px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
-          aria-label="Switch to Healthy Mode"
-        >
-          <Leaf className="h-4 w-4" />
-          <span>Healthy Mode</span>
-        </Link>
+      <header className="space-y-1">
+        <h1 className="text-xl font-bold tracking-tight">Canteen Menu</h1>
+        <p className="text-xs text-muted-foreground">
+          Select items and customize quantities before placing your pre-order.
+        </p>
       </header>
 
       <MenuView

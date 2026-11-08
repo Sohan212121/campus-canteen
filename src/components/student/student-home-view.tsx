@@ -1,13 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import Link from "next/link";
 import {
   Search,
   X,
   Utensils,
   ArrowRight,
-  Leaf,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -20,7 +18,6 @@ import { BestSellersRow } from "@/components/student/best-sellers-row";
 import { CartShortcut } from "@/components/student/cart-shortcut";
 import { type MenuItemPriceRef, registerMenuItemPrices } from "@/lib/cart-shortcut";
 import type { BestSellerItem } from "@/server/actions/best-sellers";
-import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
 import { SearchTakeover } from "@/components/student/search/search-takeover";
 import type { FoodCategory } from "@/lib/search/categories";
 import { matchesAliasWholeWord } from "@/lib/search/search-helpers";
@@ -195,7 +192,6 @@ export function StudentHomeView({
   initialItems,
   bestSellers = [],
 }: StudentHomeViewProps) {
-  const { startTransition } = useNavigationTransition();
   // 1. Carousel state (changes every 2.5s with right-to-left sliding animation)
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -667,21 +663,8 @@ export function StudentHomeView({
           </div>
         </div>
 
-        {/* Smart Quick Filter Chips (In Stock, Under ₹50, Under ₹100, Healthy Mode) */}
+        {/* Smart Quick Filter Chips (In Stock, Under ₹50, Under ₹100) */}
         <div className="flex items-center gap-2 flex-wrap pt-0.5">
-          <Link
-            href="/healthy"
-            prefetch={true}
-            onClick={() => {
-              startTransition("/healthy", "Healthy Mode");
-            }}
-            className="min-h-[36px] h-9 px-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs font-headline tracking-wide uppercase border border-emerald-900/40"
-            aria-label="Healthy Mode & High-Protein Fuel"
-          >
-            <Leaf className="h-3.5 w-3.5" />
-            <span>Healthy Mode</span>
-          </Link>
-
           <button
             type="button"
             onClick={() => {
