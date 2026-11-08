@@ -421,10 +421,10 @@ export function HealthyMainView({
         </div>
 
         {/* Circular Radial Progress Ring & Target Messaging */}
-        <div className="relative z-10 flex items-center gap-4 sm:gap-5 pt-2 max-w-[250px] sm:max-w-[280px]">
+        <div className="relative z-10 flex items-center gap-3.5 sm:gap-4.5 pt-2 flex-1 min-w-0 pr-2">
           {/* SVG Ring Dial (Scaled up to beautifully fill space) */}
-          <div className="relative w-24 h-24 sm:w-28 sm:h-28 shrink-0 flex items-center justify-center">
-            <svg className="w-24 h-24 sm:w-28 sm:h-28 -rotate-90 transform" viewBox="0 0 72 72">
+          <div className="relative w-22 h-22 sm:w-24 sm:h-24 shrink-0 flex items-center justify-center">
+            <svg className="w-22 h-22 sm:w-24 sm:h-24 -rotate-90 transform" viewBox="0 0 72 72">
               <defs>
                 <linearGradient id="proteinRingGrad" x1="0%" x2="100%" y1="0%" y2="100%">
                   <stop offset="0%" stopColor="#d2f824" />
@@ -456,37 +456,45 @@ export function HealthyMainView({
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-              <span className="text-2xl sm:text-3xl text-white font-extrabold tracking-tight font-headline">
+              <span className="text-xl sm:text-2xl text-white font-extrabold tracking-tight font-headline">
                 {hudConsumed}
-                <span className="text-sm font-semibold text-[#c5f331]">g</span>
+                <span className="text-xs font-semibold text-[#c5f331]">g</span>
               </span>
-              <span className="text-[10px] sm:text-xs text-[#a2d0be] mt-1 font-bold uppercase tracking-wider font-headline">
+              <span className="text-[9px] sm:text-[10px] text-[#a2d0be] mt-0.5 font-bold uppercase tracking-wider font-headline">
                 / {targetProteinGoal}g
               </span>
             </div>
           </div>
 
           {/* Protein Target Messaging & Goal Status */}
-          <div className="flex flex-col">
+          <div className="flex flex-col min-w-0 flex-1">
             {isGoalHit ? (
               <button
                 type="button"
                 onClick={() => setShowCelebration(true)}
                 className="text-left group cursor-pointer"
               >
-                <span className="text-xl sm:text-2xl text-[#d2f824] tracking-tight font-black drop-shadow-[0_0_12px_rgba(210,248,36,0.35)] font-headline flex items-center gap-1.5 group-hover:underline">
-                  Goal Crushed! ⚡
-                </span>
+                <div className="flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="text-xl sm:text-2xl text-[#d2f824] tracking-tight font-black drop-shadow-[0_0_12px_rgba(210,248,36,0.35)] font-headline group-hover:underline">
+                    Goal Crushed!
+                  </span>
+                  <span className="text-lg leading-none">⚡</span>
+                </div>
                 <span className="text-xs sm:text-sm text-stone-300 leading-snug font-medium block mt-1">
                   Target achieved! Tap to view celebration 🎉
                 </span>
               </button>
             ) : (
               <>
-                <span className="text-2xl sm:text-3xl text-[#d2f824] tracking-tight font-extrabold drop-shadow-[0_0_12px_rgba(210,248,36,0.35)] font-headline">
-                  {hudToGo}g to go
-                </span>
-                <span className="text-xs sm:text-sm text-stone-300 leading-snug font-medium mt-1">
+                <div className="flex items-center gap-2 whitespace-nowrap">
+                  <span className="text-2xl sm:text-3xl font-black text-[#d2f824] tracking-tight font-headline drop-shadow-[0_0_14px_rgba(210,248,36,0.4)]">
+                    {hudToGo}g
+                  </span>
+                  <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#c5f331] bg-[#c5f331]/15 px-2 py-0.5 rounded-full border border-[#c5f331]/30 font-headline">
+                    to go
+                  </span>
+                </div>
+                <span className="text-xs sm:text-sm text-stone-300/90 leading-snug font-medium mt-1">
                   {totalProtein === 0
                     ? "Add high-protein meals to hit your daily goal"
                     : "Reach your daily muscle protein synthesis threshold"}
