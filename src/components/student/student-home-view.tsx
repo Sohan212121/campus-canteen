@@ -6,6 +6,12 @@ import {
   X,
   Utensils,
   ArrowRight,
+  EggFried,
+  CookingPot,
+  Sandwich,
+  Soup,
+  Coffee,
+  type LucideIcon,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -41,17 +47,17 @@ type MealType = "all" | "breakfast" | "lunch" | "snacks" | "dinner" | "beverages
 interface MealTabConfig {
   id: MealType;
   label: string;
-  icon: string;
+  icon: LucideIcon;
   color: string;
 }
 
 const MEAL_TABS: MealTabConfig[] = [
-  { id: "all", label: "All Items", icon: "🍽️", color: "from-zinc-500/10 to-zinc-500/5" },
-  { id: "breakfast", label: "Breakfast", icon: "🍳", color: "from-amber-500/15 to-orange-500/5" },
-  { id: "lunch", label: "Lunch", icon: "🍱", color: "from-emerald-500/15 to-teal-500/5" },
-  { id: "snacks", label: "Snacks", icon: "🥪", color: "from-purple-500/15 to-indigo-500/5" },
-  { id: "dinner", label: "Dinner", icon: "🍛", color: "from-rose-500/15 to-red-500/5" },
-  { id: "beverages", label: "Beverages", icon: "☕", color: "from-blue-500/15 to-cyan-500/5" },
+  { id: "all", label: "All Items", icon: Utensils, color: "from-zinc-500/10 to-zinc-500/5" },
+  { id: "breakfast", label: "Breakfast", icon: EggFried, color: "from-amber-500/15 to-orange-500/5" },
+  { id: "lunch", label: "Lunch", icon: CookingPot, color: "from-emerald-500/15 to-teal-500/5" },
+  { id: "snacks", label: "Snacks", icon: Sandwich, color: "from-purple-500/15 to-indigo-500/5" },
+  { id: "dinner", label: "Dinner", icon: Soup, color: "from-rose-500/15 to-red-500/5" },
+  { id: "beverages", label: "Beverages", icon: Coffee, color: "from-blue-500/15 to-cyan-500/5" },
 ];
 
 // 5 motivating & food-themed banner slides (inspired by Zomato's Homely Subscriptions hero)
@@ -433,6 +439,7 @@ export function StudentHomeView({
       >
         {MEAL_TABS.map((tab) => {
           const isSelected = selectedMeal === tab.id;
+          const Icon = tab.icon;
           return (
             <button
               key={tab.id}
@@ -452,13 +459,22 @@ export function StudentHomeView({
             >
               <div
                 className={cn(
-                  "w-14 h-14 rounded-2xl flex items-center justify-center p-2 text-2xl transition-all shadow-xs relative",
+                  "w-14 h-14 rounded-2xl flex items-center justify-center p-2 transition-all shadow-xs relative",
                   isSelected
                     ? "bg-white dark:bg-[#1E2230] border-2 border-[#DC2626] dark:border-[#EF4444] shadow-md shadow-[#DC2626]/20 dark:shadow-[#EF4444]/25 scale-105"
                     : "bg-white dark:bg-[#1E2230] border border-black/20 dark:border-white/20 hover:border-[#DC2626]/50 hover:bg-[#FAF8F5] dark:hover:bg-[#252A3B] hover:shadow-xs"
                 )}
               >
-                <span className="filter drop-shadow-xs transition-transform duration-200 group-hover:scale-110">{tab.icon}</span>
+                <Icon
+                  className={cn(
+                    "w-6 h-6 transition-all duration-200 group-hover:scale-110",
+                    isSelected
+                      ? "text-[#DC2626] dark:text-[#EF4444]"
+                      : "text-[#2b2520] dark:text-[#ede7e1] group-hover:text-[#DC2626] dark:group-hover:text-[#EF4444]"
+                  )}
+                  strokeWidth={isSelected ? 2.25 : 1.85}
+                  aria-hidden="true"
+                />
                 {isSelected && (
                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#DC2626] dark:bg-[#EF4444] border-2 border-white dark:border-[#090A0F]" />
                 )}
