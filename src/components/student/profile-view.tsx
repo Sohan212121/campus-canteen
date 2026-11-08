@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -70,8 +70,12 @@ export function ProfileView({
 }: ProfileViewProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "favorites" | "sso" | "feedback">("overview");
-  const favoritesList = useFavoritesStore((s) => s.getFavoritesList());
-  const favoritesCount = useFavoritesStore((s) => s.getFavoritesCount());
+  const favoriteItemsMap = useFavoritesStore((s) => s.items);
+  const favoritesList = useMemo(() => {
+    const map = favoriteItemsMap ?? {};
+    return Object.values(map).sort((a, b) => b.added_at - a.added_at);
+  }, [favoriteItemsMap]);
+  const favoritesCount = useMemo(() => Object.keys(favoriteItemsMap ?? {}).length, [favoriteItemsMap]);
   const removeFavorite = useFavoritesStore((s) => s.removeFavorite);
   const addItem = useCartStore((s) => s.addItem);
 
