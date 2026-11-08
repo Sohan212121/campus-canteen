@@ -20,7 +20,6 @@ import {
   LayoutGrid,
   ShoppingBag,
   Heart,
-  Trash2,
   Plus,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,9 +32,7 @@ import {
 } from "@/components/student/preordered-items-review-section";
 import { useFavoritesStore, type FavoriteItem } from "@/lib/favorites-store";
 import { useCartStore } from "@/lib/cart-store";
-import { formatPaise } from "@/lib/money";
 import { MenuItemImage } from "@/components/student/menu-item-image";
-import { VegIndicator } from "@/components/student/veg-indicator";
 import { registerMenuItemPrices } from "@/lib/cart-shortcut";
 
 export interface ProfileViewProps {
@@ -76,7 +73,6 @@ export function ProfileView({
     return Object.values(map).sort((a, b) => b.added_at - a.added_at);
   }, [favoriteItemsMap]);
   const favoritesCount = useMemo(() => Object.keys(favoriteItemsMap ?? {}).length, [favoriteItemsMap]);
-  const removeFavorite = useFavoritesStore((s) => s.removeFavorite);
   const addItem = useCartStore((s) => s.addItem);
 
   const handleQuickAddToCart = (fav: FavoriteItem) => {
@@ -655,68 +651,45 @@ export function ProfileView({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {favoritesList.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-white dark:bg-[#181a24] rounded-2xl p-3 border border-[#e6e2da] dark:border-[#262836] shadow-2xs hover:border-[#dcc0bd] dark:hover:border-[#3d4255] transition-all flex gap-3 group"
+                  className="bg-white dark:bg-[#181a24] rounded-2xl p-2.5 sm:p-3 border border-[#e6e2da] dark:border-[#262836] shadow-2xs hover:border-[#dcc0bd] dark:hover:border-[#3d4255] transition-all flex flex-col justify-between group"
                 >
-                  {/* Left: Image with Veg indicator */}
-                  <div className="relative w-22 h-22 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-[#e8dac0] dark:bg-[#090A0F] shrink-0">
+                  {/* Food Photo */}
+                  <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-[#e8dac0] dark:bg-[#090A0F]">
                     <MenuItemImage
                       src={item.image_url}
                       alt={item.name}
                       aspect="square"
-                      sizes="96px"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 200px"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 rounded-xl"
                       containerClassName="w-full h-full"
+                      placeholderClassName="w-full h-full"
                     />
-                    <div className="absolute top-1 left-1 p-0.5 rounded bg-white/90 dark:bg-black/80 backdrop-blur-xs shadow-2xs">
-                      <VegIndicator isVeg={item.is_veg} />
-                    </div>
                   </div>
 
-                  {/* Right: Info + Actions */}
-                  <div className="flex-1 min-w-0 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-start justify-between gap-1">
-                        <h4 className="font-bold text-xs sm:text-sm text-[#1c1c17] dark:text-white uppercase tracking-wide truncate font-headline">
-                          {item.name}
-                        </h4>
-                        <button
-                          type="button"
-                          onClick={() => removeFavorite(item.id)}
-                          title="Remove from favorites"
-                          aria-label={`Remove ${item.name} from favorites`}
-                          className="text-stone-400 hover:text-rose-500 transition-colors p-1 rounded-md cursor-pointer shrink-0"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                  {/* Food Name */}
+                  <div className="pt-2 pb-1.5 px-0.5">
+                    <h4
+                      title={item.name}
+                      className="font-bold text-xs sm:text-sm text-[#1c1c17] dark:text-white uppercase tracking-wide truncate font-headline"
+                    >
+                      {item.name}
+                    </h4>
+                  </div>
 
-                      <div className="flex items-center gap-2 mt-1 text-[11px] text-[#564240] dark:text-stone-400 font-medium">
-                        <span className="font-extrabold text-[#6c1d18] dark:text-[#FBBF24] font-headline text-xs sm:text-sm">
-                          {formatPaise(item.price_paise)}
-                        </span>
-                        {item.calories_kcal != null && (
-                          <span>&bull; {item.calories_kcal} kcal</span>
-                        )}
-                        {item.protein_g != null && (
-                          <span className="text-emerald-700 dark:text-emerald-400 font-bold">&bull; {item.protein_g}g pro</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="pt-2">
-                      <button
-                        type="button"
-                        onClick={() => handleQuickAddToCart(item)}
-                        className="w-full py-1.5 px-3 rounded-lg bg-[#FACC15] hover:bg-[#EAB308] text-[#181513] font-headline text-[11px] font-extrabold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-2xs transition-transform active:scale-95 cursor-pointer"
-                      >
-                        <Plus className="w-3 h-3 stroke-[2.5]" />
-                        <span>Add to Cart</span>
-                      </button>
-                    </div>
+                  {/* Add to Cart Button */}
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAddToCart(item)}
+                      className="w-full py-2 px-2.5 rounded-xl bg-[#FACC15] hover:bg-[#EAB308] text-[#181513] font-headline text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-2xs transition-transform active:scale-95 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Add to Cart</span>
+                    </button>
                   </div>
                 </div>
               ))}
