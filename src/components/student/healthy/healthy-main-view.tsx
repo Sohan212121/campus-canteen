@@ -298,7 +298,7 @@ export function HealthyMainView({
         <div className="flex items-center gap-2">
           <Link
             href="/menu"
-            className="w-8 h-8 rounded-full bg-[#f0eee7] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-white active:scale-90 transition-transform shadow-2xs hover:bg-[#ebe8e1]"
+            className="w-8 h-8 rounded-full bg-[#e8f5e9] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-[#81c784] active:scale-90 transition-transform shadow-2xs hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60"
             aria-label="Back to menu"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -310,7 +310,7 @@ export function HealthyMainView({
 
         <Link
           href="/cart"
-          className="relative w-10 h-10 rounded-full bg-[#ebe8e1] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-white shadow-xs active:scale-90 transition-transform hover:bg-[#e5e2db]"
+          className="relative w-10 h-10 rounded-full bg-[#e8f5e9] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-[#81c784] shadow-xs active:scale-90 transition-transform hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60"
           aria-label="Fuel cart"
         >
           <ShoppingBag className="h-4.5 w-4.5" />
@@ -350,18 +350,18 @@ export function HealthyMainView({
                 setTimeout(scrollToCatalog, 50);
               }}
               aria-label="Clear search"
-              className="text-[#414945] dark:text-stone-400 hover:text-[#00241a] p-1 cursor-pointer"
+              className="w-7 h-7 rounded-full bg-[#e8f5e9] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-[#81c784] hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60 active:scale-90 transition-transform cursor-pointer shrink-0"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </button>
           ) : (
             <button
               type="button"
               onClick={openTakeover}
               aria-label="Voice search"
-              className="text-[#414945] dark:text-stone-400 hover:text-[#00241a] p-1 cursor-pointer"
+              className="w-7 h-7 rounded-full bg-[#e8f5e9] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-[#81c784] hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60 active:scale-90 transition-transform cursor-pointer shrink-0"
             >
-              <Mic className="h-4 w-4" />
+              <Mic className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -370,7 +370,7 @@ export function HealthyMainView({
           type="button"
           onClick={() => setIsPreferencesOpen(true)}
           aria-label="Open macro targets"
-          className="h-12 w-12 rounded-full bg-[#ebe8e1] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-white relative shadow-xs active:scale-90 transition-transform hover:bg-[#e5e2db] shrink-0 cursor-pointer"
+          className="h-12 w-12 rounded-full bg-[#e8f5e9] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-[#81c784] relative shadow-xs active:scale-90 transition-transform hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60 shrink-0 cursor-pointer"
         >
           <SlidersHorizontal className="h-5 w-5" />
           <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-[#ff6f4f] ring-2 ring-white dark:ring-[#161311]" />
