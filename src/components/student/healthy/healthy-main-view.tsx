@@ -644,8 +644,8 @@ export function HealthyMainView({
                 }}
                 className={`shrink-0 h-9 px-4 rounded-full font-headline text-xs uppercase flex items-center gap-1.5 transition-all duration-150 active:scale-95 cursor-pointer ${
                   isSelected
-                    ? "bg-[#c2f02e] text-[#00241a] font-bold shadow-xs"
-                    : "bg-[#f0eee7] dark:bg-[#1e291c] text-[#1c1c18] dark:text-[#ede7e1] hover:bg-[#ebe8e1] dark:hover:bg-[#253323] font-semibold"
+                    ? "bg-[#c2f02e] text-[#00241a] font-bold shadow-xs border border-[#a8db00]"
+                    : "bg-[#e8f5e9] dark:bg-[#1e291c] text-[#00241a] dark:text-[#ede7e1] hover:bg-[#d8eedd] dark:hover:bg-[#253323] font-semibold border border-[#cbe6d4]/60 dark:border-[#3b533a]/60"
                 }`}
               >
                 <span>{cat.emoji}</span>
@@ -714,13 +714,13 @@ export function HealthyMainView({
             }}
             className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer font-headline ${
               isVegOnly
-                ? "bg-[#c2f02e] text-[#00241a] shadow-xs"
-                : "bg-[#f0eee7] dark:bg-[#1e291c] text-[#1c1c18] dark:text-[#ede7e1] hover:bg-[#ebe8e1]"
+                ? "bg-[#c2f02e] text-[#00241a] shadow-xs border border-[#a8db00]"
+                : "bg-[#e8f5e9] dark:bg-[#1e291c] text-[#00241a] dark:text-[#ede7e1] hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60"
             }`}
           >
             <span
               className={`w-2 h-2 rounded-full ${
-                isVegOnly ? "bg-[#00241a]" : "bg-[#506600] dark:bg-[#4CAF50]"
+                isVegOnly ? "bg-[#00241a]" : "bg-[#2e7d32] dark:bg-[#4CAF50]"
               }`}
             />
             <span>Veg only</span>
@@ -735,8 +735,8 @@ export function HealthyMainView({
             }}
             className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer font-headline ${
               isUnder500Kcal
-                ? "bg-[#c2f02e] text-[#00241a] shadow-xs"
-                : "bg-[#f0eee7] dark:bg-[#1e291c] text-[#1c1c18] dark:text-[#ede7e1] hover:bg-[#ebe8e1]"
+                ? "bg-[#c2f02e] text-[#00241a] shadow-xs border border-[#a8db00]"
+                : "bg-[#e8f5e9] dark:bg-[#1e291c] text-[#00241a] dark:text-[#ede7e1] hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60"
             }`}
           >
             <span>&lt; 500 kcal</span>
@@ -751,15 +751,15 @@ export function HealthyMainView({
             }}
             className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer font-headline ${
               isHighProtein
-                ? "bg-[#c2f02e] text-[#00241a] shadow-xs"
-                : "bg-[#f0eee7] dark:bg-[#1e291c] text-[#1c1c18] dark:text-[#ede7e1] hover:bg-[#ebe8e1]"
+                ? "bg-[#c2f02e] text-[#00241a] shadow-xs border border-[#a8db00]"
+                : "bg-[#e8f5e9] dark:bg-[#1e291c] text-[#00241a] dark:text-[#ede7e1] hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60"
             }`}
           >
             <span>High protein</span>
           </button>
 
           {/* Sort Dropdown */}
-          <div className="shrink-0 flex items-center gap-1 bg-[#f0eee7] dark:bg-[#1e291c] text-[#00241a] dark:text-[#ede7e1] text-xs px-2.5 h-8 rounded-full">
+          <div className="shrink-0 flex items-center gap-1 bg-[#e8f5e9] dark:bg-[#1e291c] text-[#00241a] dark:text-[#ede7e1] text-xs px-2.5 h-8 rounded-full border border-[#cbe6d4]/60 dark:border-[#3b533a]/60 hover:bg-[#d8eedd] dark:hover:bg-[#253323] transition-colors">
             <select
               value={sortBy}
               onChange={(e) => {
@@ -805,7 +805,7 @@ export function HealthyMainView({
               All High-Protein Meals
             </h2>
           </div>
-          <span className="text-[11px] font-bold text-[#414945] dark:text-[#c4bdb3] bg-[#f0eee7] dark:bg-[#1e291c] px-2.5 py-1 rounded-full font-headline">
+          <span className="text-[11px] font-bold text-[#00241a] dark:text-[#81c784] bg-[#e8f5e9] dark:bg-[#1e291c] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60 px-2.5 py-1 rounded-full font-headline">
             {filteredDishes.length} Dishes
           </span>
         </div>
