@@ -68,8 +68,14 @@ export function HealthyLogoTransition({
         }
       `}</style>
 
-      {/* Solid Uniform Backdrop: Exactly matches the #F4F0E4 background of the video with ZERO color disparity */}
-      <div className="absolute inset-0 bg-[#F4F0E4]" />
+      {/* Solid Uniform Backdrop: Exactly matches the #F4F0E4 background in light mode, deep black in dark mode */}
+      <div className="absolute inset-0 bg-[#F4F0E4] dark:bg-black transition-colors" />
+
+      {/* Ambient Radial Glow in dark mode */}
+      <div
+        className="absolute w-80 h-80 sm:w-96 sm:h-96 rounded-full bg-gradient-to-tr from-emerald-500/20 via-lime-500/15 to-transparent blur-3xl pointer-events-none opacity-0 dark:opacity-100 transition-opacity"
+        aria-hidden="true"
+      />
 
       {/* Stage Container */}
       <div
@@ -78,7 +84,7 @@ export function HealthyLogoTransition({
         }`}
       >
         {/* Healthy Mode Logo Container (Zero-delay poster + video with feathered seamless edge) */}
-        <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center healthy-logo-mask">
+        <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center healthy-logo-mask dark:drop-shadow-[0_0_35px_rgba(16,185,129,0.2)]">
           {/* Instant First-Frame Poster: Visible IMMEDIATELY at 0ms (eliminates any video loading delay) */}
           <Image
             src="/brand/healthymode-poster.png"
@@ -110,9 +116,9 @@ export function HealthyLogoTransition({
 
         {/* Text Transition Message Below the Logo */}
         <div className="mt-2 flex flex-col items-center gap-1.5 text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-emerald-700/10 border border-emerald-700/20 mb-0.5">
-            <span className="w-2 h-2 rounded-full bg-[#0b3b2e] animate-ping" />
-            <span className="text-[10px] uppercase font-bold tracking-widest text-[#0b3b2e] font-headline">
+          <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-emerald-700/10 dark:bg-emerald-500/20 border border-emerald-700/20 dark:border-emerald-500/30 mb-0.5">
+            <span className="w-2 h-2 rounded-full bg-[#0b3b2e] dark:bg-emerald-400 animate-ping" />
+            <span className="text-[10px] uppercase font-bold tracking-widest text-[#0b3b2e] dark:text-emerald-400 font-headline">
               Campus Nutrition
             </span>
           </div>
@@ -126,7 +132,7 @@ export function HealthyLogoTransition({
             {LETTERS.map((char, i) => (
               <span
                 key={i}
-                className="inline-block font-headline text-lg sm:text-xl font-black text-[#00241a] tracking-tight"
+                className="inline-block font-headline text-lg sm:text-xl font-black text-[#00241a] dark:text-[#ede7e1] tracking-tight"
                 style={{
                   animation: "healthy-letter-in 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both",
                   animationDelay: `${80 + i * 22}ms`,
@@ -138,7 +144,7 @@ export function HealthyLogoTransition({
           </div>
 
           <span
-            className="text-xs text-[#506600] font-medium tracking-wide transition-opacity duration-500"
+            className="text-xs text-[#506600] dark:text-emerald-400/90 font-medium tracking-wide transition-opacity duration-500"
             style={{
               animation: "healthy-letter-in 0.5s ease-out both",
               animationDelay: "380ms",
