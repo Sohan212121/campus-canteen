@@ -1,0 +1,14 @@
+[
+    {
+        "relation": [
+            "delegate_permission/common.handle_all_urls"
+        ],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "app.vercel.campbitee.twa",
+            "sha256_cert_fingerprints": [
+                "ED:00:28:05:3B:14:EF:1B:14:50:D0:81:AE:14:45:9B:A1:42:DE:C4:D6:22:53:C3:4D:F7:D0:2A:94:B5:AF:C3"
+            ]
+        }
+    }
+]
