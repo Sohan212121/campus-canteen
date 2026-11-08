@@ -609,7 +609,7 @@ export function StudentHomeView({
               onChange={(e) => setSearchQuery(e.target.value)}
               onClick={openTakeover}
               onFocus={openTakeover}
-              className="h-12 pl-10 pr-20 text-sm font-semibold bg-[#eae2d2] dark:bg-[#121319] border border-[#181513]/25 dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#181513] focus-visible:dark:ring-[#FBBF24] cursor-pointer"
+              className="h-12 pl-10 pr-20 text-base md:text-sm font-semibold bg-[#eae2d2] dark:bg-[#121319] border border-[#181513]/25 dark:border-[#222533] text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-2xl shadow-2xs focus-visible:ring-[#181513] focus-visible:dark:ring-[#FBBF24] cursor-pointer"
             />
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
               {searchQuery && (

@@ -221,7 +221,7 @@ export function MenuView({ categories, initialItems, bestSellers = [] }: MenuVie
           placeholder="Search items, snacks, drinks..."
           value={searchQuery}
           onFocus={openTakeover}
-          className="h-11 pl-9 pr-16 text-sm font-semibold bg-card border border-[#181513]/25 dark:border-border/80 text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-xl cursor-pointer"
+          className="h-11 pl-9 pr-16 text-base md:text-sm font-semibold bg-card border border-[#181513]/25 dark:border-border/80 text-[#181513] dark:text-white placeholder:text-[#181513]/70 dark:placeholder:text-slate-400 rounded-xl cursor-pointer"
         />
         <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
           {searchQuery && (

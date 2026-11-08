@@ -486,7 +486,7 @@ export function HealthyMainView({
             value={searchQuery}
             onFocus={openTakeover}
             placeholder="Search chicken, paneer, eggs, whey…"
-            className="w-full bg-transparent text-[#00241a] dark:text-white placeholder-[#414945]/60 dark:placeholder-stone-500 text-xs sm:text-sm outline-none font-medium cursor-pointer"
+            className="w-full bg-transparent text-[#00241a] dark:text-white placeholder-[#414945]/60 dark:placeholder-stone-500 text-base md:text-sm outline-none font-medium cursor-pointer"
           />
           {searchQuery ? (
             <button

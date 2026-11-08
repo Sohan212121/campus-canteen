@@ -991,3 +991,13 @@ body[data-search-takeover-open="true"] [aria-label*="cart shortcut" i] {
   transform: scale(0.97);
 }
 
+/* Prevent iOS Safari from auto-zooming on focus: ensure inputs, textareas, and selects are at least 16px on mobile */
+@media screen and (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+

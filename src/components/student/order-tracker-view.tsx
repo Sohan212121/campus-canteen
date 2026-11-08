@@ -1411,7 +1411,7 @@ export function OrderTrackerView({ initialOrder }: OrderTrackerViewProps) {
                   placeholder="e.g. I was in class and did not collect this order."
                   value={disputeReason}
                   onChange={(e) => setDisputeReason(e.target.value)}
-                  className="text-sm min-h-[44px] rounded-xl"
+                  className="text-base md:text-sm min-h-[44px] rounded-xl"
                   required
                 />
               </div>

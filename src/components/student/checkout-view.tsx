@@ -628,7 +628,7 @@ export function CheckoutView({ canteenId }: CheckoutViewProps) {
                 setIdempotencyKey(crypto.randomUUID());
                 setNetworkErrorOccurred(false);
               }}
-              className="w-full h-11 px-3.5 text-sm font-bold rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary shadow-2xs"
+              className="w-full h-11 px-3.5 text-base md:text-sm font-bold rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary shadow-2xs"
             />
             {suggestedEarliestAt && (
               <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-900 dark:text-amber-200 space-y-2">

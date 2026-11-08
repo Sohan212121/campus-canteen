@@ -184,7 +184,7 @@ export function HealthyModeView({ canteenItems = [] }: HealthyModeViewProps) {
           placeholder='Search "soya, paneer, chicken, rajma, sprouts..."'
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-11 pl-10 pr-16 text-xs sm:text-sm font-medium bg-card border-border/80 rounded-2xl shadow-2xs"
+          className="h-11 pl-10 pr-16 text-base md:text-sm font-medium bg-card border-border/80 rounded-2xl shadow-2xs"
         />
         <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
           {searchQuery && (
