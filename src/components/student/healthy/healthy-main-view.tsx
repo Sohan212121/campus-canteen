@@ -388,143 +388,111 @@ export function HealthyMainView({
       {/* =========================================================================
           DAILY PROTEIN GOAL HERO CARD (LAYOUT SIZE & HEIGHT KEPT ROCK-SOLID CONSTANT)
           ========================================================================= */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#050d0a] via-[#071b12] to-[#0a1410] text-white p-4 sm:p-5 shadow-[0_20px_45px_-10px_rgba(0,0,0,0.7),0_0_25px_rgba(210,248,36,0.12)] border border-[#10b981]/30 transition-all select-none">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#050d0a] via-[#071b12] to-[#0a1410] text-white p-5 sm:p-6 shadow-[0_20px_45px_-10px_rgba(0,0,0,0.7),0_0_25px_rgba(210,248,36,0.12)] border border-[#10b981]/30 transition-all select-none min-h-[215px] sm:min-h-[230px] flex flex-col justify-between">
         {/* Glow Spheres */}
         <div className="absolute -top-12 -right-8 w-48 h-48 rounded-full bg-[#d2f824]/20 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-10 -left-10 w-44 h-44 rounded-full bg-[#06b6d4]/20 blur-3xl pointer-events-none" />
         <div className="absolute top-1/2 right-1/4 w-36 h-36 rounded-full bg-[#8b5cf6]/15 blur-2xl pointer-events-none" />
 
         {/* Circular Gourmet Fuel Thumbnail in Top Right */}
-        <div className="absolute -top-2 -right-2 w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.6),0_0_20px_rgba(210,248,36,0.3)] pointer-events-none ring-2 ring-[#d2f824]/50 transform rotate-3">
+        <div className="absolute -top-3 -right-3 w-32 h-32 sm:w-36 sm:h-36 rounded-full overflow-hidden shadow-[0_12px_36px_rgba(0,0,0,0.7),0_0_24px_rgba(210,248,36,0.35)] pointer-events-none ring-2 ring-[#d2f824]/50 transform rotate-3">
           <MenuItemImage
             src={activeItems[0]?.image_url}
             alt="Protein Fuel Bowl"
             aspect="square"
-            sizes="128px"
+            sizes="144px"
             className="w-full h-full object-cover"
             containerClassName="w-full h-full"
           />
         </div>
 
-        {/* Top Tag & Circular Radial Progress Ring */}
-        <div className="relative z-10 flex flex-col gap-2 max-w-[210px] sm:max-w-[240px]">
-          {/* Daily Protein Target Badge (Replaces AI Athletic HUD with identical size & height) */}
-          <div className="inline-flex items-center gap-1.5 self-start bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 shadow-xs">
-            <span className="flex h-2 w-2 relative">
+        {/* Top Tag */}
+        <div className="relative z-10">
+          <div className="inline-flex items-center gap-2 self-start bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20 shadow-xs">
+            <span className="flex h-2.5 w-2.5 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c5f331] opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#c5f331] shadow-[0_0_8px_#c5f331]" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#c5f331] shadow-[0_0_8px_#c5f331]" />
             </span>
-            <span className="text-[10px] uppercase text-[#c5f331] tracking-wider font-bold font-headline flex items-center gap-1">
-              <Flame className="h-3 w-3 fill-current text-[#c5f331]" />
+            <span className="text-[11px] sm:text-xs uppercase text-[#c5f331] tracking-wider font-bold font-headline flex items-center gap-1.5">
+              <Flame className="h-3.5 w-3.5 fill-current text-[#c5f331]" />
               <span>Daily Protein Target</span>
             </span>
           </div>
-
-          <div className="flex items-center gap-3 pt-0.5">
-            {/* SVG Ring Dial (Starts at 0% and fills as protein items are added/ordered) */}
-            <div className="relative w-20 h-20 shrink-0 flex items-center justify-center">
-              <svg className="w-20 h-20 -rotate-90 transform" viewBox="0 0 72 72">
-                <defs>
-                  <linearGradient id="proteinRingGrad" x1="0%" x2="100%" y1="0%" y2="100%">
-                    <stop offset="0%" stopColor="#d2f824" />
-                    <stop offset="100%" stopColor="#06b6d4" />
-                  </linearGradient>
-                </defs>
-                <circle
-                  className="stroke-[#a2d0be]/20"
-                  cx="36"
-                  cy="36"
-                  fill="none"
-                  r="29"
-                  strokeWidth="6"
-                />
-                <circle
-                  cx="36"
-                  cy="36"
-                  fill="none"
-                  r="29"
-                  stroke="url(#proteinRingGrad)"
-                  strokeDasharray="182.2"
-                  strokeDashoffset={progressDashoffset}
-                  strokeLinecap="round"
-                  strokeWidth="6"
-                  style={{
-                    filter: "drop-shadow(0 0 7px rgba(210, 248, 36, 0.7))",
-                    transition: "stroke-dashoffset 0.65s cubic-bezier(0.16, 1, 0.3, 1)",
-                  }}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-                <span className="text-[17px] sm:text-[18px] text-white font-bold tracking-tight font-headline">
-                  {hudConsumed}
-                  <span className="text-[11px] font-medium text-[#c5f331]">g</span>
-                </span>
-                <span className="text-[9px] text-[#a2d0be] mt-0.5 font-bold uppercase tracking-wider font-headline">
-                  / {targetProteinGoal}g
-                </span>
-              </div>
-            </div>
-
-            {/* Protein Target Messaging & Goal Status */}
-            <div className="flex flex-col">
-              {isGoalHit ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setShowCelebration(true)}
-                    className="text-left group cursor-pointer"
-                  >
-                    <span className="text-lg sm:text-xl text-[#d2f824] tracking-tight font-black drop-shadow-[0_0_12px_rgba(210,248,36,0.35)] font-headline flex items-center gap-1 group-hover:underline">
-                      Goal Crushed! ⚡
-                    </span>
-                    <span className="text-xs text-stone-300 leading-tight mt-0.5 font-medium block">
-                      Target achieved! Tap to view celebration 🎉
-                    </span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className="text-lg sm:text-xl text-[#d2f824] tracking-tight font-bold drop-shadow-[0_0_12px_rgba(210,248,36,0.35)] font-headline">
-                    {hudToGo}g to go
-                  </span>
-                  <span className="text-xs text-stone-300 leading-tight mt-0.5 font-medium">
-                    {totalProtein === 0
-                      ? "Add high-protein meals to begin your daily fuel streak"
-                      : "Reach your daily muscle protein synthesis threshold"}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
         </div>
 
-        {/* 3 Micro-Metric Summary Boxes */}
-        <div className="relative z-10 grid grid-cols-3 gap-2 pt-3.5 mt-3 border-t border-white/10">
-          <div className="bg-white/5 backdrop-blur-md rounded-xl p-2 flex flex-col items-center justify-center text-center border border-white/10 shadow-xs">
-            <span className="text-[9px] uppercase tracking-wider text-[#a2d0be] font-bold font-headline">
-              Energy Left
-            </span>
-            <span className="text-xs sm:text-sm text-white font-bold mt-0.5 font-headline">
-              1,240 <span className="text-[9px] font-normal text-stone-300">kcal</span>
-            </span>
+        {/* Circular Radial Progress Ring & Target Messaging */}
+        <div className="relative z-10 flex items-center gap-4 sm:gap-5 pt-2 max-w-[250px] sm:max-w-[280px]">
+          {/* SVG Ring Dial (Scaled up to beautifully fill space) */}
+          <div className="relative w-24 h-24 sm:w-28 sm:h-28 shrink-0 flex items-center justify-center">
+            <svg className="w-24 h-24 sm:w-28 sm:h-28 -rotate-90 transform" viewBox="0 0 72 72">
+              <defs>
+                <linearGradient id="proteinRingGrad" x1="0%" x2="100%" y1="0%" y2="100%">
+                  <stop offset="0%" stopColor="#d2f824" />
+                  <stop offset="100%" stopColor="#06b6d4" />
+                </linearGradient>
+              </defs>
+              <circle
+                className="stroke-[#a2d0be]/20"
+                cx="36"
+                cy="36"
+                fill="none"
+                r="29"
+                strokeWidth="6"
+              />
+              <circle
+                cx="36"
+                cy="36"
+                fill="none"
+                r="29"
+                stroke="url(#proteinRingGrad)"
+                strokeDasharray="182.2"
+                strokeDashoffset={progressDashoffset}
+                strokeLinecap="round"
+                strokeWidth="6"
+                style={{
+                  filter: "drop-shadow(0 0 8px rgba(210, 248, 36, 0.75))",
+                  transition: "stroke-dashoffset 0.65s cubic-bezier(0.16, 1, 0.3, 1)",
+                }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+              <span className="text-2xl sm:text-3xl text-white font-extrabold tracking-tight font-headline">
+                {hudConsumed}
+                <span className="text-sm font-semibold text-[#c5f331]">g</span>
+              </span>
+              <span className="text-[10px] sm:text-xs text-[#a2d0be] mt-1 font-bold uppercase tracking-wider font-headline">
+                / {targetProteinGoal}g
+              </span>
+            </div>
           </div>
 
-          <div className="bg-white/5 backdrop-blur-md rounded-xl p-2 flex flex-col items-center justify-center text-center border border-white/10 shadow-xs">
-            <span className="text-[9px] uppercase tracking-wider text-[#a2d0be] font-bold font-headline">
-              Carb Limit
-            </span>
-            <span className="text-xs sm:text-sm text-white font-bold mt-0.5 font-headline">
-              85<span className="text-[9px] font-normal text-stone-300">g</span>
-            </span>
-          </div>
-
-          <div className="bg-white/5 backdrop-blur-md rounded-xl p-2 flex flex-col items-center justify-center text-center border border-white/10 shadow-xs">
-            <span className="text-[9px] uppercase tracking-wider text-[#a2d0be] font-bold font-headline">
-              Healthy Fats
-            </span>
-            <span className="text-xs sm:text-sm text-white font-bold mt-0.5 font-headline">
-              28<span className="text-[9px] font-normal text-stone-300">g</span>
-            </span>
+          {/* Protein Target Messaging & Goal Status */}
+          <div className="flex flex-col">
+            {isGoalHit ? (
+              <button
+                type="button"
+                onClick={() => setShowCelebration(true)}
+                className="text-left group cursor-pointer"
+              >
+                <span className="text-xl sm:text-2xl text-[#d2f824] tracking-tight font-black drop-shadow-[0_0_12px_rgba(210,248,36,0.35)] font-headline flex items-center gap-1.5 group-hover:underline">
+                  Goal Crushed! ⚡
+                </span>
+                <span className="text-xs sm:text-sm text-stone-300 leading-snug font-medium block mt-1">
+                  Target achieved! Tap to view celebration 🎉
+                </span>
+              </button>
+            ) : (
+              <>
+                <span className="text-2xl sm:text-3xl text-[#d2f824] tracking-tight font-extrabold drop-shadow-[0_0_12px_rgba(210,248,36,0.35)] font-headline">
+                  {hudToGo}g to go
+                </span>
+                <span className="text-xs sm:text-sm text-stone-300 leading-snug font-medium mt-1">
+                  {totalProtein === 0
+                    ? "Add high-protein meals to hit your daily goal"
+                    : "Reach your daily muscle protein synthesis threshold"}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
