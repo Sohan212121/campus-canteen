@@ -121,16 +121,74 @@ export function HealthyMainView({
 
   // Daily target and protein progress calculation
   // Progress is 0 if no protein food was ordered today and nothing is in cart
+  const CIRCUMFERENCE = 182.2;
   const targetProteinGoal = 100;
   const totalProtein = Math.round(initialOrderedProteinToday + totalCartProtein);
   const hudConsumed = Math.min(targetProteinGoal, totalProtein);
   const hudToGo = Math.max(0, targetProteinGoal - totalProtein);
   const isGoalHit = totalProtein >= targetProteinGoal;
   const progressRatio = isGoalHit ? 1 : totalProtein / targetProteinGoal;
+  const actualTargetOffset = CIRCUMFERENCE * (1 - progressRatio);
 
-  // Circumference = 2 * PI * 29 = 182.2
-  // When totalProtein === 0: progressDashoffset = 182.2 (ring is 0% filled)
-  const progressDashoffset = 182.2 * (1 - progressRatio);
+  // Dynamic progress ring gauge sweep animation:
+  // Starts empty -> smoothly sweeps to 100% full -> smoothly returns and parks at actual user progress
+  const [ringOffset, setRingOffset] = useState<number>(CIRCUMFERENCE);
+  const [ringTransition, setRingTransition] = useState<string>("none");
+  const [isSweepComplete, setIsSweepComplete] = useState<boolean>(false);
+  const sweepTimersRef = useRef<NodeJS.Timeout[]>([]);
+
+  const triggerSweep = useCallback(() => {
+    sweepTimersRef.current.forEach(clearTimeout);
+    sweepTimersRef.current = [];
+
+    // Respect reduced motion
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setRingOffset(actualTargetOffset);
+      setRingTransition("stroke-dashoffset 0.65s cubic-bezier(0.16, 1, 0.3, 1)");
+      setIsSweepComplete(true);
+      return;
+    }
+
+    setIsSweepComplete(false);
+    // 1. Start from empty
+    setRingOffset(CIRCUMFERENCE);
+    setRingTransition("none");
+
+    // 2. Smoothly sweep to full (100% complete)
+    const t1 = setTimeout(() => {
+      setRingTransition("stroke-dashoffset 0.75s cubic-bezier(0.22, 1, 0.36, 1)");
+      setRingOffset(0);
+    }, 50);
+
+    // 3. Briefly hold at peak, then smoothly return and park at actual user progress
+    const t2 = setTimeout(() => {
+      setRingTransition("stroke-dashoffset 0.85s cubic-bezier(0.16, 1, 0.3, 1)");
+      setRingOffset(actualTargetOffset);
+    }, 900);
+
+    // 4. Mark sweep complete for future reactive cart updates
+    const t3 = setTimeout(() => {
+      setIsSweepComplete(true);
+      setRingTransition("stroke-dashoffset 0.65s cubic-bezier(0.16, 1, 0.3, 1)");
+    }, 1800);
+
+    sweepTimersRef.current = [t1, t2, t3];
+  }, [actualTargetOffset]);
+
+  // Run the dynamic sweep transition every time the user opens the Healthy section
+  useEffect(() => {
+    triggerSweep();
+    return () => {
+      sweepTimersRef.current.forEach(clearTimeout);
+    };
+  }, [triggerSweep]);
+
+  // Track cart updates reactively after the initial sweep is complete
+  useEffect(() => {
+    if (isSweepComplete) {
+      setRingOffset(actualTargetOffset);
+    }
+  }, [actualTargetOffset, isSweepComplete]);
 
   // Trigger celebration modal when protein goal is hit
   useEffect(() => {
@@ -422,9 +480,15 @@ export function HealthyMainView({
 
         {/* Circular Radial Progress Ring & Target Messaging */}
         <div className="relative z-10 flex items-center gap-3.5 sm:gap-4.5 pt-2 flex-1 min-w-0 pr-2">
-          {/* SVG Ring Dial (Scaled up to beautifully fill space) */}
-          <div className="relative w-22 h-22 sm:w-24 sm:h-24 shrink-0 flex items-center justify-center">
-            <svg className="w-22 h-22 sm:w-24 sm:h-24 -rotate-90 transform" viewBox="0 0 72 72">
+          {/* SVG Ring Dial (Scaled up from 88px to 104px / 114px with dynamic startup sweep) */}
+          <div
+            onClick={triggerSweep}
+            className="relative w-[104px] h-[104px] sm:w-[114px] sm:h-[114px] shrink-0 flex items-center justify-center cursor-pointer select-none active:scale-95 transition-transform"
+            role="button"
+            tabIndex={0}
+            aria-label={`Protein Progress Dial: ${hudConsumed} grams consumed out of ${targetProteinGoal} grams target. Tap to replay sweep.`}
+          >
+            <svg className="w-[104px] h-[104px] sm:w-[114px] sm:h-[114px] -rotate-90 transform" viewBox="0 0 72 72">
               <defs>
                 <linearGradient id="proteinRingGrad" x1="0%" x2="100%" y1="0%" y2="100%">
                   <stop offset="0%" stopColor="#d2f824" />
@@ -445,22 +509,22 @@ export function HealthyMainView({
                 fill="none"
                 r="29"
                 stroke="url(#proteinRingGrad)"
-                strokeDasharray="182.2"
-                strokeDashoffset={progressDashoffset}
+                strokeDasharray={CIRCUMFERENCE}
+                strokeDashoffset={ringOffset}
                 strokeLinecap="round"
                 strokeWidth="6"
                 style={{
+                  transition: ringTransition,
                   filter: "drop-shadow(0 0 8px rgba(210, 248, 36, 0.75))",
-                  transition: "stroke-dashoffset 0.65s cubic-bezier(0.16, 1, 0.3, 1)",
                 }}
               />
             </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-              <span className="text-xl sm:text-2xl text-white font-extrabold tracking-tight font-headline">
+            <div className="absolute inset-0 flex flex-col items-center justify-center leading-none pointer-events-none">
+              <span className="text-2xl sm:text-3xl text-white font-extrabold tracking-tight font-headline">
                 {hudConsumed}
-                <span className="text-xs font-semibold text-[#c5f331]">g</span>
+                <span className="text-xs sm:text-sm font-semibold text-[#c5f331]">g</span>
               </span>
-              <span className="text-[9px] sm:text-[10px] text-[#a2d0be] mt-0.5 font-bold uppercase tracking-wider font-headline">
+              <span className="text-[10px] sm:text-xs text-[#a2d0be] mt-1 font-bold uppercase tracking-wider font-headline">
                 / {targetProteinGoal}g
               </span>
             </div>
