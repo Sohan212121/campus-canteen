@@ -39,12 +39,12 @@ describe("Phase 9: PWA Manifest, Offline, and Mobile Integration", () => {
   describe("PWA Manifest Structure", () => {
     it("returns correct metadata matching requirements", () => {
       const config = manifest();
-      expect(config.name).toBe("C@mpBite");
-      expect(config.short_name).toBe("C@mpBite");
+      expect(config.name).toBe("CampBite");
+      expect(config.short_name).toBe("CampBite");
       expect(config.start_url).toBe("/");
       expect(config.display).toBe("standalone");
-      expect(config.theme_color).toBe("#18181b");
-      expect(config.background_color).toBe("#ffffff");
+      expect(config.theme_color).toBe("#0b0d12");
+      expect(config.background_color).toBe("#0b0d12");
 
       const icons = config.icons;
       expect(icons).toBeDefined();
