@@ -108,7 +108,7 @@ export default async function ProfilePage() {
       themeToggleSection={
         <section
           key="theme-toggle"
-          className="bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center justify-between"
+          className="bg-white dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center justify-between"
           data-purpose="theme-toggle"
         >
           <div className="flex items-center gap-3">

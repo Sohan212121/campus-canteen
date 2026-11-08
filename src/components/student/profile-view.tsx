@@ -333,7 +333,7 @@ export function ProfileView({
           ========================================================================= */}
       {(activeTab === "overview" || activeTab === "feedback") && (
         <div className="grid grid-cols-3 gap-2">
-          <div className="bg-[#f1ede6] dark:bg-[#121319] rounded-xl p-2.5 sm:p-3 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center gap-2 sm:gap-3">
+          <div className="bg-white dark:bg-[#121319] rounded-xl p-2.5 sm:p-3 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-[#ffdad6]/60 dark:bg-[#2a1412] text-[#6c1d18] dark:text-[#ffb4ab] flex items-center justify-center flex-shrink-0">
               <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
@@ -350,7 +350,7 @@ export function ProfileView({
 
           <Link
             href="/orders"
-            className="bg-[#f1ede6] dark:bg-[#121319] hover:bg-[#eae6de] dark:hover:bg-[#181a24] transition-colors rounded-xl p-2.5 sm:p-3 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center gap-2 sm:gap-3 group"
+            className="bg-white dark:bg-[#121319] hover:bg-stone-50 dark:hover:bg-[#181a24] transition-colors rounded-xl p-2.5 sm:p-3 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center gap-2 sm:gap-3 group"
           >
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-[#ffdbcb] dark:bg-[#2a1a12] text-[#9e4300] dark:text-[#FBBF24] flex items-center justify-center flex-shrink-0">
               <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -368,7 +368,7 @@ export function ProfileView({
           <button
             type="button"
             onClick={() => setActiveTab("favorites")}
-            className="bg-[#f1ede6] dark:bg-[#121319] hover:bg-[#eae6de] dark:hover:bg-[#181a24] transition-colors rounded-xl p-2.5 sm:p-3 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center gap-2 sm:gap-3 text-left cursor-pointer group"
+            className="bg-white dark:bg-[#121319] hover:bg-stone-50 dark:hover:bg-[#181a24] transition-colors rounded-xl p-2.5 sm:p-3 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center gap-2 sm:gap-3 text-left cursor-pointer group"
           >
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center flex-shrink-0">
               <Heart className="w-4 h-4 sm:w-5 sm:h-5 fill-rose-500 text-rose-500" />
@@ -391,7 +391,7 @@ export function ProfileView({
       {(activeTab === "overview" || activeTab === "sso") && (
         <div className="grid grid-cols-2 gap-3" data-purpose="user-account-details">
           {/* Card 1: College ID */}
-          <div className="col-span-1 bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col justify-between">
+          <div className="col-span-1 bg-white dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#564240] dark:text-stone-400 font-mono">
@@ -424,7 +424,7 @@ export function ProfileView({
           </div>
 
           {/* Card 2: Security Layer */}
-          <div className="col-span-1 bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col justify-between">
+          <div className="col-span-1 bg-white dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#564240] dark:text-stone-400 font-mono block mb-1">
                 Security Layer
@@ -443,7 +443,7 @@ export function ProfileView({
           </div>
 
           {/* Card 3: Role & Dining Permissions */}
-          <div className="col-span-2 bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center justify-between">
+          <div className="col-span-2 bg-white dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-[#ffdbcb] dark:bg-[#2a1a12] text-[#9e4300] dark:text-[#FBBF24] flex items-center justify-center font-bold shadow-xs flex-shrink-0">
                 <Award className="w-5 h-5" />
@@ -464,14 +464,14 @@ export function ProfileView({
               </div>
             </div>
             <div className="flex-shrink-0 ml-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-[#e6e2da] dark:bg-[#1f2230] px-2 py-1 rounded-lg text-[#564240] dark:text-stone-300 border border-[#dcc0bd] dark:border-[#2d3142]">
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-stone-100 dark:bg-[#1f2230] px-2 py-1 rounded-lg text-[#564240] dark:text-stone-300 border border-[#dcc0bd] dark:border-[#2d3142]">
                 Authorized
               </span>
             </div>
           </div>
 
           {/* Card 4: Campus Account & SSO Module */}
-          <div className="col-span-2 bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col gap-2.5">
+          <div className="col-span-2 bg-white dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#564240] dark:text-stone-400 font-mono flex items-center gap-1.5">
                 <Mail className="w-3.5 h-3.5 text-[#9e4300] dark:text-[#FBBF24]" />
@@ -479,7 +479,7 @@ export function ProfileView({
               </span>
             </div>
 
-            <div className="bg-[#ffffff] dark:bg-[#181a24] rounded-xl p-3 border border-[#e6e2da] dark:border-[#262836] flex items-center justify-between shadow-2xs">
+            <div className="bg-[#faf8f5] dark:bg-[#181a24] rounded-xl p-3 border border-[#e6e2da] dark:border-[#262836] flex items-center justify-between shadow-2xs">
               <div className="space-y-0.5 overflow-hidden pr-2">
                 <div className="text-[10px] text-[#89726f] dark:text-stone-400 font-mono uppercase tracking-wider">
                   Institutional Email
@@ -502,7 +502,7 @@ export function ProfileView({
                   <button
                     type="button"
                     onClick={() => handleCopy(email, "email", "Email")}
-                    className="w-8 h-8 rounded-xl bg-[#f1ede6] dark:bg-[#1f2230] flex items-center justify-center text-[#6c1d18] dark:text-[#ffb4ab] hover:text-[#4e0606] transition-colors border border-[#e6e2da] dark:border-[#262836] active:scale-95 cursor-pointer shadow-xs"
+                    className="w-8 h-8 rounded-xl bg-white dark:bg-[#1f2230] flex items-center justify-center text-[#6c1d18] dark:text-[#ffb4ab] hover:text-[#4e0606] transition-colors border border-[#e6e2da] dark:border-[#262836] active:scale-95 cursor-pointer shadow-xs"
                     aria-label="Copy Email"
                     title="Copy Email"
                   >
@@ -528,7 +528,7 @@ export function ProfileView({
         ) : (
           <section
             key="fallback-theme-toggle"
-            className="bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center justify-between"
+            className="bg-white dark:bg-[#121319] rounded-2xl p-3.5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center justify-between"
             data-purpose="theme-toggle"
           >
             <div className="flex items-center gap-3">
@@ -598,7 +598,7 @@ export function ProfileView({
           ========================================================================= */}
       {activeTab === "favorites" && (
         <section
-          className="bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-4 sm:p-5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col gap-4"
+          className="bg-white dark:bg-[#121319] rounded-2xl p-4 sm:p-5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col gap-4"
           data-purpose="favorites-section"
         >
           {/* Header */}
@@ -747,7 +747,7 @@ export function ProfileView({
           ========================================================================= */}
       {activeTab === "feedback" && (
         <section
-          className="bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-4 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col gap-3"
+          className="bg-white dark:bg-[#121319] rounded-2xl p-4 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col gap-3"
           data-purpose="preordered-feedback-section"
         >
           <PreorderedItemsReviewSection items={preorderedItems} />
@@ -759,7 +759,7 @@ export function ProfileView({
           ========================================================================= */}
       {(activeTab === "overview" || activeTab === "feedback") && (
         <section
-          className="bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-4 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col gap-3"
+          className="bg-white dark:bg-[#121319] rounded-2xl p-4 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col gap-3"
           data-purpose="feedback-history-section"
         >
           <div className="flex items-center justify-between pb-2 border-b border-[#e6e2da]/70 dark:border-[#222533]">
