@@ -135,51 +135,105 @@ export function HealthyMainView({
   const [ringOffset, setRingOffset] = useState<number>(CIRCUMFERENCE);
   const [ringTransition, setRingTransition] = useState<string>("none");
   const [isSweepComplete, setIsSweepComplete] = useState<boolean>(false);
+  const [displayConsumed, setDisplayConsumed] = useState<number>(hudConsumed);
   const sweepTimersRef = useRef<NodeJS.Timeout[]>([]);
+  const animFrameRef = useRef<number | null>(null);
 
   const triggerSweep = useCallback(() => {
     sweepTimersRef.current.forEach(clearTimeout);
     sweepTimersRef.current = [];
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
 
-    // Respect reduced motion
+    // Respect reduced motion: immediately show actual target without sweep
     if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setRingOffset(actualTargetOffset);
       setRingTransition("stroke-dashoffset 0.65s cubic-bezier(0.16, 1, 0.3, 1)");
+      setDisplayConsumed(hudConsumed);
       setIsSweepComplete(true);
       return;
     }
 
     setIsSweepComplete(false);
-    // 1. Start from empty
+    // 1. Start from 0
     setRingOffset(CIRCUMFERENCE);
     setRingTransition("none");
+    setDisplayConsumed(0);
 
-    // 2. Smoothly sweep to full (100% complete)
+    const FORWARD_START = 50;
+    const FORWARD_DURATION = 750;
+    const HOLD_DURATION = 100;
+    const REVERSE_START = FORWARD_START + FORWARD_DURATION + HOLD_DURATION; // 900ms
+    const REVERSE_DURATION = 850;
+    const TOTAL_DURATION = REVERSE_START + REVERSE_DURATION; // 1750ms
+
+    // Smoothly trigger SVG ring transition in sync with number interpolation
     const t1 = setTimeout(() => {
       setRingTransition("stroke-dashoffset 0.75s cubic-bezier(0.22, 1, 0.36, 1)");
       setRingOffset(0);
-    }, 50);
+    }, FORWARD_START);
 
-    // 3. Briefly hold at peak, then smoothly return and park at actual user progress
     const t2 = setTimeout(() => {
       setRingTransition("stroke-dashoffset 0.85s cubic-bezier(0.16, 1, 0.3, 1)");
       setRingOffset(actualTargetOffset);
-    }, 900);
+    }, REVERSE_START);
 
-    // 4. Mark sweep complete for future reactive cart updates
     const t3 = setTimeout(() => {
       setIsSweepComplete(true);
       setRingTransition("stroke-dashoffset 0.65s cubic-bezier(0.16, 1, 0.3, 1)");
-    }, 1800);
+      setDisplayConsumed(hudConsumed);
+    }, TOTAL_DURATION + 50);
 
     sweepTimersRef.current = [t1, t2, t3];
-  }, [actualTargetOffset]);
+
+    // Animate the displayed protein numbers in exact real-time sync with the ring sweep
+    const startTime = performance.now();
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const animateValues = (now: number) => {
+      const elapsed = now - startTime;
+
+      if (elapsed < FORWARD_START) {
+        setDisplayConsumed(0);
+        animFrameRef.current = requestAnimationFrame(animateValues);
+      } else if (elapsed < FORWARD_START + FORWARD_DURATION) {
+        // Forward phase: numbers count up from 0 to 100g
+        const progress = Math.min(1, Math.max(0, (elapsed - FORWARD_START) / FORWARD_DURATION));
+        const eased = easeOutCubic(progress);
+        const val = Math.min(100, Math.round(eased * 100));
+        setDisplayConsumed(val);
+        animFrameRef.current = requestAnimationFrame(animateValues);
+      } else if (elapsed < REVERSE_START) {
+        // Peak hold: display 100g
+        setDisplayConsumed(100);
+        animFrameRef.current = requestAnimationFrame(animateValues);
+      } else if (elapsed < TOTAL_DURATION) {
+        // Reverse phase: numbers smoothly glide down from 100g back to user's actual progress
+        const progress = Math.min(1, Math.max(0, (elapsed - REVERSE_START) / REVERSE_DURATION));
+        const eased = easeOutCubic(progress);
+        const val = Math.round(100 - eased * (100 - hudConsumed));
+        setDisplayConsumed(val);
+        animFrameRef.current = requestAnimationFrame(animateValues);
+      } else {
+        // Sweep finished: lock onto exact user progress
+        setDisplayConsumed(hudConsumed);
+        animFrameRef.current = null;
+      }
+    };
+
+    animFrameRef.current = requestAnimationFrame(animateValues);
+  }, [actualTargetOffset, hudConsumed]);
 
   // Run the dynamic sweep transition every time the user opens the Healthy section
   useEffect(() => {
     triggerSweep();
     return () => {
       sweepTimersRef.current.forEach(clearTimeout);
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
     };
   }, [triggerSweep]);
 
@@ -187,8 +241,12 @@ export function HealthyMainView({
   useEffect(() => {
     if (isSweepComplete) {
       setRingOffset(actualTargetOffset);
+      setDisplayConsumed(hudConsumed);
     }
-  }, [actualTargetOffset, isSweepComplete]);
+  }, [actualTargetOffset, hudConsumed, isSweepComplete]);
+
+  // Calculate live to-go amount based on currently animated consumed value
+  const displayToGo = Math.max(0, targetProteinGoal - displayConsumed);
 
   // Trigger celebration modal when protein goal is hit
   useEffect(() => {
@@ -521,7 +579,7 @@ export function HealthyMainView({
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center leading-none pointer-events-none">
               <span className="text-2xl sm:text-3xl text-white font-extrabold tracking-tight font-headline">
-                {hudConsumed}
+                {displayConsumed}
                 <span className="text-xs sm:text-sm font-semibold text-[#c5f331]">g</span>
               </span>
               <span className="text-[10px] sm:text-xs text-[#a2d0be] mt-1 font-bold uppercase tracking-wider font-headline">
@@ -532,7 +590,7 @@ export function HealthyMainView({
 
           {/* Protein Target Messaging & Goal Status */}
           <div className="flex flex-col min-w-0 flex-1">
-            {isGoalHit ? (
+            {isSweepComplete && isGoalHit ? (
               <button
                 type="button"
                 onClick={() => setShowCelebration(true)}
@@ -552,7 +610,7 @@ export function HealthyMainView({
               <>
                 <div className="flex items-center gap-2 whitespace-nowrap">
                   <span className="text-2xl sm:text-3xl font-black text-[#d2f824] tracking-tight font-headline drop-shadow-[0_0_14px_rgba(210,248,36,0.4)]">
-                    {hudToGo}g
+                    {displayToGo}g
                   </span>
                   <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#c5f331] bg-[#c5f331]/15 px-2 py-0.5 rounded-full border border-[#c5f331]/30 font-headline">
                     to go
