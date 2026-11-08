@@ -152,8 +152,6 @@ export async function transitionOrderAction(
     };
   }
 
-  revalidatePath("/staff");
-  revalidatePath("/staff/pickup");
   revalidatePath("/orders");
   revalidatePath(`/orders/${parsedId.data}`, "page");
 
