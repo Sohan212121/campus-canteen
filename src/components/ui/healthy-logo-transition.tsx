@@ -16,24 +16,35 @@ export function HealthyLogoTransition({
   isExiting = false,
   onEnded,
 }: HealthyLogoTransitionProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const lightVideoRef = useRef<HTMLVideoElement>(null);
+  const darkVideoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const endedCalledRef = useRef(false);
+
+  const handleEnded = () => {
+    if (endedCalledRef.current) return;
+    endedCalledRef.current = true;
+    onEnded?.();
+  };
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    const playVideo = (video: HTMLVideoElement | null) => {
+      if (!video) return;
+      video.currentTime = 0;
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+          })
+          .catch(() => {
+            // Autoplay fallback: poster image remains visible smoothly
+          });
+      }
+    };
 
-    video.currentTime = 0;
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          setIsPlaying(true);
-        })
-        .catch(() => {
-          // Autoplay fallback: poster image remains visible smoothly
-        });
-    }
+    playVideo(lightVideoRef.current);
+    playVideo(darkVideoRef.current);
   }, []);
 
   return (
@@ -71,20 +82,14 @@ export function HealthyLogoTransition({
       {/* Solid Uniform Backdrop: Exactly matches the #F4F0E4 background in light mode, deep black in dark mode */}
       <div className="absolute inset-0 bg-[#F4F0E4] dark:bg-black transition-colors" />
 
-      {/* Ambient Radial Glow in dark mode */}
-      <div
-        className="absolute w-80 h-80 sm:w-96 sm:h-96 rounded-full bg-gradient-to-tr from-emerald-500/20 via-lime-500/15 to-transparent blur-3xl pointer-events-none opacity-0 dark:opacity-100 transition-opacity"
-        aria-hidden="true"
-      />
-
       {/* Stage Container */}
       <div
         className={`relative z-10 flex flex-col items-center max-w-sm w-full px-4 ${
           isExiting ? "cb-stage-exit" : "cb-stage-enter"
         }`}
       >
-        {/* Healthy Mode Logo Container (Zero-delay poster + video with feathered seamless edge) */}
-        <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center healthy-logo-mask dark:drop-shadow-[0_0_35px_rgba(16,185,129,0.2)]">
+        {/* Light Theme Logo Container (Zero-delay poster + video with feathered seamless edge) */}
+        <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center healthy-logo-mask dark:hidden">
           {/* Instant First-Frame Poster: Visible IMMEDIATELY at 0ms (eliminates any video loading delay) */}
           <Image
             src="/brand/healthymode-poster.png"
@@ -99,7 +104,7 @@ export function HealthyLogoTransition({
 
           {/* Logo Transition Video */}
           <video
-            ref={videoRef}
+            ref={lightVideoRef}
             src="/brand/healthymode-logo-transition.mp4"
             poster="/brand/healthymode-poster.png"
             autoPlay
@@ -107,7 +112,38 @@ export function HealthyLogoTransition({
             playsInline
             preload="auto"
             onPlaying={() => setIsPlaying(true)}
-            onEnded={onEnded}
+            onEnded={handleEnded}
+            className={`w-full h-full object-contain pointer-events-none relative z-10 transition-opacity duration-150 ${
+              isPlaying ? "opacity-100" : "opacity-0"
+            }`}
+          />
+        </div>
+
+        {/* Dark Theme Logo Container (Dedicated dark video & poster with pure black background - perfectly matches dark backdrop) */}
+        <div className="relative w-64 h-64 sm:w-72 sm:h-72 hidden dark:flex items-center justify-center">
+          {/* Instant First-Frame Dark Poster: Pure black background, zero white flash */}
+          <Image
+            src="/brand/healthymode-poster-dark.png"
+            alt="Healthy Mode Logo"
+            width={288}
+            height={288}
+            priority
+            className={`w-full h-full object-contain pointer-events-none absolute inset-0 transition-opacity duration-200 ${
+              isPlaying ? "opacity-0" : "opacity-100"
+            }`}
+          />
+
+          {/* Dark Mode Logo Transition Video: Pure black background, zero white halo */}
+          <video
+            ref={darkVideoRef}
+            src="/brand/healthymode-logo-transition-dark.mp4"
+            poster="/brand/healthymode-poster-dark.png"
+            autoPlay
+            muted
+            playsInline
+            preload="auto"
+            onPlaying={() => setIsPlaying(true)}
+            onEnded={handleEnded}
             className={`w-full h-full object-contain pointer-events-none relative z-10 transition-opacity duration-150 ${
               isPlaying ? "opacity-100" : "opacity-0"
             }`}
