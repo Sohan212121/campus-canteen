@@ -15,6 +15,12 @@ import {
   Mic,
   ShoppingBag,
   Flame,
+  Drumstick,
+  Egg,
+  Soup,
+  UtensilsCrossed,
+  CupSoda,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,14 +45,42 @@ interface HealthyMainViewProps {
   migrationPending?: boolean;
 }
 
-const CATEGORY_CHIPS = [
-  { id: "all", label: "All Picks", emoji: "⚡" },
-  { id: "chicken", label: "Chicken", emoji: "🍗" },
-  { id: "eggs", label: "Eggs", emoji: "🥚" },
-  { id: "paneer", label: "Paneer", emoji: "🧀" },
-  { id: "dal", label: "Dal & Lentils", emoji: "🍲" },
-  { id: "combos", label: "Combos & Thali", emoji: "🍱" },
-  { id: "shakes", label: "Shakes & Lassi", emoji: "🥤" },
+function CheeseIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="m3 11 16-6 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4z" />
+      <path d="M19 5v12" />
+      <circle cx="8" cy="14" r="1.2" />
+      <circle cx="14" cy="13" r="1" />
+      <circle cx="11" cy="9.5" r="1" />
+    </svg>
+  );
+}
+
+interface CategoryChipConfig {
+  id: string;
+  label: string;
+  icon: LucideIcon | React.ComponentType<{ className?: string }>;
+}
+
+const CATEGORY_CHIPS: CategoryChipConfig[] = [
+  { id: "all", label: "All Picks", icon: Zap },
+  { id: "chicken", label: "Chicken", icon: Drumstick },
+  { id: "eggs", label: "Eggs", icon: Egg },
+  { id: "paneer", label: "Paneer", icon: CheeseIcon },
+  { id: "dal", label: "Dal & Lentils", icon: Soup },
+  { id: "combos", label: "Combos & Thali", icon: UtensilsCrossed },
+  { id: "shakes", label: "Shakes & Lassi", icon: CupSoda },
 ];
 
 export function HealthyMainView({
@@ -622,6 +656,7 @@ export function HealthyMainView({
         <div className="flex items-center gap-2">
           {CATEGORY_CHIPS.map((cat) => {
             const isSelected = selectedCategory === cat.id;
+            const Icon = cat.icon;
             return (
               <button
                 key={cat.id}
@@ -636,7 +671,7 @@ export function HealthyMainView({
                     : "bg-[#e8f5e9] dark:bg-[#1e291c] text-[#00241a] dark:text-[#ede7e1] hover:bg-[#d8eedd] dark:hover:bg-[#253323] font-semibold border border-[#cbe6d4]/60 dark:border-[#3b533a]/60"
                 }`}
               >
-                <span>{cat.emoji}</span>
+                <Icon className="h-3.5 w-3.5 shrink-0" />
                 <span>{cat.label}</span>
               </button>
             );
