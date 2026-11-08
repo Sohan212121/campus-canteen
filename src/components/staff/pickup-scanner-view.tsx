@@ -27,8 +27,7 @@ import {
   type CollectionCard,
 } from "@/server/actions/staff";
 import { formatPaise } from "@/lib/money";
-import { LazyQrScanner, preloadQrScanner } from "./lazy-qr-scanner";
-import { createScanDebouncer } from "@/lib/staff-board-helpers";
+import { LazyQrScanner } from "./lazy-qr-scanner";
 
 export function PickupScannerView() {
   const [mode, setMode] = useState<"camera" | "manual" | "override">("camera");
@@ -56,12 +55,6 @@ export function PickupScannerView() {
   const [isSubmittingLateHandover, setIsSubmittingLateHandover] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const scanDebouncerRef = useRef(createScanDebouncer(1500));
-
-  // Preload scanner chunk on mount
-  useEffect(() => {
-    preloadQrScanner();
-  }, []);
 
   // Stop camera tracks on unmount
   useEffect(() => {
@@ -134,13 +127,8 @@ export function PickupScannerView() {
   const handleScan = (detectedCodes: { rawValue: string }[]) => {
     if (paused || isVerifying || verifiedCard) return;
     if (detectedCodes.length > 0 && detectedCodes[0].rawValue) {
-      const val = detectedCodes[0].rawValue.trim();
-      if (!scanDebouncerRef.current.shouldProcess(val)) {
-        return;
-      }
-
       setPaused(true);
-      setIsVerifying(true);
+      const val = detectedCodes[0].rawValue.trim();
 
       // QR format: CC1:<order_id>:<code>
       if (val.startsWith("CC1:")) {
@@ -156,7 +144,6 @@ export function PickupScannerView() {
       setErrorMessage("Invalid QR code format. Please scan a valid C@mpBite pickup QR.");
       toast.error("Invalid QR format");
       setPaused(false);
-      setIsVerifying(false);
     }
   };
 
@@ -229,7 +216,6 @@ export function PickupScannerView() {
     setPinInput("");
     setManualReason("");
     setLastScannedCode("");
-    scanDebouncerRef.current.reset();
     setPaused(false);
   };
 
@@ -622,12 +608,6 @@ export function PickupScannerView() {
                     }}
                     paused={paused}
                   />
-                  {isVerifying && (
-                    <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white gap-2 z-10 animate-in fade-in duration-100">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      <span className="text-xs font-bold uppercase tracking-wider">Checking...</span>
-                    </div>
-                  )}
                 </div>
                 <p className="text-center text-xs text-muted-foreground">
                   Center the student&apos;s dynamic pickup QR code inside the viewfinder.

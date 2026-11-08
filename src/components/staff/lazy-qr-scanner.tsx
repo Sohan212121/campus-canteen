@@ -3,14 +3,6 @@
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
 
-export const preloadQrScanner = () => {
-  if (typeof window !== "undefined") {
-    import("@yudiel/react-qr-scanner").catch(() => {
-      // Ignore background preload failures
-    });
-  }
-};
-
 export const LazyQrScanner = dynamic<React.ComponentProps<typeof import("@yudiel/react-qr-scanner").Scanner>>(
   () => import("@yudiel/react-qr-scanner").then((mod) => mod.Scanner),
   {
