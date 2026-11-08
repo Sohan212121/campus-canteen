@@ -68,7 +68,6 @@ export function HealthyMainView({
   const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
   const searchBarContainerRef = useRef<HTMLDivElement>(null);
   const catalogSectionRef = useRef<HTMLElement>(null);
-  const isMountedRef = useRef(false);
 
   const openTakeover = useCallback(() => {
     if (searchBarContainerRef.current) {
@@ -83,17 +82,10 @@ export function HealthyMainView({
     }
   }, []);
 
-  // Smooth scroll down to catalog when minProtein slider value is fixed/settled
+  // Always stay at the top when entering or clicking the Healthy section
   useEffect(() => {
-    if (!isMountedRef.current) {
-      isMountedRef.current = true;
-      return;
-    }
-    const timer = setTimeout(() => {
-      scrollToCatalog();
-    }, 450);
-    return () => clearTimeout(timer);
-  }, [minProtein, scrollToCatalog]);
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, []);
 
   // Celebration state when daily protein goal is reached
   const [showCelebration, setShowCelebration] = useState(false);
