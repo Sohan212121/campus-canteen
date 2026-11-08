@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { VegIndicator } from "@/components/student/veg-indicator";
 import { MenuItemImage } from "@/components/student/menu-item-image";
 import { StarRatingDisplay } from "@/components/student/star-rating";
+import { FavoriteButton } from "@/components/student/favorite-button";
 import { formatPaise } from "@/lib/money";
 import { registerMenuItemPrices } from "@/lib/cart-shortcut";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
@@ -119,29 +120,37 @@ export function MenuItemCard({ item, onOpenDetail }: MenuItemCardProps) {
 
       {/* Right side: Image + Separate Non-Nested Action button */}
       <div className="relative flex flex-col items-center justify-between shrink-0 w-24 sm:w-28">
-        <button
-          type="button"
-          onClick={() => onOpenDetail(item)}
-          className="relative h-20 w-24 sm:h-22 sm:w-28 overflow-hidden rounded-xl bg-[#e8dac0] dark:bg-[#090A0F] cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={`View ${item.name} image`}
-        >
-          <MenuItemImage
-            src={item.image_url}
-            alt={item.name}
-            aspect="4/3"
-            sizes="(max-width: 640px) 100px, 120px"
-            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300 rounded-xl"
-            containerClassName="h-full w-full"
-            placeholderClassName="h-full w-full"
+        <div className="relative h-20 w-24 sm:h-22 sm:w-28">
+          <button
+            type="button"
+            onClick={() => onOpenDetail(item)}
+            className="relative h-full w-full overflow-hidden rounded-xl bg-[#e8dac0] dark:bg-[#090A0F] cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`View ${item.name} image`}
+          >
+            <MenuItemImage
+              src={item.image_url}
+              alt={item.name}
+              aspect="4/3"
+              sizes="(max-width: 640px) 100px, 120px"
+              className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300 rounded-xl"
+              containerClassName="h-full w-full"
+              placeholderClassName="h-full w-full"
+            />
+            {isOutOfStock && (
+              <div className="absolute inset-0 bg-[#181615]/70 dark:bg-black/80 backdrop-blur-[1px] flex items-center justify-center p-1 text-center">
+                <span className="text-[10px] font-bold text-red-400 leading-tight uppercase font-headline">
+                  Unavailable
+                </span>
+              </div>
+            )}
+          </button>
+          <FavoriteButton
+            item={item}
+            size="sm"
+            variant="floating"
+            className="absolute top-1 right-1 z-10"
           />
-          {isOutOfStock && (
-            <div className="absolute inset-0 bg-[#181615]/70 dark:bg-black/80 backdrop-blur-[1px] flex items-center justify-center p-1 text-center">
-              <span className="text-[10px] font-bold text-red-400 leading-tight uppercase font-headline">
-                Unavailable
-              </span>
-            </div>
-          )}
-        </button>
+        </div>
 
         {/* Action button positioned below image (>= 44px touch targets) */}
         <div className="mt-2 w-full flex justify-center">

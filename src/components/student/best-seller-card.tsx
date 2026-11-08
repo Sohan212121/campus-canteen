@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { VegIndicator } from "@/components/student/veg-indicator";
 import { MenuItemImage } from "@/components/student/menu-item-image";
+import { FavoriteButton } from "@/components/student/favorite-button";
 import { formatPaise } from "@/lib/money";
 import { formatBestSellerBadge, formatUnitsSoldBadge } from "@/lib/best-sellers";
 import { registerMenuItemPrices } from "@/lib/cart-shortcut";
@@ -73,15 +74,14 @@ export function BestSellerCard({
         isOutOfStock ? "opacity-75 bg-muted/30" : ""
       } ${className}`}
     >
-      {/* Clickable Image & Info Section */}
-      <button
-        type="button"
-        onClick={() => onOpenDetail(item)}
-        className="flex flex-col text-left cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-xl"
-        aria-label={`View details for ${item.name}, ${rankBadgeText}`}
-      >
-        {/* Card Image with Rank & Rating Badges overlay */}
-        <div className="relative w-full overflow-hidden rounded-2xl bg-[#e8dac0] dark:bg-[#090A0F]">
+      {/* Image & Favorite Button Container */}
+      <div className="relative w-full overflow-hidden rounded-2xl bg-[#e8dac0] dark:bg-[#090A0F]">
+        <button
+          type="button"
+          onClick={() => onOpenDetail(item)}
+          className="relative w-full h-full text-left cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring block"
+          aria-label={`View details for ${item.name}, ${rankBadgeText}`}
+        >
           <MenuItemImage
             src={item.image_url}
             alt={item.name}
@@ -92,23 +92,10 @@ export function BestSellerCard({
             placeholderClassName="h-full w-full"
           />
 
-          {/* Rank Badge: Prominent Fast-Casual Corner Badge */}
-          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-[#181615] text-[#fe7543] dark:bg-gradient-to-r dark:from-red-600 dark:to-rose-500 dark:text-white dark:border-transparent font-headline text-[10px] uppercase font-bold tracking-wider shadow-sm border border-[#362f2b]">
+          {/* Rank Badge: Top-Left */}
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-[#181615] text-[#fe7543] dark:bg-gradient-to-r dark:from-red-600 dark:to-rose-500 dark:text-white dark:border-transparent font-headline text-[10px] uppercase font-bold tracking-wider shadow-sm border border-[#362f2b]">
             {rankBadgeText}
           </div>
-
-          {/* Rating Badge with Golden Star */}
-          {item.rating_count !== undefined && item.rating_count !== null && item.rating_count > 0 && item.rating_avg != null ? (
-            <div className="absolute top-2 left-2 flex items-center gap-0.5 rounded-full bg-[#181615]/90 dark:bg-black/70 dark:border-white/10 dark:text-amber-400 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-[#f6eedb] shadow-2xs border border-[#362f2b]">
-              <span className="text-[#ffb94e] dark:text-amber-400">★</span>
-              <span>{item.rating_avg.toFixed(1)}</span>
-            </div>
-          ) : (
-            <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-[#181615]/90 dark:bg-black/70 dark:border-white/10 dark:text-amber-400 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold tracking-tight text-[#f6eedb] shadow-2xs border border-[#362f2b]">
-              <TrendingUp className="h-3 w-3 text-[#ffb94e] dark:text-amber-400" />
-              <span>Hot</span>
-            </div>
-          )}
 
           {/* Prep time badge */}
           {item.prep_minutes > 0 && (
@@ -129,7 +116,21 @@ export function BestSellerCard({
               </span>
             </div>
           )}
+        </button>
+
+        {/* Favorite Heart Button: Top-Right */}
+        <div className="absolute top-2 right-2 z-10">
+          <FavoriteButton item={item} size="sm" variant="floating" />
         </div>
+      </div>
+
+      {/* Info click area */}
+      <button
+        type="button"
+        onClick={() => onOpenDetail(item)}
+        className="flex flex-col text-left cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring w-full"
+        aria-label={`View details for ${item.name}`}
+      >
 
         {/* Info */}
         <div className="mt-2.5 space-y-1">

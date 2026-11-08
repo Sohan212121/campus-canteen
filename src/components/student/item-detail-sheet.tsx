@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { VegIndicator } from "@/components/student/veg-indicator";
 import { MenuItemImage } from "@/components/student/menu-item-image";
+import { FavoriteButton } from "@/components/student/favorite-button";
 import { formatPaise } from "@/lib/money";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
 import { StarRatingDisplay } from "@/components/student/star-rating";
@@ -145,10 +146,16 @@ function ItemDetailDialogContent({
             containerClassName="h-full w-full"
             placeholderClassName="h-full w-full"
           />
+          <FavoriteButton
+            item={item}
+            size="md"
+            variant="floating"
+            className="absolute top-3 left-3 z-10"
+          />
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+            className="absolute top-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors cursor-pointer z-10"
             aria-label="Close"
           >
             <X className="h-5 w-5" />

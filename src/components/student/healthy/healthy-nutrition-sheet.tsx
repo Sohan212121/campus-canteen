@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { VegIndicator } from "@/components/student/veg-indicator";
+import { FavoriteButton } from "@/components/student/favorite-button";
 import { IngredientsPanel } from "@/components/student/ingredients-panel";
 import { formatPaise } from "@/lib/money";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
@@ -137,24 +138,27 @@ export function HealthyNutritionSheet({
       >
         {/* Header Bar */}
         <div className="flex items-center justify-between p-5 pb-3 border-b border-border/60">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
             <VegIndicator isVeg={item.is_veg} />
             <h2
               id="nutrition-sheet-title"
-              className="text-base sm:text-lg font-black tracking-tight text-foreground truncate max-w-[260px]"
+              className="text-base sm:text-lg font-black tracking-tight text-foreground truncate"
             >
               {item.name}
             </h2>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-            aria-label="Close nutrition card"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <FavoriteButton item={item} size="md" variant="floating" />
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              aria-label="Close nutrition card"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Content */}

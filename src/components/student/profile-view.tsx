@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   User,
   Camera,
@@ -18,6 +19,9 @@ import {
   MessageSquare,
   LayoutGrid,
   ShoppingBag,
+  Heart,
+  Trash2,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,6 +31,12 @@ import {
   PreorderedItemsReviewSection,
   type PreorderedFoodItem,
 } from "@/components/student/preordered-items-review-section";
+import { useFavoritesStore, type FavoriteItem } from "@/lib/favorites-store";
+import { useCartStore } from "@/lib/cart-store";
+import { formatPaise } from "@/lib/money";
+import { MenuItemImage } from "@/components/student/menu-item-image";
+import { VegIndicator } from "@/components/student/veg-indicator";
+import { registerMenuItemPrices } from "@/lib/cart-shortcut";
 
 export interface ProfileViewProps {
   profile: {
@@ -58,7 +68,24 @@ export function ProfileView({
   preorderedItems = [],
   themeToggleSection,
 }: ProfileViewProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "sso" | "feedback">("overview");
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"overview" | "favorites" | "sso" | "feedback">("overview");
+  const favoritesList = useFavoritesStore((s) => s.getFavoritesList());
+  const favoritesCount = useFavoritesStore((s) => s.getFavoritesCount());
+  const removeFavorite = useFavoritesStore((s) => s.removeFavorite);
+  const addItem = useCartStore((s) => s.addItem);
+
+  const handleQuickAddToCart = (fav: FavoriteItem) => {
+    registerMenuItemPrices([{ id: fav.id, price_paise: fav.price_paise }]);
+    addItem(fav.id, 1);
+    toast.success(`Added ${fav.name} to cart`, {
+      id: "cart-add-feedback",
+      action: {
+        label: "View cart",
+        onClick: () => router.push("/cart"),
+      },
+    });
+  };
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -241,13 +268,13 @@ export function ProfileView({
       </div>
 
       {/* =========================================================================
-          3. INTERACTIVE SEGMENTED TABS STRIP (OVERVIEW / SSO / FEEDBACK)
+          3. INTERACTIVE SEGMENTED TABS STRIP (OVERVIEW / SAVED / SSO / FEEDBACK)
           ========================================================================= */}
       <div className="flex items-center p-1 bg-[#ece8e0] dark:bg-[#16171E] rounded-2xl border border-[#e6e2da] dark:border-[#222533] gap-1 shadow-inner text-xs font-bold font-mono">
         <button
           type="button"
           onClick={() => setActiveTab("overview")}
-          className={`flex-1 py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+          className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             activeTab === "overview"
               ? "bg-[#ffffff] dark:bg-[#202330] text-[#6c1d18] dark:text-[#FBBF24] shadow-sm border border-[#e6e2da] dark:border-[#2D3142]"
               : "text-[#564240] dark:text-stone-400 hover:text-[#1c1c17] dark:hover:text-white"
@@ -259,8 +286,23 @@ export function ProfileView({
 
         <button
           type="button"
+          onClick={() => setActiveTab("favorites")}
+          className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === "favorites"
+              ? "bg-[#ffffff] dark:bg-[#202330] text-[#6c1d18] dark:text-[#FBBF24] shadow-sm border border-[#e6e2da] dark:border-[#2D3142]"
+              : "text-[#564240] dark:text-stone-400 hover:text-[#1c1c17] dark:hover:text-white"
+          }`}
+        >
+          <Heart className={`w-3.5 h-3.5 ${favoritesCount > 0 ? "fill-rose-500 text-rose-500" : ""}`} />
+          <span className="truncate">
+            Saved {favoritesCount > 0 ? `(${favoritesCount})` : ""}
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("sso")}
-          className={`flex-1 py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+          className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             activeTab === "sso"
               ? "bg-[#ffffff] dark:bg-[#202330] text-[#6c1d18] dark:text-[#FBBF24] shadow-sm border border-[#e6e2da] dark:border-[#2D3142]"
               : "text-[#564240] dark:text-stone-400 hover:text-[#1c1c17] dark:hover:text-white"
@@ -273,7 +315,7 @@ export function ProfileView({
         <button
           type="button"
           onClick={() => setActiveTab("feedback")}
-          className={`flex-1 py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+          className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             activeTab === "feedback"
               ? "bg-[#ffffff] dark:bg-[#202330] text-[#6c1d18] dark:text-[#FBBF24] shadow-sm border border-[#e6e2da] dark:border-[#2D3142]"
               : "text-[#564240] dark:text-stone-400 hover:text-[#1c1c17] dark:hover:text-white"
@@ -287,19 +329,19 @@ export function ProfileView({
       </div>
 
       {/* =========================================================================
-          4. STAT PILLS ROW (DINING PASS & TOTAL ORDERS)
+          4. STAT PILLS ROW (DINING PASS, TOTAL ORDERS & SAVED FAVORITES)
           ========================================================================= */}
       {(activeTab === "overview" || activeTab === "feedback") && (
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="bg-[#f1ede6] dark:bg-[#121319] rounded-xl p-3 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[#ffdad6]/60 dark:bg-[#2a1412] text-[#6c1d18] dark:text-[#ffb4ab] flex items-center justify-center flex-shrink-0">
-              <CreditCard className="w-5 h-5" />
+        <div className="grid grid-cols-3 gap-2">
+          <div className="bg-[#f1ede6] dark:bg-[#121319] rounded-xl p-2.5 sm:p-3 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-[#ffdad6]/60 dark:bg-[#2a1412] text-[#6c1d18] dark:text-[#ffb4ab] flex items-center justify-center flex-shrink-0">
+              <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
-              <div className="text-[9px] font-mono uppercase text-[#89726f] dark:text-stone-400 font-semibold tracking-wider">
-                Pre-Order Pass
+              <div className="text-[9px] font-mono uppercase text-[#89726f] dark:text-stone-400 font-semibold tracking-wider truncate">
+                Pre-Order
               </div>
-              <div className="text-sm font-black font-mono text-[#6c1d18] dark:text-[#ffdad6] mt-0.5 flex items-center gap-1">
+              <div className="text-xs sm:text-sm font-black font-mono text-[#6c1d18] dark:text-[#ffdad6] mt-0.5 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 Active
               </div>
@@ -308,20 +350,38 @@ export function ProfileView({
 
           <Link
             href="/orders"
-            className="bg-[#f1ede6] dark:bg-[#121319] hover:bg-[#eae6de] dark:hover:bg-[#181a24] transition-colors rounded-xl p-3 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center gap-3 group"
+            className="bg-[#f1ede6] dark:bg-[#121319] hover:bg-[#eae6de] dark:hover:bg-[#181a24] transition-colors rounded-xl p-2.5 sm:p-3 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center gap-2 sm:gap-3 group"
           >
-            <div className="w-9 h-9 rounded-lg bg-[#ffdbcb] dark:bg-[#2a1a12] text-[#9e4300] dark:text-[#FBBF24] flex items-center justify-center flex-shrink-0">
-              <ShoppingBag className="w-5 h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-[#ffdbcb] dark:bg-[#2a1a12] text-[#9e4300] dark:text-[#FBBF24] flex items-center justify-center flex-shrink-0">
+              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
-              <div className="text-[9px] font-mono uppercase text-[#89726f] dark:text-stone-400 font-semibold tracking-wider">
-                Total Orders
+              <div className="text-[9px] font-mono uppercase text-[#89726f] dark:text-stone-400 font-semibold tracking-wider truncate">
+                Orders
               </div>
-              <div className="text-sm font-black font-mono text-[#9e4300] dark:text-[#FBBF24] mt-0.5">
-                {ordersCount} {ordersCount === 1 ? "Order" : "Orders"}
+              <div className="text-xs sm:text-sm font-black font-mono text-[#9e4300] dark:text-[#FBBF24] mt-0.5 truncate">
+                {ordersCount}
               </div>
             </div>
           </Link>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("favorites")}
+            className="bg-[#f1ede6] dark:bg-[#121319] hover:bg-[#eae6de] dark:hover:bg-[#181a24] transition-colors rounded-xl p-2.5 sm:p-3 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex items-center gap-2 sm:gap-3 text-left cursor-pointer group"
+          >
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center flex-shrink-0">
+              <Heart className="w-4 h-4 sm:w-5 sm:h-5 fill-rose-500 text-rose-500" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[9px] font-mono uppercase text-[#89726f] dark:text-stone-400 font-semibold tracking-wider truncate">
+                Favorites
+              </div>
+              <div className="text-xs sm:text-sm font-black font-mono text-rose-700 dark:text-rose-400 mt-0.5 truncate">
+                {favoritesCount}
+              </div>
+            </div>
+          </button>
         </div>
       )}
 
@@ -494,6 +554,172 @@ export function ProfileView({
           </section>
         )}
       </div>
+
+      {/* =========================================================================
+          OVERVIEW: SAVED FAVORITES QUICK ACCESS CARD
+          ========================================================================= */}
+      {activeTab === "overview" && favoritesCount > 0 && (
+        <div className="bg-gradient-to-br from-[#fff5f5] via-[#fff0f2] to-[#ffe8eb] dark:from-[#201316] dark:via-[#191113] dark:to-[#241317] rounded-2xl p-4 border border-rose-200 dark:border-rose-900/40 shadow-xs flex flex-col gap-3 group relative overflow-hidden">
+          <div className="flex items-start justify-between gap-2 relative z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold shadow-xs flex-shrink-0 group-hover:scale-105 transition-transform border border-rose-200 dark:border-rose-800/40">
+                <Heart className="w-6 h-6 fill-rose-500 text-rose-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-[#1c1c17] dark:text-white text-sm leading-snug font-headline">
+                  Saved Favorite Meals
+                </h3>
+                <p className="text-[11px] text-[#564240] dark:text-stone-400 mt-0.5 leading-snug">
+                  {favoritesCount} {favoritesCount === 1 ? "dish saved" : "dishes saved"} for fast 1-tap re-ordering
+                </p>
+              </div>
+            </div>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400 bg-rose-100 dark:bg-rose-950/80 px-2.5 py-0.5 rounded-full font-mono flex-shrink-0 border border-rose-300 dark:border-rose-900/60">
+              {favoritesCount} Saved
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("favorites")}
+            className="relative z-10 w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white text-xs font-bold flex items-center justify-between transition-all active:scale-[0.98] shadow-sm cursor-pointer"
+          >
+            <span>View Saved Favorites</span>
+            <div className="flex items-center gap-1.5 text-rose-100">
+              <span className="text-[11px] font-semibold font-mono">Open List</span>
+              <ArrowRight className="w-4 h-4" />
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* =========================================================================
+          SAVED / FAVORITE FOOD ITEMS TAB
+          ========================================================================= */}
+      {activeTab === "favorites" && (
+        <section
+          className="bg-[#f1ede6] dark:bg-[#121319] rounded-2xl p-4 sm:p-5 border border-[#e6e2da] dark:border-[#222533] shadow-xs flex flex-col gap-4"
+          data-purpose="favorites-section"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between pb-3 border-b border-[#e6e2da]/70 dark:border-[#222533]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center shadow-xs">
+                <Heart className="w-5 h-5 fill-rose-500 text-rose-500" />
+              </div>
+              <div>
+                <h2 className="font-extrabold text-[#1c1c17] dark:text-white text-base leading-tight font-headline">
+                  Saved Favorites
+                </h2>
+                <p className="text-[11px] text-[#564240] dark:text-stone-400 mt-0.5 font-medium">
+                  {favoritesCount} {favoritesCount === 1 ? "dish saved" : "dishes saved"} for fast pre-ordering
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href="/menu"
+              className="text-xs font-bold text-[#6c1d18] dark:text-[#FBBF24] hover:underline flex items-center gap-1 font-mono"
+            >
+              <span>Menu</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          {/* Empty State */}
+          {favoritesCount === 0 ? (
+            <div className="py-12 px-4 text-center flex flex-col items-center justify-center bg-white dark:bg-[#181a24] rounded-2xl border border-dashed border-[#e6e2da] dark:border-[#262836] space-y-3">
+              <div className="w-16 h-16 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-500 flex items-center justify-center shadow-inner">
+                <Heart className="w-8 h-8 stroke-[1.75]" />
+              </div>
+              <div className="space-y-1 max-w-sm">
+                <h3 className="font-bold text-[#1c1c17] dark:text-white text-sm sm:text-base font-headline">
+                  No Saved Favorites Yet
+                </h3>
+                <p className="text-xs text-[#564240] dark:text-stone-400 leading-relaxed font-medium">
+                  Tap the heart icon ❤️ on any dish in the Canteen Menu or Healthy Mode to save your go-to meals here.
+                </p>
+              </div>
+              <div className="pt-2">
+                <Link
+                  href="/menu"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#FACC15] hover:bg-[#EAB308] text-[#181513] font-headline text-xs font-extrabold uppercase tracking-wider shadow-sm transition-transform active:scale-95 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>Explore Menu</span>
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {favoritesList.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-white dark:bg-[#181a24] rounded-2xl p-3 border border-[#e6e2da] dark:border-[#262836] shadow-2xs hover:border-[#dcc0bd] dark:hover:border-[#3d4255] transition-all flex gap-3 group"
+                >
+                  {/* Left: Image with Veg indicator */}
+                  <div className="relative w-22 h-22 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-[#e8dac0] dark:bg-[#090A0F] shrink-0">
+                    <MenuItemImage
+                      src={item.image_url}
+                      alt={item.name}
+                      aspect="square"
+                      sizes="96px"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      containerClassName="w-full h-full"
+                    />
+                    <div className="absolute top-1 left-1 p-0.5 rounded bg-white/90 dark:bg-black/80 backdrop-blur-xs shadow-2xs">
+                      <VegIndicator isVeg={item.is_veg} />
+                    </div>
+                  </div>
+
+                  {/* Right: Info + Actions */}
+                  <div className="flex-1 min-w-0 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-start justify-between gap-1">
+                        <h4 className="font-bold text-xs sm:text-sm text-[#1c1c17] dark:text-white uppercase tracking-wide truncate font-headline">
+                          {item.name}
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => removeFavorite(item.id)}
+                          title="Remove from favorites"
+                          aria-label={`Remove ${item.name} from favorites`}
+                          className="text-stone-400 hover:text-rose-500 transition-colors p-1 rounded-md cursor-pointer shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2 mt-1 text-[11px] text-[#564240] dark:text-stone-400 font-medium">
+                        <span className="font-extrabold text-[#6c1d18] dark:text-[#FBBF24] font-headline text-xs sm:text-sm">
+                          {formatPaise(item.price_paise)}
+                        </span>
+                        {item.calories_kcal != null && (
+                          <span>&bull; {item.calories_kcal} kcal</span>
+                        )}
+                        {item.protein_g != null && (
+                          <span className="text-emerald-700 dark:text-emerald-400 font-bold">&bull; {item.protein_g}g pro</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => handleQuickAddToCart(item)}
+                        className="w-full py-1.5 px-3 rounded-lg bg-[#FACC15] hover:bg-[#EAB308] text-[#181513] font-headline text-[11px] font-extrabold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-2xs transition-transform active:scale-95 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3 stroke-[2.5]" />
+                        <span>Add to Cart</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* =========================================================================
           7. RATE PRE-ORDER EXPERIENCE HERO ACTION (HIGH DELIGHT HIGHLIGHT CARD)

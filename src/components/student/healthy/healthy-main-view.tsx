@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MenuItemImage } from "@/components/student/menu-item-image";
 import { VegIndicator } from "@/components/student/veg-indicator";
+import { FavoriteButton } from "@/components/student/favorite-button";
 import { CartShortcut } from "@/components/student/cart-shortcut";
 import { calculateEstimatedCartTotal } from "@/lib/cart-shortcut";
 import { useCartStore, MAX_ITEM_QUANTITY } from "@/lib/cart-store";
@@ -1016,6 +1017,14 @@ export function HealthyMainView({
                       <div className="absolute top-1.5 right-1.5 p-0.5 rounded bg-white/95 dark:bg-black/90 shadow-2xs backdrop-blur-md z-10">
                         <VegIndicator isVeg={dish.is_veg} />
                       </div>
+
+                      {/* Favorite Button on bottom-right of image */}
+                      <FavoriteButton
+                        item={dish}
+                        size="sm"
+                        variant="floating"
+                        className="absolute bottom-1.5 right-1.5 z-10"
+                      />
                     </div>
 
                     {/* Dish Name */}
