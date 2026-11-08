@@ -651,41 +651,39 @@ export function ProfileView({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="flex flex-col gap-2.5">
               {favoritesList.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-white dark:bg-[#181a24] rounded-2xl p-2.5 sm:p-3 border border-[#e6e2da] dark:border-[#262836] shadow-2xs hover:border-[#dcc0bd] dark:hover:border-[#3d4255] transition-all flex flex-col justify-between group"
+                  className="bg-white dark:bg-[#181a24] rounded-2xl p-3 border border-[#e6e2da] dark:border-[#262836] shadow-2xs hover:border-[#dcc0bd] dark:hover:border-[#3d4255] transition-all flex items-center justify-between gap-3 group"
                 >
-                  {/* Food Photo */}
-                  <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-[#e8dac0] dark:bg-[#090A0F]">
-                    <MenuItemImage
-                      src={item.image_url}
-                      alt={item.name}
-                      aspect="square"
-                      sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 200px"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 rounded-xl"
-                      containerClassName="w-full h-full"
-                      placeholderClassName="w-full h-full"
-                    />
-                  </div>
-
-                  {/* Food Name */}
-                  <div className="pt-2 pb-1.5 px-0.5">
+                  {/* Left: Food Photo + Name */}
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden bg-[#e8dac0] dark:bg-[#090A0F] shrink-0 border border-[#e6e2da]/70 dark:border-[#262836]">
+                      <MenuItemImage
+                        src={item.image_url}
+                        alt={item.name}
+                        aspect="square"
+                        sizes="64px"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 rounded-xl"
+                        containerClassName="w-full h-full"
+                        placeholderClassName="w-full h-full"
+                      />
+                    </div>
                     <h4
                       title={item.name}
-                      className="font-bold text-xs sm:text-sm text-[#1c1c17] dark:text-white uppercase tracking-wide truncate font-headline"
+                      className="font-bold text-xs sm:text-sm text-[#1c1c17] dark:text-white uppercase tracking-wide line-clamp-2 font-headline"
                     >
                       {item.name}
                     </h4>
                   </div>
 
-                  {/* Add to Cart Button */}
-                  <div className="pt-1">
+                  {/* Right: Add to Cart Button */}
+                  <div className="shrink-0">
                     <button
                       type="button"
                       onClick={() => handleQuickAddToCart(item)}
-                      className="w-full py-2 px-2.5 rounded-xl bg-[#FACC15] hover:bg-[#EAB308] text-[#181513] font-headline text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-2xs transition-transform active:scale-95 cursor-pointer"
+                      className="py-2 px-3 sm:px-4 rounded-xl bg-[#FACC15] hover:bg-[#EAB308] text-[#181513] font-headline text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-2xs transition-transform active:scale-95 cursor-pointer whitespace-nowrap"
                     >
                       <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                       <span>Add to Cart</span>
