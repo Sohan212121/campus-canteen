@@ -50,7 +50,7 @@ export function AdminNav({ adminName }: { adminName?: string | null }) {
             </div>
             <div>
               <span className="font-brand text-lg sm:text-xl tracking-wide leading-none text-[#611c08] dark:text-[#f5efe4]">
-                C@MPBITE
+                C<span className="text-[#DC2626] dark:text-[#EF4444]">@</span>MPBITE
               </span>
               <span className="block text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">
                 Admin Console
