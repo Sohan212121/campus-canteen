@@ -395,14 +395,10 @@ export function HealthyMainView({
   return (
     <div className="-mx-4 -mt-3 px-4 pt-3 pb-28 bg-[#fcf9f2] dark:bg-transparent min-h-screen text-[#1c1c18] dark:text-foreground selection:bg-[#c2f02e] selection:text-[#00241a] space-y-4">
       {/* =========================================================================
-          HEADER ROW: HEY ATHLETE 👋 & PROTEIN PICKS
+          HEADER ROW: PROTEIN PICKS
           ========================================================================= */}
       <header className="flex items-center justify-between gap-3 pt-1">
         <div className="flex flex-col">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[#506600] dark:text-[#81c784] flex items-center gap-1 font-headline">
-            <span>Hey Athlete</span>
-            <span className="text-sm leading-none">👋</span>
-          </span>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#00241a] dark:text-[#ede7e1] font-headline">
             Protein Picks
           </h1>
@@ -491,14 +487,6 @@ export function HealthyMainView({
           <SlidersHorizontal className="h-5 w-5" />
           <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-[#ff6f4f] ring-2 ring-white dark:ring-[#161311]" />
         </button>
-      </div>
-
-      {/* SHARED-ELEMENT ANNOTATION TAG */}
-      <div className="flex items-center gap-1.5 bg-[#f6f3ec] dark:bg-[#1e291c]/60 px-3 py-1.5 rounded-xl border border-[#c0c8c3]/30 dark:border-white/5">
-        <Zap className="h-3.5 w-3.5 text-[#506600] dark:text-[#81c784] shrink-0" />
-        <span className="text-[10px] sm:text-[11px] font-bold text-[#414945] dark:text-stone-400 uppercase tracking-wider truncate font-headline">
-          High-Protein Fuel: Tap any dish to inspect complete macro pie charts &amp; minerals
-        </span>
       </div>
 
       {/* =========================================================================
