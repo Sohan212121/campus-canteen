@@ -47,7 +47,6 @@ export function OrderDetailDrawer({
 }: OrderDetailDrawerProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
-  const [actionError, setActionError] = useState<{ status: StaffOrderStatus; message: string } | null>(null);
 
   if (!order) return null;
 
@@ -59,23 +58,12 @@ export function OrderDetailDrawer({
 
   const handleTransition = async (toStatus: StaffOrderStatus) => {
     setIsUpdating(true);
-    setActionError(null);
     setShowRejectConfirm(false);
 
     try {
-      const timeoutPromise = new Promise<{ success: false; error: string }>((_, reject) =>
-        setTimeout(() => reject(new Error("Request timed out after 20 seconds. Please retry.")), 20000)
-      );
-
-      const res = await Promise.race([
-        transitionOrderAction(order.id, toStatus),
-        timeoutPromise,
-      ]);
-
+      const res = await transitionOrderAction(order.id, toStatus);
       if (!res.success) {
-        const msg = res.error || "Failed to update order status";
-        toast.error(msg);
-        setActionError({ status: toStatus, message: msg });
+        toast.error(res.error || "Failed to update order status");
       } else {
         toast.success(
           res.was_noop
@@ -85,10 +73,8 @@ export function OrderDetailDrawer({
         onOrderUpdated();
         onClose();
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Network error updating order";
-      toast.error(msg);
-      setActionError({ status: toStatus, message: msg });
+    } catch {
+      toast.error("Network error updating order");
     } finally {
       setIsUpdating(false);
     }
@@ -99,7 +85,7 @@ export function OrderDetailDrawer({
       role="dialog"
       aria-modal="true"
       aria-labelledby="order-drawer-title"
-      className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
     >
       {/* Backdrop click */}
       <div className="absolute inset-0" onClick={onClose} />
@@ -230,23 +216,6 @@ export function OrderDetailDrawer({
 
         {/* Action Buttons Section */}
         <div className="mt-auto pt-4 border-t border-border space-y-2">
-          {actionError && (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 flex items-center justify-between text-xs text-destructive gap-2">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span className="truncate">{actionError.message}</span>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleTransition(actionError.status)}
-                disabled={isUpdating}
-                className="h-8 text-xs font-bold rounded-lg shrink-0 border-destructive/40 hover:bg-destructive/10"
-              >
-                Retry
-              </Button>
-            </div>
-          )}
           {order.status === "PLACED" && !showRejectConfirm && (
             <div className="grid grid-cols-3 gap-2">
               <Button

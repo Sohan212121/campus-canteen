@@ -221,7 +221,7 @@ export function InventoryView({ initialItems }: InventoryViewProps) {
                       type="button"
                       disabled={isPending}
                       onClick={() => handleToggle(item.id, item.is_available)}
-                      className={`w-full min-h-[44px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                      className={`w-full min-h-[44px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-2xs ${
                         item.is_available
                           ? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400 border border-emerald-500/30"
                           : "bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 dark:text-rose-400 border border-rose-500/30"
