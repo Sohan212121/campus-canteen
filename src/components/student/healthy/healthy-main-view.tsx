@@ -445,7 +445,7 @@ export function HealthyMainView({
         <div
           ref={searchBarContainerRef}
           onClick={openTakeover}
-          className="flex-1 h-12 rounded-full bg-white dark:bg-[#161311] shadow-[0_8px_24px_-4px_rgba(11,59,46,0.06)] dark:shadow-none border border-[#c0c8c3]/40 dark:border-[#3b533a]/60 px-4 flex items-center gap-2.5 cursor-pointer hover:border-[#10b981]/50 transition-colors"
+          className="flex-1 h-12 rounded-full bg-white dark:bg-[#161311] shadow-[0_8px_24px_-4px_rgba(11,59,46,0.06)] dark:shadow-none border border-[#c0c8c3]/40 dark:border-[#3b533a]/60 pl-4 pr-1.5 flex items-center gap-2.5 cursor-pointer hover:border-[#10b981]/50 transition-colors"
           role="search"
         >
           <Search className="h-4.5 w-4.5 text-[#00241a] dark:text-white shrink-0" />
@@ -466,18 +466,18 @@ export function HealthyMainView({
                 setTimeout(scrollToCatalog, 50);
               }}
               aria-label="Clear search"
-              className="w-7 h-7 rounded-full bg-[#e8f5e9] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-[#81c784] hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60 active:scale-90 transition-transform cursor-pointer shrink-0"
+              className="w-9 h-9 rounded-full bg-[#e8f5e9] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-[#81c784] hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60 active:scale-90 transition-transform cursor-pointer shrink-0"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-4 w-4 stroke-[2.25]" />
             </button>
           ) : (
             <button
               type="button"
               onClick={openTakeover}
               aria-label="Voice search"
-              className="w-7 h-7 rounded-full bg-[#e8f5e9] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-[#81c784] hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60 active:scale-90 transition-transform cursor-pointer shrink-0"
+              className="w-9 h-9 rounded-full bg-[#e8f5e9] dark:bg-[#1e291c] flex items-center justify-center text-[#00241a] dark:text-[#81c784] hover:bg-[#d8eedd] dark:hover:bg-[#253323] border border-[#cbe6d4]/60 dark:border-[#3b533a]/60 active:scale-90 transition-transform cursor-pointer shrink-0"
             >
-              <Mic className="h-3.5 w-3.5" />
+              <Mic className="h-4.5 w-4.5 stroke-[2.25]" />
             </button>
           )}
         </div>
