@@ -42,3 +42,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# design exports, archives and scratch files
+*.zip
+*.mp4
+scratch/
+campusbites-dining-portal/
+darkmode_ui/
+healthymode_design/
+light_theme_healthy/
+newhomepage_ui/
+preference_slider_ui/
+stitch_campus_canteen_ui_ux_redesign*/
+
