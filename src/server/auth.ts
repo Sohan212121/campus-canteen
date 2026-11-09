@@ -39,7 +39,30 @@ export const getCurrentUser = cache(async (): Promise<UserProfile | null> => {
     )) as Awaited<ReturnType<typeof supabase.auth.getUser>>;
     const user = authRes?.data?.user;
 
-    if (!user) return null;
+    if (!user) {
+      if (authRes?.error) {
+        const err = authRes.error;
+        const status = err.status || 0;
+        const name = err.name || "";
+        const msg = (err.message || "").toLowerCase();
+
+        // Handle temporary error: status >= 500, 429 rate limit, or AuthRetryableFetchError / network failure
+        const isTemporary =
+          status >= 500 ||
+          status === 429 ||
+          name === "AuthRetryableFetchError" ||
+          msg.includes("network") ||
+          msg.includes("fetch failed") ||
+          msg.includes("timeout") ||
+          msg.includes("service unreachable");
+
+        if (isTemporary) {
+          console.error("auth service unreachable");
+          throw new Error("We can't reach the service right now. Please try again.");
+        }
+      }
+      return null;
+    }
 
     const query = supabase
       .from("profiles")
@@ -57,7 +80,24 @@ export const getCurrentUser = cache(async (): Promise<UserProfile | null> => {
     );
 
     const profile = profileRes?.data;
-    if (!profile) return null;
+    if (!profile) {
+      const err = profileRes?.error;
+      const isNotFound =
+        !err ||
+        err.code === "PGRST116" ||
+        err.message?.toLowerCase().includes("not found") ||
+        err.message?.toLowerCase().includes("no rows") ||
+        err.message?.toLowerCase().includes("0 rows");
+
+      if (isNotFound) {
+        // Definitive: user row does not exist in profiles table
+        return null;
+      }
+
+      // Transient database / network query failure — throw into retry state
+      console.error("auth service unreachable");
+      throw new Error("We can't reach the service right now. Please try again.");
+    }
 
     const userProfile: UserProfile = { ...(profile as UserProfile) };
     if (user.email) {
@@ -66,9 +106,19 @@ export const getCurrentUser = cache(async (): Promise<UserProfile | null> => {
 
     return userProfile;
   } catch (err) {
-    if (err instanceof TimeoutError || (err as Error)?.name === "TimeoutError") {
+    const isTimeout =
+      err instanceof TimeoutError || (err as Error)?.name === "TimeoutError";
+    const msg = (err as Error)?.message?.toLowerCase() || "";
+    const isNetworkOrTransient =
+      isTimeout ||
+      msg.includes("fetch failed") ||
+      msg.includes("network") ||
+      msg.includes("can't reach the service") ||
+      msg.includes("abort");
+
+    if (isNetworkOrTransient) {
       console.error("auth service unreachable");
-      throw err;
+      throw new Error("We can't reach the service right now. Please try again.");
     }
     return null;
   }
@@ -103,7 +153,11 @@ export async function requireRole(
   try {
     profile = await getCurrentUser();
   } catch (err) {
-    if (err instanceof TimeoutError || (err as Error)?.name === "TimeoutError") {
+    if (
+      err instanceof TimeoutError ||
+      (err as Error)?.name === "TimeoutError" ||
+      (err as Error)?.message?.includes("reach the service right now")
+    ) {
       throw new Error("We can't reach the service right now. Please try again.");
     }
     throw err;

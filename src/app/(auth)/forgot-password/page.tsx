@@ -47,6 +47,8 @@ function ForgotPasswordForm() {
   const urlErrorMessage =
     errorParam === "link_expired"
       ? "Your reset or invite link has expired or has already been used. Please request a new link below."
+      : errorParam === "different_browser"
+      ? "This link was opened in a different browser or app than the one used to request it. Please request a new link below."
       : errorParam === "invalid_link"
       ? "The link was invalid or incomplete. Please request a new link below."
       : null;

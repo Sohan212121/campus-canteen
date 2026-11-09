@@ -139,4 +139,51 @@ describe("Sub-Step 3C: Timeout safety for slow Supabase in Proxy & Auth helpers"
       consoleErrorSpy.mockRestore();
     });
   });
+
+  describe("Prefetch requests and transient auth error classification", () => {
+    it("(d) a request with a spoofed prefetch header still goes through the full proxy checks", async () => {
+      // Unauthenticated visitor with spoofed prefetch header on protected route
+      mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
+
+      const req = createMockRequest("/orders");
+      // Empty cookies for unauthenticated visitor
+      (req as unknown as { cookies: { getAll: () => unknown[] } }).cookies = {
+        getAll: () => [],
+      };
+      (req.headers as Headers).set("next-router-prefetch", "1");
+      (req.headers as Headers).set("purpose", "prefetch");
+
+      const res = await proxy(req);
+
+      // Must NOT bypass — must enforce full login redirect check
+      expect(mockGetUser).toHaveBeenCalled();
+      expect(res.headers.get("location")).toBe("https://example.com/login");
+    });
+
+    it("returns 503 and NEVER redirects to /login on transient 500 error when session cookie is present", async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: null },
+        error: { status: 500, message: "Database connection failed" },
+      });
+
+      const req = createMockRequest("/orders");
+      const res = await proxy(req);
+
+      expect(res.status).toBe(503);
+      expect(res.headers.get("location")).toBeNull();
+    });
+
+    it("returns 503 and NEVER redirects to /login on rate limit (429) when session cookie is present", async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: null },
+        error: { status: 429, message: "Too many requests" },
+      });
+
+      const req = createMockRequest("/orders");
+      const res = await proxy(req);
+
+      expect(res.status).toBe(503);
+      expect(res.headers.get("location")).toBeNull();
+    });
+  });
 });

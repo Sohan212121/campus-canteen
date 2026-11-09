@@ -86,4 +86,45 @@ describe("Token Security: pickup_token Non-Reference & orders Query Invariants",
       `Found wildcard select('*') or unprojected select() on orders in source files: ${JSON.stringify(violations, null, 2)}`
     ).toEqual([]);
   });
+
+  it("ensures NO source file in src/auth or src/server/actions/auth logs auth tokens or credentials", () => {
+    const authFiles = [
+      path.join(srcDir, "app", "auth", "confirm", "confirm-view.tsx"),
+      path.join(srcDir, "app", "auth", "confirm", "page.tsx"),
+      path.join(srcDir, "server", "actions", "auth.ts"),
+      path.join(srcDir, "proxy.ts"),
+    ];
+
+    const violations: { file: string; line: number; match: string }[] = [];
+
+    for (const file of authFiles) {
+      if (!fs.existsSync(file)) continue;
+      const content = fs.readFileSync(file, "utf-8");
+      const lines = content.split("\n");
+
+      lines.forEach((lineText, idx) => {
+        const trimmed = lineText.trim();
+        // Check for logging of tokens
+        if (
+          trimmed.startsWith("console.") &&
+          (trimmed.includes("token_hash") ||
+            trimmed.includes("access_token") ||
+            trimmed.includes("refresh_token") ||
+            trimmed.includes("password") ||
+            trimmed.includes("code"))
+        ) {
+          violations.push({
+            file: path.relative(srcDir, file),
+            line: idx + 1,
+            match: trimmed,
+          });
+        }
+      });
+    }
+
+    expect(
+      violations,
+      `Found forbidden logging of tokens/secrets in auth files: ${JSON.stringify(violations, null, 2)}`
+    ).toEqual([]);
+  });
 });

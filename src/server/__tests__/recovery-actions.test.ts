@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockResetPasswordForEmail = vi.fn();
 const mockVerifyOtp = vi.fn();
+const mockExchangeCodeForSession = vi.fn();
 const mockUpdateUser = vi.fn();
 const mockSignOut = vi.fn();
 const mockGetUser = vi.fn();
+const mockGetSession = vi.fn();
 const mockSingle = vi.fn();
 const mockEq = vi.fn().mockReturnValue({ single: mockSingle });
 const mockSelect = vi.fn().mockReturnValue({ eq: mockEq });
@@ -40,9 +42,12 @@ vi.mock("@/lib/supabase/server", () => ({
       resetPasswordForEmail: (...args: unknown[]) =>
         mockResetPasswordForEmail(...args),
       verifyOtp: (...args: unknown[]) => mockVerifyOtp(...args),
+      exchangeCodeForSession: (...args: unknown[]) =>
+        mockExchangeCodeForSession(...args),
       updateUser: (...args: unknown[]) => mockUpdateUser(...args),
       signOut: (...args: unknown[]) => mockSignOut(...args),
       getUser: (...args: unknown[]) => mockGetUser(...args),
+      getSession: (...args: unknown[]) => mockGetSession(...args),
     },
     from: (...args: unknown[]) => mockFrom(...args),
   }),
@@ -51,9 +56,21 @@ vi.mock("@/lib/supabase/server", () => ({
 import {
   forgotPasswordAction,
   verifyConfirmTokenAction,
+  verifyConfirmCodeAction,
+  authorizeRecoverySessionAction,
   setPasswordAction,
 } from "@/server/actions/auth";
-import { PASSWORD_RESET_COOKIE } from "@/lib/validation/auth-recovery";
+import {
+  PASSWORD_RESET_COOKIE,
+  isRecentRecoveryOrInviteSession,
+  parseJwtPayload,
+} from "@/lib/validation/auth-recovery";
+
+function createTestJwt(amr: unknown, iat = Math.floor(Date.now() / 1000)): string {
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ amr, iat, exp: iat + 3600 })).toString("base64url");
+  return `${header}.${payload}.mock-sig`;
+}
 
 describe("Recovery & Password Setting Server Actions", () => {
   beforeEach(() => {
@@ -86,6 +103,26 @@ describe("Recovery & Password Setting Server Actions", () => {
         "student@campus.edu",
         expect.objectContaining({
           redirectTo: "http://localhost:3000/auth/confirm?type=recovery&next=/set-password",
+        })
+      );
+    });
+
+    it("reduces referer with full path to its origin only", async () => {
+      mockHeadersGet.mockImplementation((key: string) => {
+        if (key === "referer") return "https://canteen.campus.edu/forgot-password?retry=1";
+        return null;
+      });
+      mockResetPasswordForEmail.mockResolvedValue({ error: null });
+
+      const formData = new FormData();
+      formData.set("email", "student@campus.edu");
+
+      const result = await forgotPasswordAction({}, formData);
+      expect(result.success).toBe(true);
+      expect(mockResetPasswordForEmail).toHaveBeenCalledWith(
+        "student@campus.edu",
+        expect.objectContaining({
+          redirectTo: "https://canteen.campus.edu/auth/confirm?type=recovery&next=/set-password",
         })
       );
     });
@@ -164,6 +201,221 @@ describe("Recovery & Password Setting Server Actions", () => {
           path: "/",
         })
       );
+    });
+
+    it("accepts magiclink and email_change types", async () => {
+      for (const validOtpType of ["magiclink", "email_change"]) {
+        mockVerifyOtp.mockResolvedValue({
+          data: { user: { id: "user-456" } },
+          error: null,
+        });
+
+        const formData = new FormData();
+        formData.set("token_hash", "valid-hash");
+        formData.set("type", validOtpType);
+
+        await expect(verifyConfirmTokenAction(formData)).rejects.toThrow(
+          "NEXT_REDIRECT:"
+        );
+        expect(mockVerifyOtp).toHaveBeenCalledWith({
+          token_hash: "valid-hash",
+          type: validOtpType,
+        });
+      }
+    });
+  });
+
+  describe("verifyConfirmCodeAction", () => {
+    it("exchanges code for session and binds password reset cookie when session AMR is recovery", async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const recoveryJwt = createTestJwt([{ method: "recovery", timestamp: now }]);
+
+      mockExchangeCodeForSession.mockResolvedValue({
+        data: {
+          user: { id: "code-user-uuid" },
+          session: { access_token: recoveryJwt },
+        },
+        error: null,
+      });
+
+      const formData = new FormData();
+      formData.set("code", "auth-code-123");
+      formData.set("type", "recovery");
+      formData.set("next", "/set-password");
+
+      await expect(verifyConfirmCodeAction(formData)).rejects.toThrow(
+        "NEXT_REDIRECT:/set-password"
+      );
+
+      expect(mockExchangeCodeForSession).toHaveBeenCalledWith("auth-code-123");
+      expect(mockCookieSet).toHaveBeenCalledWith(
+        PASSWORD_RESET_COOKIE,
+        "code-user-uuid",
+        expect.objectContaining({
+          httpOnly: true,
+          sameSite: "lax",
+          maxAge: 600,
+          path: "/",
+        })
+      );
+    });
+
+    it("does NOT bind password reset cookie when session AMR is password (not recovery)", async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const passwordJwt = createTestJwt([{ method: "password", timestamp: now }]);
+
+      mockExchangeCodeForSession.mockResolvedValue({
+        data: {
+          user: { id: "code-user-uuid" },
+          session: { access_token: passwordJwt },
+        },
+        error: null,
+      });
+
+      const formData = new FormData();
+      formData.set("code", "auth-code-123");
+      formData.set("type", "recovery"); // Even if client passes type=recovery!
+      formData.set("next", "/set-password");
+
+      await expect(verifyConfirmCodeAction(formData)).rejects.toThrow(
+        "NEXT_REDIRECT:/"
+      );
+
+      // CRITICAL SECURITY REQUIREMENT: Cookie must NOT be set
+      expect(mockCookieSet).not.toHaveBeenCalledWith(
+        PASSWORD_RESET_COOKIE,
+        expect.anything(),
+        expect.anything()
+      );
+    });
+
+    it("redirects to different_browser when PKCE code verifier is missing", async () => {
+      mockExchangeCodeForSession.mockResolvedValue({
+        data: { user: null },
+        error: { message: "code verifier not found or invalid pkce" },
+      });
+
+      const formData = new FormData();
+      formData.set("code", "stale-code");
+      formData.set("type", "recovery");
+
+      await expect(verifyConfirmCodeAction(formData)).rejects.toThrow(
+        "NEXT_REDIRECT:/forgot-password?error=different_browser"
+      );
+    });
+
+    it("redirects to link_expired on other code exchange errors", async () => {
+      mockExchangeCodeForSession.mockResolvedValue({
+        data: { user: null },
+        error: { message: "invalid authorization code" },
+      });
+
+      const formData = new FormData();
+      formData.set("code", "invalid-code");
+
+      await expect(verifyConfirmCodeAction(formData)).rejects.toThrow(
+        "NEXT_REDIRECT:/forgot-password?error=link_expired"
+      );
+    });
+  });
+
+  describe("authorizeRecoverySessionAction", () => {
+    it("binds password reset cookie strictly when session AMR has recent recovery timestamp", async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const recoveryJwt = createTestJwt([{ method: "recovery", timestamp: now }]);
+
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: "server-verified-user" } },
+        error: null,
+      });
+      mockGetSession.mockResolvedValue({
+        data: {
+          session: {
+            user: { id: "server-verified-user" },
+            access_token: recoveryJwt,
+          },
+        },
+        error: null,
+      });
+
+      const res = await authorizeRecoverySessionAction();
+      expect(res.success).toBe(true);
+      expect(res.userId).toBe("server-verified-user");
+      expect(mockCookieSet).toHaveBeenCalledWith(
+        PASSWORD_RESET_COOKIE,
+        "server-verified-user",
+        expect.objectContaining({
+          httpOnly: true,
+          sameSite: "lax",
+          maxAge: 600,
+          path: "/",
+        })
+      );
+    });
+
+    it("(a) an ordinary logged-in session (password auth) cannot get the reset cookie", async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const passwordJwt = createTestJwt([{ method: "password", timestamp: now }]);
+
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: "ordinary-user" } },
+        error: null,
+      });
+      mockGetSession.mockResolvedValue({
+        data: {
+          session: {
+            user: { id: "ordinary-user" },
+            access_token: passwordJwt,
+          },
+        },
+        error: null,
+      });
+
+      const res = await authorizeRecoverySessionAction();
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("not a verified recent recovery");
+      expect(mockCookieSet).not.toHaveBeenCalled();
+    });
+
+    it("(b) a recovery session older than 10 minutes cannot get the reset cookie", async () => {
+      const elevenMinutesAgo = Math.floor(Date.now() / 1000) - 660; // 11 minutes ago
+      const expiredRecoveryJwt = createTestJwt([
+        { method: "recovery", timestamp: elevenMinutesAgo },
+      ]);
+
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: "expired-user" } },
+        error: null,
+      });
+      mockGetSession.mockResolvedValue({
+        data: {
+          session: {
+            user: { id: "expired-user" },
+            access_token: expiredRecoveryJwt,
+          },
+        },
+        error: null,
+      });
+
+      const res = await authorizeRecoverySessionAction();
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("not a verified recent recovery");
+      expect(mockCookieSet).not.toHaveBeenCalled();
+    });
+
+    it("returns error when no valid session exists on server", async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: null },
+        error: { message: "session missing" },
+      });
+      mockGetSession.mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+
+      const res = await authorizeRecoverySessionAction();
+      expect(res.success).toBe(false);
+      expect(res.error).toBe("Unauthorized session");
     });
   });
 

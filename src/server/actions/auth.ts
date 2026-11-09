@@ -13,6 +13,9 @@ import {
   setPasswordSchema,
   validateRedirectPath,
   PASSWORD_RESET_COOKIE,
+  ALLOWED_OTP_TYPES,
+  parseJwtPayload,
+  isRecentRecoveryOrInviteSession,
 } from "@/lib/validation/auth-recovery";
 
 // ---------------------------------------------------------------------------
@@ -266,9 +269,19 @@ export async function forgotPasswordAction(
 
   const supabase = await createClient();
   const headersList = await headers();
+  const rawReferer = headersList.get("referer");
+  let refererOrigin: string | null = null;
+  if (rawReferer) {
+    try {
+      refererOrigin = new URL(rawReferer).origin;
+    } catch {
+      refererOrigin = null;
+    }
+  }
+
   const origin =
     headersList.get("origin") ||
-    headersList.get("referer") ||
+    refererOrigin ||
     process.env.NEXT_PUBLIC_APP_URL ||
     "http://localhost:3000";
 
@@ -298,8 +311,6 @@ export async function forgotPasswordAction(
 // Confirm Token Server Action (Email-Scanner Safe POST Verification)
 // ---------------------------------------------------------------------------
 
-const ALLOWED_OTP_TYPES = ["invite", "recovery", "signup", "email"] as const;
-
 export async function verifyConfirmTokenAction(
   formData: FormData
 ): Promise<never> {
@@ -308,7 +319,11 @@ export async function verifyConfirmTokenAction(
   const rawNext = formData.get("next")?.toString();
 
   // Validate presence and allowlist: unknown types redirect to expired-link screen
-  if (!token_hash || !rawType || !ALLOWED_OTP_TYPES.includes(rawType as (typeof ALLOWED_OTP_TYPES)[number])) {
+  if (
+    !token_hash ||
+    !rawType ||
+    !ALLOWED_OTP_TYPES.includes(rawType as (typeof ALLOWED_OTP_TYPES)[number])
+  ) {
     redirect("/forgot-password?error=link_expired");
   }
 
@@ -341,6 +356,98 @@ export async function verifyConfirmTokenAction(
   }
 
   redirect(next);
+}
+
+// ---------------------------------------------------------------------------
+// Confirm PKCE Authorization Code Action
+// ---------------------------------------------------------------------------
+
+export async function verifyConfirmCodeAction(
+  formData: FormData
+): Promise<never> {
+  const code = formData.get("code")?.toString();
+  const rawNext = formData.get("next")?.toString();
+
+  if (!code) {
+    redirect("/forgot-password?error=invalid_link");
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+  if (error || !data?.user || !data?.session) {
+    logSupabaseError("verifyConfirmCodeAction:exchange", error);
+    const errMsg = (error?.message || "").toLowerCase();
+    if (errMsg.includes("code verifier") || errMsg.includes("pkce")) {
+      redirect("/forgot-password?error=different_browser");
+    }
+    redirect("/forgot-password?error=link_expired");
+  }
+
+  // Strictly verify the AMR claim from the exchanged session JWT (never trust client parameter)
+  const claims = parseJwtPayload(data.session.access_token);
+  const isVerifiedRecovery = isRecentRecoveryOrInviteSession(claims, 600);
+
+  const defaultNext = isVerifiedRecovery ? "/set-password" : "/";
+  const next = validateRedirectPath(rawNext, defaultNext);
+
+  if (isVerifiedRecovery) {
+    const cookieStore = await cookies();
+    cookieStore.set(PASSWORD_RESET_COOKIE, data.user.id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 600, // 10 minutes
+      path: "/",
+    });
+  }
+
+  redirect(next);
+}
+
+// ---------------------------------------------------------------------------
+// Authorize Recovery Session (Server-Bound, strictly for validated sessions)
+// ---------------------------------------------------------------------------
+
+export async function authorizeRecoverySessionAction(): Promise<{
+  success: boolean;
+  userId?: string;
+  error?: string;
+}> {
+  const supabase = await createClient();
+  const [sessionRes, userRes] = await Promise.all([
+    supabase.auth.getSession(),
+    supabase.auth.getUser(),
+  ]);
+
+  const session = sessionRes.data?.session;
+  const user = userRes.data?.user;
+
+  if (!session || !user || user.id !== session.user.id) {
+    return { success: false, error: "Unauthorized session" };
+  }
+
+  // Strictly verify the AMR claim from the session JWT
+  const claims = parseJwtPayload(session.access_token);
+  const isVerifiedRecovery = isRecentRecoveryOrInviteSession(claims, 600);
+
+  if (!isVerifiedRecovery) {
+    return {
+      success: false,
+      error: "Session is not a verified recent recovery or invite session",
+    };
+  }
+
+  const cookieStore = await cookies();
+  cookieStore.set(PASSWORD_RESET_COOKIE, user.id, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 600, // 10 minutes
+    path: "/",
+  });
+
+  return { success: true, userId: user.id };
 }
 
 // ---------------------------------------------------------------------------

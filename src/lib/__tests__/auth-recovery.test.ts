@@ -3,12 +3,14 @@ import {
   validateRedirectPath,
   forgotPasswordSchema,
   setPasswordSchema,
+  ALLOWED_OTP_TYPES,
 } from "@/lib/validation/auth-recovery";
 
 describe("validateRedirectPath", () => {
   it("allows safe allowed paths", () => {
     expect(validateRedirectPath("/")).toBe("/");
     expect(validateRedirectPath("/set-password")).toBe("/set-password");
+    expect(validateRedirectPath("/profile")).toBe("/profile");
     expect(validateRedirectPath("/staff")).toBe("/staff");
     expect(validateRedirectPath("/admin")).toBe("/admin");
     expect(validateRedirectPath("/auth/pending-activation")).toBe(
@@ -95,5 +97,22 @@ describe("setPasswordSchema", () => {
     if (!res.success) {
       expect(res.error.issues[0].message).toBe("Passwords do not match");
     }
+  });
+});
+
+describe("ALLOWED_OTP_TYPES", () => {
+  it("contains all supported Supabase OTP verification types", () => {
+    expect(ALLOWED_OTP_TYPES).toContain("recovery");
+    expect(ALLOWED_OTP_TYPES).toContain("signup");
+    expect(ALLOWED_OTP_TYPES).toContain("invite");
+    expect(ALLOWED_OTP_TYPES).toContain("email");
+    expect(ALLOWED_OTP_TYPES).toContain("magiclink");
+    expect(ALLOWED_OTP_TYPES).toContain("email_change");
+  });
+
+  it("does not contain unauthorized arbitrary types", () => {
+    expect(ALLOWED_OTP_TYPES).not.toContain("sms");
+    expect(ALLOWED_OTP_TYPES).not.toContain("phone_change");
+    expect(ALLOWED_OTP_TYPES).not.toContain("admin_override");
   });
 });

@@ -162,6 +162,26 @@ describe("server/auth", () => {
       const client = await createReadOnlyClient();
       expect(client.auth).not.toHaveProperty("getSession");
     });
+
+    it("(c) temporary getUser error (500, 429, retryable) throws into retry state and NEVER redirects to /login", async () => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      // Simulate temporary Supabase Auth 500 error
+      mockGetUser.mockResolvedValue({
+        data: { user: null },
+        error: { status: 500, message: "Database connection failed" },
+      });
+
+      await expect(requireRole(["student"])).rejects.toThrow(
+        "We can't reach the service right now. Please try again."
+      );
+
+      // CRITICAL SECURITY REQUIREMENT: Must NEVER redirect to /login on temporary error
+      expect(mockRedirect).not.toHaveBeenCalledWith("/login");
+      expect(consoleErrorSpy).toHaveBeenCalledWith("auth service unreachable");
+
+      consoleErrorSpy.mockRestore();
+    });
   });
 
   // =========================================================================
