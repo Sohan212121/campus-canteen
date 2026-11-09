@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -25,6 +25,12 @@ import {
 } from "@/lib/order-status";
 import { getReorderItemsAction } from "@/server/actions/order";
 import { MenuItemImage } from "@/components/ui/menu-item-image";
+import { extractMenuItemImageUrl } from "@/lib/image-utils";
+import {
+  ACTIVE_ORDER_STATUSES,
+  mergePastOrders,
+  createResumeDebouncer,
+} from "@/lib/orders-list-helpers";
 import { cn } from "@/lib/utils";
 
 export interface OrderSummaryItem {
@@ -67,47 +73,160 @@ export function OrdersListView({
   const [hasMorePast, setHasMorePast] = useState<boolean>(initialPastOrders.length < totalPastCount);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [reorderingId, setReorderingId] = useState<string | null>(null);
+  const isRefreshingRef = useRef(false);
 
-  // Refresh active orders
-  const refreshActive = useCallback(async () => {
+  // Helper to format raw order query results
+  const formatOrderRow = useCallback((d: {
+    id: string;
+    order_code: string;
+    status: string;
+    total_paise: number;
+    placed_at: string;
+    estimated_ready_at: string;
+    pickup_window_end: string;
+    canteens: { name: string; location: string | null } | Array<{ name: string; location: string | null }> | null;
+    order_items?: Array<{
+      id: string;
+      name_snapshot: string;
+      quantity: number;
+      unit_price_paise: number;
+      menu_items?: { image_url?: string | null } | Array<{ image_url?: string | null }> | null;
+    }> | null;
+  }): OrderSummaryItem => ({
+    ...d,
+    canteens: Array.isArray(d.canteens) ? d.canteens[0] : d.canteens,
+    order_items: (d.order_items || []).map((item) => ({
+      id: item.id,
+      name_snapshot: item.name_snapshot,
+      quantity: item.quantity,
+      unit_price_paise: item.unit_price_paise,
+      image_url: extractMenuItemImageUrl(item.menu_items),
+    })),
+  }), []);
+
+  // Refresh active and latest past orders, merging without flicker
+  const refreshOrders = useCallback(async () => {
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
     try {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("orders")
-        .select(`
-          id,
-          order_code,
-          status,
-          total_paise,
-          placed_at,
-          estimated_ready_at,
-          pickup_window_end,
-          canteens (name, location),
-          order_items (id, name_snapshot, quantity, unit_price_paise)
-        `)
-        .eq("user_id", userId)
-        .in("status", ["PLACED", "ACCEPTED", "PREPARING", "READY"])
-        .order("placed_at", { ascending: false });
+      const [activeRes, pastRes] = await Promise.all([
+        supabase
+          .from("orders")
+          .select(`
+            id,
+            order_code,
+            status,
+            total_paise,
+            placed_at,
+            estimated_ready_at,
+            pickup_window_end,
+            canteens (name, location),
+            order_items (
+              id,
+              name_snapshot,
+              quantity,
+              unit_price_paise,
+              menu_items (image_url)
+            )
+          `)
+          .eq("user_id", userId)
+          .in("status", ACTIVE_ORDER_STATUSES)
+          .order("placed_at", { ascending: false }),
 
-      if (data) {
-        const formatted = data.map((d) => ({
-          ...d,
-          canteens: Array.isArray(d.canteens) ? d.canteens[0] : d.canteens,
-          order_items: d.order_items || [],
-        })) as OrderSummaryItem[];
+        supabase
+          .from("orders")
+          .select(`
+            id,
+            order_code,
+            status,
+            total_paise,
+            placed_at,
+            estimated_ready_at,
+            pickup_window_end,
+            canteens (name, location),
+            order_items (
+              id,
+              name_snapshot,
+              quantity,
+              unit_price_paise,
+              menu_items (image_url)
+            )
+          `, { count: "exact" })
+          .eq("user_id", userId)
+          .not("status", "in", '("PLACED","ACCEPTED","PREPARING","READY")')
+          .order("placed_at", { ascending: false })
+          .range(0, 19),
+      ]);
 
-        setActiveOrders(formatted);
+      if (activeRes.data) {
+        const formattedActive = activeRes.data.map(formatOrderRow);
+        setActiveOrders(formattedActive);
+      }
+
+      if (pastRes.data) {
+        const formattedPast = pastRes.data.map(formatOrderRow);
+        setPastOrders((prev) => mergePastOrders(prev, formattedPast));
       }
     } catch {
       // Ignore background refresh errors
+    } finally {
+      isRefreshingRef.current = false;
     }
-  }, [userId]);
+  }, [userId, formatOrderRow]);
 
-  // Realtime subscription on public.orders for user_id
+  // 1. Refresh on mount (guarantees fresh data even if client router cache served initial props)
+  useEffect(() => {
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (active) {
+        refreshOrders();
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [refreshOrders]);
+
+  // 2. Resume handling: visibilitychange, pageshow (bfcache), focus, and online (leading + trailing debounced)
+  useEffect(() => {
+    const debouncer = createResumeDebouncer(() => {
+      refreshOrders();
+    }, 750);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        debouncer.trigger();
+      }
+    };
+    const handlePageShow = () => {
+      debouncer.trigger();
+    };
+    const handleFocus = () => {
+      debouncer.trigger();
+    };
+    const handleOnline = () => {
+      debouncer.trigger();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      debouncer.cancel();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [refreshOrders]);
+
+  // 3. Realtime subscription on public.orders for user_id + 10s background polling fallback
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel(`orders-list-${userId}`)
+    const channel = supabase.channel(`orders-list-${userId}`)
       .on(
         "postgres_changes",
         {
@@ -117,21 +236,21 @@ export function OrdersListView({
           filter: `user_id=eq.${userId}`,
         },
         () => {
-          refreshActive();
+          refreshOrders();
         }
       )
       .subscribe();
 
     const intervalId = window.setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
-      refreshActive();
+      refreshOrders();
     }, 10000);
 
     return () => {
       window.clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
-  }, [userId, refreshActive]);
+  }, [userId, refreshOrders]);
 
   const handleLoadMorePast = async () => {
     setIsLoadingMore(true);
@@ -148,7 +267,13 @@ export function OrdersListView({
           estimated_ready_at,
           pickup_window_end,
           canteens (name, location),
-          order_items (id, name_snapshot, quantity, unit_price_paise)
+          order_items (
+            id,
+            name_snapshot,
+            quantity,
+            unit_price_paise,
+            menu_items (image_url)
+          )
         `, { count: "exact" })
         .eq("user_id", userId)
         .not("status", "in", '("PLACED","ACCEPTED","PREPARING","READY")')
@@ -156,13 +281,8 @@ export function OrdersListView({
         .range(pastOrders.length, pastOrders.length + 19);
 
       if (data && data.length > 0) {
-        const formatted = data.map((d) => ({
-          ...d,
-          canteens: Array.isArray(d.canteens) ? d.canteens[0] : d.canteens,
-          order_items: d.order_items || [],
-        })) as OrderSummaryItem[];
-
-        const updated = [...pastOrders, ...formatted];
+        const formatted = data.map(formatOrderRow);
+        const updated = mergePastOrders(pastOrders, formatted);
         setPastOrders(updated);
         setHasMorePast(updated.length < (count ?? totalPastCount));
       } else {

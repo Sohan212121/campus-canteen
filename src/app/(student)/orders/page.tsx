@@ -2,6 +2,10 @@ import { requireRole } from "@/server/auth";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { OrdersListView, type OrderSummaryItem } from "@/components/student/orders-list-view";
 import { extractMenuItemImageUrl } from "@/lib/image-utils";
+import { ACTIVE_ORDER_STATUSES } from "@/lib/orders-list-helpers";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function OrdersPage() {
   const profile = await requireRole(["student"]);
@@ -34,7 +38,7 @@ export default async function OrdersPage() {
         )
       `)
       .eq("user_id", profile.id)
-      .in("status", ["PLACED", "ACCEPTED", "PREPARING", "READY"])
+      .in("status", ACTIVE_ORDER_STATUSES)
       .order("placed_at", { ascending: false }),
 
     supabase
