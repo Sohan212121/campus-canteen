@@ -19,6 +19,7 @@ function LoginForm() {
   const [state, formAction, isPending] = useActionState(loginAction, initialState);
   const searchParams = useSearchParams();
   const errorParam = searchParams.get("error");
+  const resetParam = searchParams.get("reset");
 
   const urlErrorMessage =
     !state.error && errorParam === "account_deactivated"
@@ -27,8 +28,22 @@ function LoginForm() {
       ? "The confirmation link was invalid or has expired. Please sign in or request a new confirmation email."
       : null;
 
+  const resetSuccessMessage =
+    !state.error && resetParam === "success"
+      ? "Password updated. Please sign in with your new password. If you use the CampBite app, open it and sign in there."
+      : null;
+
   return (
     <>
+      {resetSuccessMessage && (
+        <div
+          id="reset-success-message"
+          className="mb-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-center text-sm font-medium text-emerald-600 dark:text-emerald-400"
+        >
+          {resetSuccessMessage}
+        </div>
+      )}
+
       {urlErrorMessage && (
         <div
           id="url-error"

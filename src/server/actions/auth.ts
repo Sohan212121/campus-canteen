@@ -345,8 +345,9 @@ export async function verifyConfirmTokenAction(
   const next = validateRedirectPath(rawNext, defaultNext);
 
   if (type === "recovery" || type === "invite" || next === "/set-password") {
+    const flow = type === "invite" ? "invite" : "recovery";
     const cookieStore = await cookies();
-    cookieStore.set(PASSWORD_RESET_COOKIE, data.user.id, {
+    cookieStore.set(PASSWORD_RESET_COOKIE, `${data.user.id}:${flow}`, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -392,8 +393,17 @@ export async function verifyConfirmCodeAction(
   const next = validateRedirectPath(rawNext, defaultNext);
 
   if (isVerifiedRecovery) {
+    const isInvite =
+      claims?.amr && Array.isArray(claims.amr)
+        ? claims.amr.some((a) =>
+            typeof a === "object" && a !== null
+              ? (a as { method?: string }).method === "invite"
+              : a === "invite"
+          )
+        : false;
+    const flow = isInvite ? "invite" : "recovery";
     const cookieStore = await cookies();
-    cookieStore.set(PASSWORD_RESET_COOKIE, data.user.id, {
+    cookieStore.set(PASSWORD_RESET_COOKIE, `${data.user.id}:${flow}`, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -438,8 +448,17 @@ export async function authorizeRecoverySessionAction(): Promise<{
     };
   }
 
+  const isInvite =
+    claims?.amr && Array.isArray(claims.amr)
+      ? claims.amr.some((a) =>
+          typeof a === "object" && a !== null
+            ? (a as { method?: string }).method === "invite"
+            : a === "invite"
+        )
+      : false;
+  const flow = isInvite ? "invite" : "recovery";
   const cookieStore = await cookies();
-  cookieStore.set(PASSWORD_RESET_COOKIE, user.id, {
+  cookieStore.set(PASSWORD_RESET_COOKIE, `${user.id}:${flow}`, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -459,13 +478,17 @@ export async function setPasswordAction(
   formData: FormData
 ): Promise<AuthActionState> {
   const cookieStore = await cookies();
-  const resetAllowedUserId = cookieStore.get(PASSWORD_RESET_COOKIE)?.value;
-  if (!resetAllowedUserId) {
+  const resetCookieVal = cookieStore.get(PASSWORD_RESET_COOKIE)?.value;
+  if (!resetCookieVal) {
     return {
       error:
         "Password reset session has expired or is unauthorized. Please request a new link.",
     };
   }
+
+  const [resetAllowedUserId, flowType] = resetCookieVal.includes(":")
+    ? resetCookieVal.split(":")
+    : [resetCookieVal, "recovery"];
 
   const raw = {
     password: formData.get("password"),
@@ -511,6 +534,17 @@ export async function setPasswordAction(
   // Consume / delete the reset authorization cookie
   cookieStore.delete(PASSWORD_RESET_COOKIE);
 
+  // Recovery flow: completely sign out current session and redirect to login
+  if (flowType !== "invite") {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("[setPasswordAction] Recovery signout error:", err);
+    }
+    redirect("/login?reset=success");
+  }
+
+  // Invite flow: keep signed in and redirect to role home
   // Check profile active status and role
   const { data: profile } = await supabase
     .from("profiles")

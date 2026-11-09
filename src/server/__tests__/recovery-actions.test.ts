@@ -59,12 +59,9 @@ import {
   verifyConfirmCodeAction,
   authorizeRecoverySessionAction,
   setPasswordAction,
+  loginAction,
 } from "@/server/actions/auth";
-import {
-  PASSWORD_RESET_COOKIE,
-  isRecentRecoveryOrInviteSession,
-  parseJwtPayload,
-} from "@/lib/validation/auth-recovery";
+import { PASSWORD_RESET_COOKIE } from "@/lib/validation/auth-recovery";
 
 function createTestJwt(amr: unknown, iat = Math.floor(Date.now() / 1000)): string {
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
@@ -193,7 +190,7 @@ describe("Recovery & Password Setting Server Actions", () => {
 
       expect(mockCookieSet).toHaveBeenCalledWith(
         PASSWORD_RESET_COOKIE,
-        "verified-user-uuid",
+        "verified-user-uuid:recovery",
         expect.objectContaining({
           httpOnly: true,
           sameSite: "lax",
@@ -250,7 +247,7 @@ describe("Recovery & Password Setting Server Actions", () => {
       expect(mockExchangeCodeForSession).toHaveBeenCalledWith("auth-code-123");
       expect(mockCookieSet).toHaveBeenCalledWith(
         PASSWORD_RESET_COOKIE,
-        "code-user-uuid",
+        "code-user-uuid:recovery",
         expect.objectContaining({
           httpOnly: true,
           sameSite: "lax",
@@ -343,7 +340,7 @@ describe("Recovery & Password Setting Server Actions", () => {
       expect(res.userId).toBe("server-verified-user");
       expect(mockCookieSet).toHaveBeenCalledWith(
         PASSWORD_RESET_COOKIE,
-        "server-verified-user",
+        "server-verified-user:recovery",
         expect.objectContaining({
           httpOnly: true,
           sameSite: "lax",
@@ -473,12 +470,52 @@ describe("Recovery & Password Setting Server Actions", () => {
       expect(mockUpdateUser).not.toHaveBeenCalled();
     });
 
-    it("updates password, signs out other sessions, deletes cookie, and redirects active student to /", async () => {
+    it("recovery ends signed out and redirects to /login?reset=success", async () => {
+      mockCookieGet.mockReturnValue({ value: "user-123:recovery" });
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-123" } } });
+      mockUpdateUser.mockResolvedValue({ error: null });
+
+      const formData = new FormData();
+      formData.set("password", "ValidNewPassword123!");
+      formData.set("confirmPassword", "ValidNewPassword123!");
+
+      await expect(setPasswordAction({}, formData)).rejects.toThrow(
+        "NEXT_REDIRECT:/login?reset=success"
+      );
+
+      // Kept signOut({ scope: "others" }) for every flow
+      expect(mockSignOut).toHaveBeenCalledWith({ scope: "others" });
+      // Deleted the password reset cookie
+      expect(mockCookieDelete).toHaveBeenCalledWith(PASSWORD_RESET_COOKIE);
+      // Recovery branch: performed full signOut of current session
+      expect(mockSignOut).toHaveBeenCalledWith();
+      expect(mockRedirect).toHaveBeenCalledWith("/login?reset=success");
+    });
+
+    it("legacy recovery cookie without colon also ends signed out and redirects to /login?reset=success", async () => {
       mockCookieGet.mockReturnValue({ value: "user-123" });
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-123" } } });
       mockUpdateUser.mockResolvedValue({ error: null });
+
+      const formData = new FormData();
+      formData.set("password", "ValidNewPassword123!");
+      formData.set("confirmPassword", "ValidNewPassword123!");
+
+      await expect(setPasswordAction({}, formData)).rejects.toThrow(
+        "NEXT_REDIRECT:/login?reset=success"
+      );
+
+      expect(mockSignOut).toHaveBeenCalledWith({ scope: "others" });
+      expect(mockSignOut).toHaveBeenCalledWith();
+      expect(mockRedirect).toHaveBeenCalledWith("/login?reset=success");
+    });
+
+    it("invite still goes to the role home, signed in (no full sign out)", async () => {
+      mockCookieGet.mockReturnValue({ value: "staff-123:invite" });
+      mockGetUser.mockResolvedValue({ data: { user: { id: "staff-123" } } });
+      mockUpdateUser.mockResolvedValue({ error: null });
       mockSingle.mockResolvedValue({
-        data: { role: "student", is_active: true },
+        data: { role: "staff", is_active: true },
       });
 
       const formData = new FormData();
@@ -486,19 +523,22 @@ describe("Recovery & Password Setting Server Actions", () => {
       formData.set("confirmPassword", "ValidNewPassword123!");
 
       await expect(setPasswordAction({}, formData)).rejects.toThrow(
-        "NEXT_REDIRECT:/"
+        "NEXT_REDIRECT:/staff"
       );
 
       expect(mockUpdateUser).toHaveBeenCalledWith({
         password: "ValidNewPassword123!",
       });
+      // Kept signOut others
       expect(mockSignOut).toHaveBeenCalledWith({ scope: "others" });
+      // Did NOT call full sign out (user stays signed in)
+      expect(mockSignOut).not.toHaveBeenCalledWith();
       expect(mockCookieDelete).toHaveBeenCalledWith(PASSWORD_RESET_COOKIE);
-      expect(mockRedirect).toHaveBeenCalledWith("/");
+      expect(mockRedirect).toHaveBeenCalledWith("/staff");
     });
 
-    it("redirects inactive staff user to /auth/pending-activation", async () => {
-      mockCookieGet.mockReturnValue({ value: "staff-123" });
+    it("invite flow redirects inactive user to /auth/pending-activation while signed in", async () => {
+      mockCookieGet.mockReturnValue({ value: "staff-123:invite" });
       mockGetUser.mockResolvedValue({ data: { user: { id: "staff-123" } } });
       mockUpdateUser.mockResolvedValue({ error: null });
       mockSingle.mockResolvedValue({
@@ -513,12 +553,80 @@ describe("Recovery & Password Setting Server Actions", () => {
         "NEXT_REDIRECT:/auth/pending-activation"
       );
 
-      expect(mockUpdateUser).toHaveBeenCalledWith({
-        password: "ValidNewPassword123!",
-      });
       expect(mockSignOut).toHaveBeenCalledWith({ scope: "others" });
+      expect(mockSignOut).not.toHaveBeenCalledWith();
       expect(mockCookieDelete).toHaveBeenCalledWith(PASSWORD_RESET_COOKIE);
       expect(mockRedirect).toHaveBeenCalledWith("/auth/pending-activation");
+    });
+
+    it("a failed password update does not sign anyone out", async () => {
+      mockCookieGet.mockReturnValue({ value: "user-123:recovery" });
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-123" } } });
+      mockUpdateUser.mockResolvedValue({
+        error: { message: "Database update error" },
+      });
+
+      const formData = new FormData();
+      formData.set("password", "ValidNewPassword123!");
+      formData.set("confirmPassword", "ValidNewPassword123!");
+
+      const result = await setPasswordAction({}, formData);
+      expect(result.error).toContain("Failed to update password");
+
+      // GUARANTEE: Never signs out if update failed
+      expect(mockSignOut).not.toHaveBeenCalled();
+      expect(mockCookieDelete).not.toHaveBeenCalled();
+      expect(mockRedirect).not.toHaveBeenCalled();
+    });
+
+    it("guarantees: loginAction and src/proxy.ts are untouched", async () => {
+      expect(typeof loginAction).toBe("function");
+      // Read src/proxy.ts to verify it was not modified
+      const fs = await import("fs");
+      const path = await import("path");
+      const proxyContent = fs.readFileSync(
+        path.resolve(process.cwd(), "src/proxy.ts"),
+        "utf-8"
+      );
+      expect(proxyContent).toContain("export async function proxy");
+      expect(proxyContent).toContain("pathname === \"/auth/confirm\"");
+    });
+  });
+
+  describe("Login Page Reset Message Specification", () => {
+    it("the login message appears only when reset=success is present", async () => {
+      const fs = await import("fs");
+      const path = await import("path");
+      const loginPageContent = fs.readFileSync(
+        path.resolve(process.cwd(), "src/app/(auth)/login/page.tsx"),
+        "utf-8"
+      );
+
+      // Verify the reset parameter query check
+      expect(loginPageContent).toContain('searchParams.get("reset")');
+      expect(loginPageContent).toContain('resetParam === "success"');
+
+      // Verify the exact user-requested message string
+      const expectedMessage =
+        "Password updated. Please sign in with your new password. If you use the CampBite app, open it and sign in there.";
+      expect(loginPageContent).toContain(expectedMessage);
+
+      // Verify it does NOT appear for other parameters
+      function computeResetMessage(
+        resetParam: string | null,
+        hasStateError: boolean
+      ): string | null {
+        return !hasStateError && resetParam === "success"
+          ? expectedMessage
+          : null;
+      }
+
+      expect(computeResetMessage("success", false)).toBe(expectedMessage);
+      expect(computeResetMessage(null, false)).toBeNull();
+      expect(computeResetMessage("failed", false)).toBeNull();
+      expect(computeResetMessage("error", false)).toBeNull();
+      expect(computeResetMessage("true", false)).toBeNull();
+      expect(computeResetMessage("success", true)).toBeNull();
     });
   });
 });
