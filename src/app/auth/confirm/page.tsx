@@ -6,6 +6,9 @@ interface ConfirmPageProps {
     code?: string;
     type?: string;
     next?: string;
+    error?: string;
+    error_code?: string;
+    error_description?: string;
   }>;
 }
 
@@ -18,6 +21,8 @@ export default async function ConfirmPage({ searchParams }: ConfirmPageProps) {
       initialCode={params.code}
       initialType={params.type}
       initialNext={params.next}
+      initialError={params.error_code || params.error}
+      initialErrorDescription={params.error_description}
     />
   );
 }
