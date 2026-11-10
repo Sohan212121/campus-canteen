@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -40,8 +40,8 @@ import { createClient } from "@/lib/supabase/client";
 import {
   saveAvatarPathAction,
   removeAvatarAction,
-  getStudentAvatarUrlAction,
 } from "@/server/actions/profile";
+import { useAvatarSignedUrl } from "@/lib/use-avatar-signed-url";
 import {
   compressAvatarForUpload,
   buildAvatarStoragePath,
@@ -103,46 +103,16 @@ export function ProfileView({
   };
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
+  const {
+    avatarUrl,
+    imgError,
+    setAvatarUrlDirectly,
+    handleImageError,
+  } = useAvatarSignedUrl({ initialAvatarUrl });
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [isRemoving, setIsRemoving] = useState<boolean>(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState<boolean>(false);
-  const [imgError, setImgError] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [prevPropUrl, setPrevPropUrl] = useState(initialAvatarUrl);
-  if (prevPropUrl !== initialAvatarUrl) {
-    setPrevPropUrl(initialAvatarUrl);
-    setAvatarUrl(initialAvatarUrl);
-    setImgError(false);
-  }
-
-  // Re-fetch fresh signed URL on app resume / visibility change (Amendment 6)
-  const refreshAvatar = useCallback(async () => {
-    try {
-      const res = await getStudentAvatarUrlAction();
-      if (res.success) {
-        setAvatarUrl(res.avatarUrl);
-        setImgError(false);
-      }
-    } catch {
-      // Ignore background refresh errors
-    }
-  }, []);
-
-  useEffect(() => {
-    const handleResume = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        refreshAvatar();
-      }
-    };
-    window.addEventListener("focus", handleResume);
-    document.addEventListener("visibilitychange", handleResume);
-    return () => {
-      window.removeEventListener("focus", handleResume);
-      document.removeEventListener("visibilitychange", handleResume);
-    };
-  }, [refreshAvatar]);
 
   const collegeIdDisplay = profile.college_id || "CS2024002";
   const fullNameDisplay = profile.full_name || "Campus Member";
@@ -202,10 +172,10 @@ export function ProfileView({
         return;
       }
 
-      setAvatarUrl(saveRes.avatarUrl);
-      setImgError(false);
+      setAvatarUrlDirectly(saveRes.avatarUrl);
       setShowRemoveConfirm(false);
       toast.success("Profile photo updated!");
+      router.refresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Please choose a JPEG, PNG or WebP photo.";
       toast.error(msg);
@@ -223,10 +193,10 @@ export function ProfileView({
         toast.error(res.error || "Failed to remove photo.");
         return;
       }
-      setAvatarUrl(null);
-      setImgError(false);
+      setAvatarUrlDirectly(null);
       setShowRemoveConfirm(false);
       toast.success("Profile photo removed.");
+      router.refresh();
     } catch {
       toast.error("Failed to remove photo. Please try again.");
     } finally {
@@ -310,7 +280,7 @@ export function ProfileView({
                   src={avatarUrl}
                   alt={fullNameDisplay}
                   className="w-full h-full object-cover rounded-2xl"
-                  onError={() => setImgError(true)}
+                  onError={handleImageError}
                 />
               ) : initials ? (
                 <span className="text-xl sm:text-2xl font-black text-[#ffdad6] tracking-tight select-none">

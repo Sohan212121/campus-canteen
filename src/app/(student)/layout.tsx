@@ -42,7 +42,7 @@ export default async function StudentLayout({
     })();
 
     const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 2000)
+      setTimeout(() => resolve(null), 1000)
     );
 
     avatarUrl = await Promise.race([avatarFetchPromise, timeoutPromise]);

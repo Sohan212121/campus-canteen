@@ -9,7 +9,7 @@ import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
 import { getNotificationsAction } from "@/server/actions/notifications";
-import { getStudentAvatarUrlAction } from "@/server/actions/profile";
+import { useAvatarSignedUrl } from "@/lib/use-avatar-signed-url";
 import { BrandWordmark } from "@/components/ui/brand-wordmark";
 import { NotificationBell } from "@/components/student/notification-bell";
 import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
@@ -34,8 +34,9 @@ export function StudentHeader({
   const { startTransition } = useNavigationTransition();
   const isProfileActive = isProfileHeaderActive(pathname);
   const [unreadCount, setUnreadCount] = useState<number>(initialUnreadCount);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
-  const [imgError, setImgError] = useState<boolean>(false);
+  const { avatarUrl, showAvatarImage, handleImageError } = useAvatarSignedUrl({
+    initialAvatarUrl,
+  });
   const toastedNotificationIds = useRef<Set<string>>(new Set());
 
   // Derive initials for fallback display
@@ -48,13 +49,6 @@ export function StudentHeader({
     .join("")
     .toUpperCase();
 
-  const [prevPropUrl, setPrevPropUrl] = useState(initialAvatarUrl);
-  if (prevPropUrl !== initialAvatarUrl) {
-    setPrevPropUrl(initialAvatarUrl);
-    setAvatarUrl(initialAvatarUrl);
-    setImgError(false);
-  }
-
   // Refresh notifications unread count
   const refreshUnread = useCallback(async () => {
     try {
@@ -66,35 +60,6 @@ export function StudentHeader({
       // Ignore background fetch errors
     }
   }, []);
-
-  // Refresh avatar signed URL on app resume / visibility change
-  const refreshAvatar = useCallback(async () => {
-    try {
-      const res = await getStudentAvatarUrlAction();
-      if (res.success) {
-        setAvatarUrl(res.avatarUrl);
-        setImgError(false);
-      }
-    } catch {
-      // Ignore background fetch errors
-    }
-  }, []);
-
-  // Listen for window focus & visibilitychange to re-fetch expired signed URL
-  useEffect(() => {
-    const handleResume = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        refreshAvatar();
-      }
-    };
-
-    window.addEventListener("focus", handleResume);
-    document.addEventListener("visibilitychange", handleResume);
-    return () => {
-      window.removeEventListener("focus", handleResume);
-      document.removeEventListener("visibilitychange", handleResume);
-    };
-  }, [refreshAvatar]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -157,8 +122,6 @@ export function StudentHeader({
     };
   }, [userId, router, refreshUnread]);
 
-  const showAvatarImage = Boolean(avatarUrl && !imgError);
-
   return (
     <header className="flex items-center justify-between pb-3.5 mb-2 border-b border-[#ded5c4] dark:border-[#1E202B]">
       <Link
@@ -218,7 +181,7 @@ export function StudentHeader({
               src={avatarUrl!}
               alt={fullName || "Profile"}
               className="w-full h-full object-cover rounded-full"
-              onError={() => setImgError(true)}
+              onError={handleImageError}
             />
           ) : initials ? (
             <span className="text-xs sm:text-sm font-bold tracking-tight text-[#DC2626] dark:text-[#EF4444] select-none">
