@@ -2,22 +2,12 @@
 
 import React from "react";
 import Image from "next/image";
+import { BrandWordmark } from "@/components/ui/brand-wordmark";
 
 interface LogoTransitionProps {
   destinationLabel?: string;
   isExiting?: boolean;
 }
-
-const BRAND_LETTERS = [
-  { char: "C", isSpecial: false },
-  { char: "@", isSpecial: true },
-  { char: "M", isSpecial: false },
-  { char: "P", isSpecial: false },
-  { char: "B", isSpecial: false },
-  { char: "I", isSpecial: false },
-  { char: "T", isSpecial: false },
-  { char: "E", isSpecial: false },
-];
 
 export function LogoTransition({
   destinationLabel = "Campus Dining",
@@ -80,24 +70,17 @@ export function LogoTransition({
           />
         </div>
 
-        {/* Wordmark: C@MPBITE Typewriter Reveal */}
-        <div className="mt-5 flex items-center justify-center tracking-[0.14em] sm:tracking-[0.18em] font-brand text-2xl sm:text-3xl font-extrabold select-none">
-          {BRAND_LETTERS.map((item, idx) => (
-            <span
-              key={idx}
-              className={`inline-block transition-transform opacity-0 ${
-                item.isSpecial
-                  ? "text-[#DC2626] dark:text-[#EF4444]"
-                  : "text-[#3A1400] dark:text-[#FDFBF7]"
-              }`}
-              style={{
-                animation: "cb-letter-pop 200ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
-                animationDelay: `${260 + idx * 35}ms`,
-              }}
-            >
-              {item.char}
-            </span>
-          ))}
+        {/* Wordmark: C@MPBITE Title Logo */}
+        <div
+          className="mt-5 flex items-center justify-center h-8 sm:h-9 select-none opacity-0 motion-reduce:opacity-100 motion-reduce:!animate-none motion-reduce:!transform-none"
+          style={{
+            animation: "cb-letter-pop 410ms cubic-bezier(0.34, 1.56, 0.64, 1) 260ms forwards",
+          }}
+        >
+          <BrandWordmark
+            priority={false}
+            imageClassName="h-7 sm:h-8 w-auto object-contain"
+          />
         </div>
 
         {/* Tagline: SKIP THE QUEUE, GRAB THE FOOD with Left-to-Right Wipe */}

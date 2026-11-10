@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { getNotificationsAction } from "@/server/actions/notifications";
 import { getStudentAvatarUrlAction } from "@/server/actions/profile";
+import { BrandWordmark } from "@/components/ui/brand-wordmark";
 import { NotificationBell } from "@/components/student/notification-bell";
 import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
 import { isProfileHeaderActive } from "@/lib/student-nav";
@@ -180,22 +181,9 @@ export function StudentHeader({
             SKIP THE QUEUE, GRAB THE FOOD
           </span>
           <h1 className="select-none pt-1 leading-none">
-            <span className="sr-only">C@mpBite</span>
-            <Image
-              src="/brand/campbite-title-light.png"
-              alt="C@MPBITE"
-              width={180}
-              height={29}
-              className="h-5 xs:h-6 sm:h-7 w-auto object-contain dark:hidden"
+            <BrandWordmark
               priority
-            />
-            <Image
-              src="/brand/campbite-title-dark.png"
-              alt="C@MPBITE"
-              width={180}
-              height={29}
-              className="h-5 xs:h-6 sm:h-7 w-auto object-contain hidden dark:block"
-              priority
+              imageClassName="h-5 xs:h-6 sm:h-7 w-auto object-contain"
             />
           </h1>
         </div>
