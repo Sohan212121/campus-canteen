@@ -8,6 +8,7 @@ export const BACKGROUND_REFRESH_THROTTLE_MS = 60 * 1000; // 60 seconds
 
 export interface AvatarUrlManagerOptions {
   initialAvatarUrl: string | null;
+  avatarLookupTimedOut?: boolean;
   fetchAvatarUrlAction?: () => Promise<{ success: boolean; avatarUrl?: string | null; error?: string }>;
   nowFn?: () => number;
 }
@@ -28,6 +29,7 @@ export class AvatarUrlManager {
   private urlVersion: number = 0;
   private retriedUrls: Set<string> = new Set();
   private prevPropUrl: string | null;
+  private hasAttemptedTimeoutRecovery: boolean = false;
   private readonly fetchAction: () => Promise<{ success: boolean; avatarUrl?: string | null; error?: string }>;
   private readonly nowFn: () => number;
   private listeners: Set<() => void> = new Set();
@@ -78,7 +80,15 @@ export class AvatarUrlManager {
     this.notify();
   }
 
-  public syncPropUrl(newPropUrl: string | null) {
+  public syncPropUrl(newPropUrl: string | null, timedOut: boolean = false) {
+    if (timedOut) {
+      // Lookup timed out on server: do NOT overwrite an existing valid avatar with null
+      return;
+    }
+
+    // Authoritative update from server: reset timeout recovery flag
+    this.hasAttemptedTimeoutRecovery = false;
+
     if (this.prevPropUrl !== newPropUrl) {
       this.prevPropUrl = newPropUrl;
       this.urlVersion += 1;
@@ -86,6 +96,21 @@ export class AvatarUrlManager {
       this.updateState(newPropUrl, false);
     }
   }
+
+  public handleTimeoutRecovery = () => {
+    // If we already have a valid avatar URL, no need to fetch
+    if (this.avatarUrl) {
+      return;
+    }
+
+    // Only ONE client refresh per timeout event
+    if (this.hasAttemptedTimeoutRecovery) {
+      return;
+    }
+
+    this.hasAttemptedTimeoutRecovery = true;
+    void this.executeRefresh({ isError: false });
+  };
 
   public setAvatarUrlDirectly = (newUrl: string | null) => {
     this.urlVersion += 1;
@@ -238,14 +263,16 @@ export class AvatarUrlManager {
 
 export function useAvatarSignedUrl({
   initialAvatarUrl,
+  avatarLookupTimedOut = false,
 }: {
   initialAvatarUrl: string | null;
+  avatarLookupTimedOut?: boolean;
 }) {
   const [manager] = useState(
-    () => new AvatarUrlManager({ initialAvatarUrl })
+    () => new AvatarUrlManager({ initialAvatarUrl, avatarLookupTimedOut })
   );
 
-  manager.syncPropUrl(initialAvatarUrl);
+  manager.syncPropUrl(initialAvatarUrl, avatarLookupTimedOut);
 
   const state = useSyncExternalStore(
     manager.subscribe,
@@ -259,10 +286,13 @@ export function useAvatarSignedUrl({
 
   useEffect(() => {
     manager.attachListeners();
+    if (avatarLookupTimedOut) {
+      manager.handleTimeoutRecovery();
+    }
     return () => {
       manager.destroy();
     };
-  }, [manager]);
+  }, [manager, avatarLookupTimedOut]);
 
   return {
     avatarUrl: state.avatarUrl,

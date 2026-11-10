@@ -20,6 +20,7 @@ interface StudentHeaderProps {
   userId: string;
   initialUnreadCount?: number;
   initialAvatarUrl?: string | null;
+  avatarLookupTimedOut?: boolean;
   fullName?: string | null;
 }
 
@@ -27,6 +28,7 @@ export function StudentHeader({
   userId,
   initialUnreadCount = 0,
   initialAvatarUrl = null,
+  avatarLookupTimedOut = false,
   fullName = null,
 }: StudentHeaderProps) {
   const router = useRouter();
@@ -36,6 +38,7 @@ export function StudentHeader({
   const [unreadCount, setUnreadCount] = useState<number>(initialUnreadCount);
   const { avatarUrl, showAvatarImage, handleImageError } = useAvatarSignedUrl({
     initialAvatarUrl,
+    avatarLookupTimedOut,
   });
   const toastedNotificationIds = useRef<Set<string>>(new Set());
 

@@ -24,6 +24,7 @@ export default async function StudentLayout({
   // 2. Avatar lookup: strictly isolated with its own 2-second timeout & try/catch
   // Never affects notifications count, never throws, and never triggers retry state
   let avatarUrl: string | null = null;
+  let avatarLookupTimedOut = false;
   try {
     const avatarFetchPromise = (async () => {
       const { data: profileRow } = await supabase
@@ -41,11 +42,18 @@ export default async function StudentLayout({
       return null;
     })();
 
-    const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 1000)
+    const TIMEOUT_SENTINEL = Symbol("timeout");
+    const timeoutPromise = new Promise<typeof TIMEOUT_SENTINEL>((resolve) =>
+      setTimeout(() => resolve(TIMEOUT_SENTINEL), 1000)
     );
 
-    avatarUrl = await Promise.race([avatarFetchPromise, timeoutPromise]);
+    const raceResult = await Promise.race([avatarFetchPromise, timeoutPromise]);
+    if (raceResult === TIMEOUT_SENTINEL) {
+      avatarLookupTimedOut = true;
+      avatarUrl = null;
+    } else {
+      avatarUrl = raceResult;
+    }
   } catch (err) {
     console.error("Non-blocking error loading student avatar:", err);
     avatarUrl = null;
@@ -63,6 +71,7 @@ export default async function StudentLayout({
             userId={profile.id}
             initialUnreadCount={count ?? 0}
             initialAvatarUrl={avatarUrl}
+            avatarLookupTimedOut={avatarLookupTimedOut}
             fullName={profile.full_name}
           />
           {children}

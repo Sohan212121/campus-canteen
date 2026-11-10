@@ -286,4 +286,71 @@ describe("useAvatarSignedUrl / AvatarUrlManager", () => {
     expect(manager.getState().showAvatarImage).toBe(false);
     expect(manager.getIssuedAt()).toBe(0);
   });
+
+  it("11. timeout recovery: avatarLookupTimedOut = true with initialAvatarUrl = null triggers exactly ONE client refresh", async () => {
+    let fetchCount = 0;
+    const fetchAction = vi.fn(async () => {
+      fetchCount++;
+      return { success: true, avatarUrl: "https://example.com/recovered-after-timeout.jpg" };
+    });
+
+    const manager = new AvatarUrlManager({
+      initialAvatarUrl: null,
+      avatarLookupTimedOut: true,
+      fetchAvatarUrlAction: fetchAction,
+      nowFn: () => BASE_TIME,
+    });
+
+    expect(manager.getState().avatarUrl).toBeNull();
+
+    // Trigger timeout recovery
+    manager.handleTimeoutRecovery();
+
+    // Second call must deduplicate / be a no-op
+    manager.handleTimeoutRecovery();
+
+    await vi.waitFor(() => {
+      expect(fetchCount).toBe(1);
+    });
+
+    expect(manager.getState().avatarUrl).toBe("https://example.com/recovered-after-timeout.jpg");
+    expect(manager.getState().showAvatarImage).toBe(true);
+  });
+
+  it("12. preserves existing avatar when router.refresh times out (avatarLookupTimedOut = true)", () => {
+    const fetchAction = vi.fn();
+    const manager = new AvatarUrlManager({
+      initialAvatarUrl: "https://example.com/existing-photo.jpg",
+      fetchAvatarUrlAction: fetchAction,
+      nowFn: () => BASE_TIME,
+    });
+
+    expect(manager.getState().avatarUrl).toBe("https://example.com/existing-photo.jpg");
+
+    // Server re-render times out: passes null prop with timedOut = true
+    manager.syncPropUrl(null, true);
+
+    // Existing photo must NOT be wiped out!
+    expect(manager.getState().avatarUrl).toBe("https://example.com/existing-photo.jpg");
+    expect(manager.getState().showAvatarImage).toBe(true);
+
+    // Recovery is not needed since photo is already present
+    manager.handleTimeoutRecovery();
+    expect(fetchAction).not.toHaveBeenCalled();
+  });
+
+  it("13. authoritative removal (avatarLookupTimedOut = false, newPropUrl = null) clears avatar immediately", () => {
+    const manager = new AvatarUrlManager({
+      initialAvatarUrl: "https://example.com/existing-photo.jpg",
+      nowFn: () => BASE_TIME,
+    });
+
+    expect(manager.getState().showAvatarImage).toBe(true);
+
+    // Real removal from server (timedOut = false)
+    manager.syncPropUrl(null, false);
+
+    expect(manager.getState().avatarUrl).toBeNull();
+    expect(manager.getState().showAvatarImage).toBe(false);
+  });
 });
