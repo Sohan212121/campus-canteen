@@ -27,32 +27,52 @@ export default async function ProfilePage() {
   const profile = await requireRole(["student"]);
   const supabase = await createReadOnlyClient();
 
-  // Fetch orders data for student profile (email is already available on profile from auth)
-  const ordersRes = await supabase
-    .from("orders")
-    .select(
-      `
-      id,
-      order_code,
-      status,
-      placed_at,
-      total_paise,
-      order_items (
+  // Run orders fetch and avatar_path fetch in parallel
+  const [ordersRes, profileRowRes] = await Promise.all([
+    supabase
+      .from("orders")
+      .select(
+        `
         id,
-        menu_item_id,
-        name_snapshot,
-        quantity,
-        unit_price_paise,
-        menu_items (
-          image_url
+        order_code,
+        status,
+        placed_at,
+        total_paise,
+        order_items (
+          id,
+          menu_item_id,
+          name_snapshot,
+          quantity,
+          unit_price_paise,
+          menu_items (
+            image_url
+          )
         )
+      `,
+        { count: "exact" }
       )
-    `,
-      { count: "exact" }
-    )
-    .eq("user_id", profile.id)
-    .order("placed_at", { ascending: false })
-    .limit(30);
+      .eq("user_id", profile.id)
+      .order("placed_at", { ascending: false })
+      .limit(30),
+    supabase
+      .from("profiles")
+      .select("avatar_path")
+      .eq("id", profile.id)
+      .single(),
+  ]);
+
+  let avatarUrl: string | null = null;
+  const avatarPath = profileRowRes.data?.avatar_path;
+  if (avatarPath) {
+    try {
+      const { data: signedData } = await supabase.storage
+        .from("avatars")
+        .createSignedUrl(avatarPath, 3600);
+      avatarUrl = signedData?.signedUrl ?? null;
+    } catch (e) {
+      console.error("Non-blocking error generating profile avatar signed URL:", e);
+    }
+  }
 
   const email = profile.email || "";
   const ordersCount = ordersRes.count;
@@ -102,6 +122,7 @@ export default async function ProfilePage() {
     <ProfileView
       profile={profile}
       email={email}
+      initialAvatarUrl={avatarUrl}
       ordersCount={ordersCount ?? 0}
       recentOrders={recentOrders}
       preorderedItems={preorderedItems}

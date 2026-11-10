@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
 import { getNotificationsAction } from "@/server/actions/notifications";
+import { getStudentAvatarUrlAction } from "@/server/actions/profile";
 import { NotificationBell } from "@/components/student/notification-bell";
 import { useNavigationTransition } from "@/components/navigation/navigation-transition-provider";
 import { isProfileHeaderActive } from "@/lib/student-nav";
@@ -17,17 +18,43 @@ import { cn } from "@/lib/utils";
 interface StudentHeaderProps {
   userId: string;
   initialUnreadCount?: number;
+  initialAvatarUrl?: string | null;
+  fullName?: string | null;
 }
 
-export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderProps) {
+export function StudentHeader({
+  userId,
+  initialUnreadCount = 0,
+  initialAvatarUrl = null,
+  fullName = null,
+}: StudentHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { startTransition } = useNavigationTransition();
   const isProfileActive = isProfileHeaderActive(pathname);
   const [unreadCount, setUnreadCount] = useState<number>(initialUnreadCount);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
+  const [imgError, setImgError] = useState<boolean>(false);
   const toastedNotificationIds = useRef<Set<string>>(new Set());
 
-  // Function to fetch latest unread count during polling
+  // Derive initials for fallback display
+  const initials = (fullName || "")
+    .trim()
+    .split(/\s+/)
+    .map((s) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const [prevPropUrl, setPrevPropUrl] = useState(initialAvatarUrl);
+  if (prevPropUrl !== initialAvatarUrl) {
+    setPrevPropUrl(initialAvatarUrl);
+    setAvatarUrl(initialAvatarUrl);
+    setImgError(false);
+  }
+
+  // Refresh notifications unread count
   const refreshUnread = useCallback(async () => {
     try {
       const res = await getNotificationsAction(10);
@@ -38,6 +65,35 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
       // Ignore background fetch errors
     }
   }, []);
+
+  // Refresh avatar signed URL on app resume / visibility change
+  const refreshAvatar = useCallback(async () => {
+    try {
+      const res = await getStudentAvatarUrlAction();
+      if (res.success) {
+        setAvatarUrl(res.avatarUrl);
+        setImgError(false);
+      }
+    } catch {
+      // Ignore background fetch errors
+    }
+  }, []);
+
+  // Listen for window focus & visibilitychange to re-fetch expired signed URL
+  useEffect(() => {
+    const handleResume = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        refreshAvatar();
+      }
+    };
+
+    window.addEventListener("focus", handleResume);
+    document.addEventListener("visibilitychange", handleResume);
+    return () => {
+      window.removeEventListener("focus", handleResume);
+      document.removeEventListener("visibilitychange", handleResume);
+    };
+  }, [refreshAvatar]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -100,6 +156,8 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
     };
   }, [userId, router, refreshUnread]);
 
+  const showAvatarImage = Boolean(avatarUrl && !imgError);
+
   return (
     <header className="flex items-center justify-between pb-3.5 mb-2 border-b border-[#ded5c4] dark:border-[#1E202B]">
       <Link
@@ -157,7 +215,7 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
             }
           }}
           className={cn(
-            "relative flex h-10 w-10 sm:h-11 sm:w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full border transition-all active:scale-95 shadow-xs select-none cursor-pointer",
+            "relative flex h-10 w-10 sm:h-11 sm:w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full border transition-all active:scale-95 shadow-xs select-none cursor-pointer overflow-hidden",
             isProfileActive
               ? "bg-[#FEE2E2] dark:bg-[#381B1B] text-[#DC2626] dark:text-[#EF4444] border-[#DC2626] dark:border-[#EF4444] shadow-[0_0_12px_rgba(220,38,38,0.25)]"
               : "bg-[#FFFDF5] dark:bg-[#231F1C] border-[#ded0be] dark:border-[#3D352B] text-[#DC2626] dark:text-[#EF4444] hover:border-[#DC2626]/60 dark:hover:border-[#EF4444]/60"
@@ -166,7 +224,21 @@ export function StudentHeader({ userId, initialUnreadCount = 0 }: StudentHeaderP
           title="Profile"
           aria-current={isProfileActive ? "page" : undefined}
         >
-          <User className="h-4 w-4 sm:h-5 sm:w-5 text-[#DC2626] dark:text-[#EF4444]" />
+          {showAvatarImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl!}
+              alt={fullName || "Profile"}
+              className="w-full h-full object-cover rounded-full"
+              onError={() => setImgError(true)}
+            />
+          ) : initials ? (
+            <span className="text-xs sm:text-sm font-bold tracking-tight text-[#DC2626] dark:text-[#EF4444] select-none">
+              {initials}
+            </span>
+          ) : (
+            <User className="h-4 w-4 sm:h-5 sm:w-5 text-[#DC2626] dark:text-[#EF4444]" />
+          )}
           <span className="sr-only">Profile</span>
         </Link>
       </div>

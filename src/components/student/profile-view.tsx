@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -21,6 +21,8 @@ import {
   ShoppingBag,
   Heart,
   Plus,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -34,6 +36,17 @@ import { useFavoritesStore, type FavoriteItem } from "@/lib/favorites-store";
 import { useCartStore } from "@/lib/cart-store";
 import { MenuItemImage } from "@/components/student/menu-item-image";
 import { registerMenuItemPrices } from "@/lib/cart-shortcut";
+import { createClient } from "@/lib/supabase/client";
+import {
+  saveAvatarPathAction,
+  removeAvatarAction,
+  getStudentAvatarUrlAction,
+} from "@/server/actions/profile";
+import {
+  compressAvatarForUpload,
+  buildAvatarStoragePath,
+} from "@/lib/avatar-utils";
+import { isAnimatedGif } from "@/lib/client-image";
 
 export interface ProfileViewProps {
   profile: {
@@ -44,6 +57,7 @@ export interface ProfileViewProps {
     is_active: boolean;
   };
   email: string;
+  initialAvatarUrl?: string | null;
   ordersCount: number;
   recentOrders?: Array<{
     id: string;
@@ -60,6 +74,7 @@ export interface ProfileViewProps {
 export function ProfileView({
   profile,
   email,
+  initialAvatarUrl = null,
   ordersCount,
   recentOrders = [],
   preorderedItems = [],
@@ -88,29 +103,134 @@ export function ProfileView({
   };
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [isRemoving, setIsRemoving] = useState<boolean>(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState<boolean>(false);
+  const [imgError, setImgError] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [prevPropUrl, setPrevPropUrl] = useState(initialAvatarUrl);
+  if (prevPropUrl !== initialAvatarUrl) {
+    setPrevPropUrl(initialAvatarUrl);
+    setAvatarUrl(initialAvatarUrl);
+    setImgError(false);
+  }
+
+  // Re-fetch fresh signed URL on app resume / visibility change (Amendment 6)
+  const refreshAvatar = useCallback(async () => {
+    try {
+      const res = await getStudentAvatarUrlAction();
+      if (res.success) {
+        setAvatarUrl(res.avatarUrl);
+        setImgError(false);
+      }
+    } catch {
+      // Ignore background refresh errors
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleResume = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        refreshAvatar();
+      }
+    };
+    window.addEventListener("focus", handleResume);
+    document.addEventListener("visibilitychange", handleResume);
+    return () => {
+      window.removeEventListener("focus", handleResume);
+      document.removeEventListener("visibilitychange", handleResume);
+    };
+  }, [refreshAvatar]);
 
   const collegeIdDisplay = profile.college_id || "CS2024002";
   const fullNameDisplay = profile.full_name || "Campus Member";
 
+  const initials = (profile.full_name || "")
+    .trim()
+    .split(/\s+/)
+    .map((s) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   const handlePhotoClick = () => {
+    if (isUploading || isRemoving) return;
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith("image/")) {
-        toast.error("Please select a valid image file");
+    if (!file) return;
+
+    // Validate MIME type & reject GIF
+    const validMimes = ["image/jpeg", "image/png", "image/webp"];
+    if (!validMimes.includes(file.type.toLowerCase()) || isAnimatedGif(file)) {
+      toast.error("Please choose a JPEG, PNG or WebP photo.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // 1. Client-side compression & resizing (< 512px, < 300 KB)
+      const compressed = await compressAvatarForUpload(file);
+
+      // 2. Upload to private avatars bucket using cookie-bound client
+      const supabase = createClient();
+      const ext = compressed.name.endsWith(".jpg") ? "jpg" : "webp";
+      const storagePath = buildAvatarStoragePath(profile.id, ext);
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(storagePath, compressed, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        toast.error("Failed to upload photo. Please try again.");
         return;
       }
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setAvatarUrl(event.target?.result as string);
-        toast.success("Profile photo updated!");
-      };
-      reader.readAsDataURL(file);
+
+      // 3. Call server action to verify magic bytes & save path
+      const saveRes = await saveAvatarPathAction({ path: storagePath });
+      if (!saveRes.success) {
+        toast.error(saveRes.error || "Failed to save profile photo.");
+        return;
+      }
+
+      setAvatarUrl(saveRes.avatarUrl);
+      setImgError(false);
+      setShowRemoveConfirm(false);
+      toast.success("Profile photo updated!");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Please choose a JPEG, PNG or WebP photo.";
+      toast.error(msg);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleConfirmRemove = async () => {
+    setIsRemoving(true);
+    try {
+      const res = await removeAvatarAction();
+      if (!res.success) {
+        toast.error(res.error || "Failed to remove photo.");
+        return;
+      }
+      setAvatarUrl(null);
+      setImgError(false);
+      setShowRemoveConfirm(false);
+      toast.success("Profile photo removed.");
+    } catch {
+      toast.error("Failed to remove photo. Please try again.");
+    } finally {
+      setIsRemoving(false);
     }
   };
 
@@ -170,37 +290,55 @@ export function ProfileView({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               className="hidden"
               onChange={handleFileChange}
-              aria-label="Upload profile photo"
+              aria-label={avatarUrl && !imgError ? "Change profile photo" : "Upload profile photo"}
             />
 
             <button
               type="button"
               onClick={handlePhotoClick}
-              className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-md border border-white/25 flex items-center justify-center text-white shadow-inner relative overflow-hidden group/btn cursor-pointer active:scale-95 transition-transform"
-              title="Click to upload profile photo"
-              aria-label="Upload profile photo"
+              disabled={isUploading || isRemoving}
+              className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-md border border-white/25 flex items-center justify-center text-white shadow-inner relative overflow-hidden group/btn cursor-pointer active:scale-95 transition-transform disabled:opacity-75 disabled:cursor-not-allowed"
+              title={avatarUrl && !imgError ? "Change profile photo" : "Upload profile photo"}
+              aria-label={avatarUrl && !imgError ? "Change profile photo" : "Upload profile photo"}
             >
-              {avatarUrl ? (
+              {avatarUrl && !imgError ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={avatarUrl}
                   alt={fullNameDisplay}
                   className="w-full h-full object-cover rounded-2xl"
+                  onError={() => setImgError(true)}
                 />
+              ) : initials ? (
+                <span className="text-xl sm:text-2xl font-black text-[#ffdad6] tracking-tight select-none">
+                  {initials}
+                </span>
               ) : (
                 <User className="w-9 h-9 sm:w-10 sm:h-10 text-[#ffdad6]" />
               )}
 
-              {/* Hover / Tap Overlay */}
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-xs opacity-0 group-hover/btn:opacity-100 flex flex-col items-center justify-center text-white transition-opacity duration-200">
-                <Camera className="w-5 h-5 text-white" />
-                <span className="text-[9px] font-bold mt-1 tracking-wider uppercase font-mono">
-                  {avatarUrl ? "Change" : "Upload"}
-                </span>
-              </div>
+              {/* Uploading Overlay */}
+              {isUploading && (
+                <div className="absolute inset-0 bg-black/75 backdrop-blur-xs flex flex-col items-center justify-center text-white z-30">
+                  <Loader2 className="w-6 h-6 animate-spin text-[#ff8843]" />
+                  <span className="text-[9px] font-bold mt-1 tracking-wider uppercase font-mono">
+                    Uploading
+                  </span>
+                </div>
+              )}
+
+              {/* Hover / Tap Overlay (when not uploading) */}
+              {!isUploading && (
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-xs opacity-0 group-hover/btn:opacity-100 flex flex-col items-center justify-center text-white transition-opacity duration-200">
+                  <Camera className="w-5 h-5 text-white" />
+                  <span className="text-[9px] font-bold mt-1 tracking-wider uppercase font-mono">
+                    {avatarUrl && !imgError ? "Change" : "Upload"}
+                  </span>
+                </div>
+              )}
             </button>
 
             {/* Verified Checkmark Badge (Bottom-Right) */}
@@ -223,13 +361,14 @@ export function ProfileView({
               </svg>
             </div>
 
-            {/* Cool Camera Upload Action Button (Top-Right) */}
+            {/* Camera Upload Action Button (Top-Right) */}
             <button
               type="button"
               onClick={handlePhotoClick}
-              className="absolute -top-2 -right-2 w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-full bg-gradient-to-tr from-[#ffdad6] via-white to-white text-[#4e0606] border-2 border-[#480806] flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all cursor-pointer z-20 group/cam"
-              title="Upload profile photo"
-              aria-label="Upload profile photo"
+              disabled={isUploading || isRemoving}
+              className="absolute -top-2 -right-2 w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-full bg-gradient-to-tr from-[#ffdad6] via-white to-white text-[#4e0606] border-2 border-[#480806] flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all cursor-pointer z-20 group/cam disabled:opacity-50 disabled:cursor-not-allowed"
+              title={avatarUrl && !imgError ? "Change profile photo" : "Upload profile photo"}
+              aria-label={avatarUrl && !imgError ? "Change profile photo" : "Upload profile photo"}
             >
               <Camera className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-[#4e0606] stroke-[2.2] transition-transform group-hover/cam:rotate-12" />
             </button>
@@ -245,6 +384,46 @@ export function ProfileView({
             <div className="flex items-center gap-2 font-mono text-xs sm:text-sm text-[#ffdad6]/90">
               <span className="font-bold tracking-wide">ID: {collegeIdDisplay}</span>
             </div>
+
+            {/* Remove photo button with confirmation */}
+            {avatarUrl && !imgError && (
+              <div className="pt-1.5 flex items-center">
+                {!showRemoveConfirm ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowRemoveConfirm(true)}
+                    disabled={isUploading || isRemoving}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/30 hover:bg-black/50 text-[#ffdad6] hover:text-white border border-white/20 text-[11px] font-medium transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                    aria-label="Remove profile photo"
+                  >
+                    <Trash2 className="w-3 h-3 text-[#ffdad6]" />
+                    <span>Remove photo</span>
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#381B1B]/90 border border-red-500/50 text-[11px] backdrop-blur-xs">
+                    <span className="text-white/90 font-medium">Remove photo?</span>
+                    <button
+                      type="button"
+                      onClick={handleConfirmRemove}
+                      disabled={isRemoving}
+                      className="font-bold text-red-300 hover:text-red-100 underline ml-1 cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+                      aria-label="Confirm remove profile photo"
+                    >
+                      {isRemoving ? <Loader2 className="w-3 h-3 animate-spin inline" /> : "Yes, remove"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowRemoveConfirm(false)}
+                      disabled={isRemoving}
+                      className="text-white/70 hover:text-white ml-1 cursor-pointer disabled:opacity-50"
+                      aria-label="Cancel remove profile photo"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
