@@ -257,7 +257,7 @@ describe("Recovery & Password Setting Server Actions", () => {
       );
     });
 
-    it("does NOT bind password reset cookie when session AMR is password (not recovery)", async () => {
+    it("signs out locally and redirects to link_expired when claimed recovery session AMR is password (not recovery)", async () => {
       const now = Math.floor(Date.now() / 1000);
       const passwordJwt = createTestJwt([{ method: "password", timestamp: now }]);
 
@@ -275,10 +275,45 @@ describe("Recovery & Password Setting Server Actions", () => {
       formData.set("next", "/set-password");
 
       await expect(verifyConfirmCodeAction(formData)).rejects.toThrow(
-        "NEXT_REDIRECT:/"
+        "NEXT_REDIRECT:/forgot-password?error=link_expired"
       );
 
+      // Must sign out locally to clear unverified session
+      expect(mockSignOut).toHaveBeenCalledWith({ scope: "local" });
+
       // CRITICAL SECURITY REQUIREMENT: Cookie must NOT be set
+      expect(mockCookieSet).not.toHaveBeenCalledWith(
+        PASSWORD_RESET_COOKIE,
+        expect.anything(),
+        expect.anything()
+      );
+    });
+
+    it("handles non-recovery code links (signup, magiclink) keeping default behaviour without signing out", async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const signupJwt = createTestJwt([{ method: "email", timestamp: now }]);
+
+      mockExchangeCodeForSession.mockResolvedValue({
+        data: {
+          user: { id: "signup-user-uuid" },
+          session: { access_token: signupJwt },
+        },
+        error: null,
+      });
+
+      const formData = new FormData();
+      formData.set("code", "signup-code-456");
+      formData.set("type", "signup");
+      formData.set("next", "/menu");
+
+      await expect(verifyConfirmCodeAction(formData)).rejects.toThrow(
+        "NEXT_REDIRECT:/menu"
+      );
+
+      // Must NOT sign out for legitimate non-recovery flows
+      expect(mockSignOut).not.toHaveBeenCalled();
+
+      // Cookie must NOT be set for signup
       expect(mockCookieSet).not.toHaveBeenCalledWith(
         PASSWORD_RESET_COOKIE,
         expect.anything(),

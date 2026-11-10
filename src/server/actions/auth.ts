@@ -340,11 +340,7 @@ export async function verifyConfirmTokenAction(
     redirect("/forgot-password?error=link_expired");
   }
 
-  const defaultNext =
-    type === "recovery" || type === "invite" ? "/set-password" : "/";
-  const next = validateRedirectPath(rawNext, defaultNext);
-
-  if (type === "recovery" || type === "invite" || next === "/set-password") {
+  if (type === "recovery" || type === "invite") {
     const flow = type === "invite" ? "invite" : "recovery";
     const cookieStore = await cookies();
     cookieStore.set(PASSWORD_RESET_COOKIE, `${data.user.id}:${flow}`, {
@@ -354,8 +350,11 @@ export async function verifyConfirmTokenAction(
       maxAge: 600, // 10 minutes
       path: "/",
     });
+    redirect("/set-password");
   }
 
+  const defaultNext = "/";
+  const next = validateRedirectPath(rawNext, defaultNext);
   redirect(next);
 }
 
@@ -367,6 +366,7 @@ export async function verifyConfirmCodeAction(
   formData: FormData
 ): Promise<never> {
   const code = formData.get("code")?.toString();
+  const rawType = formData.get("type")?.toString();
   const rawNext = formData.get("next")?.toString();
 
   if (!code) {
@@ -389,9 +389,23 @@ export async function verifyConfirmCodeAction(
   const claims = parseJwtPayload(data.session.access_token);
   const isVerifiedRecovery = isRecentRecoveryOrInviteSession(claims, 600);
 
-  const defaultNext = isVerifiedRecovery ? "/set-password" : "/";
-  const next = validateRedirectPath(rawNext, defaultNext);
+  const isClaimedRecoveryOrInvite =
+    rawType === "recovery" ||
+    rawType === "invite" ||
+    rawNext === "/set-password";
 
+  // When the link claims to be recovery or invite but fails server AMR verification:
+  // clear the newly exchanged local session and redirect to expired error (never silently send to "/")
+  if (isClaimedRecoveryOrInvite && !isVerifiedRecovery) {
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch {
+      // safe fallback
+    }
+    redirect("/forgot-password?error=link_expired");
+  }
+
+  // Security decision to set PASSWORD_RESET_COOKIE depends ONLY on the server-verified amr check
   if (isVerifiedRecovery) {
     const isInvite =
       claims?.amr && Array.isArray(claims.amr)
@@ -410,8 +424,15 @@ export async function verifyConfirmCodeAction(
       maxAge: 600, // 10 minutes
       path: "/",
     });
+
+    if (isClaimedRecoveryOrInvite) {
+      redirect("/set-password");
+    }
   }
 
+  // Non-recovery code links (signup confirmation, magic link, email change) keep today's behaviour:
+  const defaultNext = "/";
+  const next = validateRedirectPath(rawNext, defaultNext);
   redirect(next);
 }
 

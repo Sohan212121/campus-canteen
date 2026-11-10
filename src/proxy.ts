@@ -277,11 +277,23 @@ export async function proxy(request: NextRequest) {
   const userRole = profile.role as UserRole;
   const userHome = ROLE_HOME[userRole] ?? "/";
 
+  // Allow signed-in users arriving at /forgot-password with an error parameter or from=link
+  // to view the error message and request a new link rather than redirecting them home.
+  const searchParams = request.nextUrl.searchParams;
+  const isForgotPasswordWithContext =
+    pathname === "/forgot-password" &&
+    Boolean(
+      searchParams?.has("error") ||
+      searchParams?.has("error_code") ||
+      searchParams?.get("from") === "link"
+    );
+
   // Redirect signed-in active users away from auth pages to their own home
   if (
-    pathname === "/login" ||
-    pathname === "/signup" ||
-    pathname === "/forgot-password"
+    !isForgotPasswordWithContext &&
+    (pathname === "/login" ||
+      pathname === "/signup" ||
+      pathname === "/forgot-password")
   ) {
     const homeUrl = request.nextUrl.clone();
     homeUrl.pathname = userHome;

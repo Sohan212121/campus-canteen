@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   parseHashFragment,
@@ -153,6 +155,17 @@ describe("Confirm View URL Parsing & Snapshot Caching", () => {
       expect(pageJsx.props.initialNext).toBe("/set-password");
       expect(pageJsx.props.initialError).toBe("otp_expired");
       expect(pageJsx.props.initialErrorDescription).toBe("Link expired");
+    });
+  });
+
+  describe("Request new link URL", () => {
+    it("uses /forgot-password?from=link so signed-in users are not redirected by the proxy", () => {
+      // Static verification of link target in ConfirmView source
+      const confirmViewFile = fs.readFileSync(
+        path.join(__dirname, "../confirm-view.tsx"),
+        "utf-8"
+      );
+      expect(confirmViewFile).toContain('href="/forgot-password?from=link"');
     });
   });
 });

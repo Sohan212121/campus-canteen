@@ -27,7 +27,8 @@ function createMockRequest(
     method: options?.method ?? "GET",
     headers,
     nextUrl: {
-      pathname,
+      pathname: url.pathname,
+      searchParams: url.searchParams,
       clone: () => new URL(url.toString()),
     },
     cookies: {
@@ -185,6 +186,29 @@ describe("proxy (UX redirects & loop invariants)", () => {
       const req = createMockRequest("/login");
       const res = await proxy(req);
       expect(res.headers.get("location")).toBe(`https://example.com${expectedHome}`);
+    });
+
+    it("redirects signed-in student on /forgot-password without error to /", async () => {
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-student" } } });
+      mockProfile({ role: "student", is_active: true });
+
+      const req = createMockRequest("/forgot-password");
+      const res = await proxy(req);
+      expect(res.headers.get("location")).toBe("https://example.com/");
+    });
+
+    it.each([
+      "/forgot-password?error=link_expired",
+      "/forgot-password?error=different_browser",
+      "/forgot-password?error_code=otp_expired",
+      "/forgot-password?from=link",
+    ])("allows signed-in student on %s with context without redirect", async (path) => {
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-student" } } });
+      mockProfile({ role: "student", is_active: true });
+
+      const req = createMockRequest(path);
+      const res = await proxy(req);
+      expect(res.headers.get("location")).toBeNull();
     });
   });
 

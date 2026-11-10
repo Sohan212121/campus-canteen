@@ -297,11 +297,19 @@ export function ConfirmView({
         ) {
           const authRes = await authorizeRecoverySessionAction();
           if (!authRes.success) {
+            try {
+              await supabase.auth.signOut({ scope: "local" });
+            } catch {
+              // safe fallback
+            }
             setActionError(
               "Unable to authorize password reset. Please request a new link."
             );
             return;
           }
+          _resetHashStoreForTesting();
+          router.replace("/set-password");
+          return;
         }
 
         _resetHashStoreForTesting();
@@ -363,7 +371,7 @@ export function ConfirmView({
           {isErrorOrInvalid ? (
             <div className="space-y-3">
               <Link
-                href="/forgot-password"
+                href="/forgot-password?from=link"
                 className={buttonVariants({ className: "w-full" })}
               >
                 Request a new link
