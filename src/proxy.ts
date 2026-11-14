@@ -62,6 +62,8 @@ export async function proxy(request: NextRequest) {
     pathname === "/auth/confirm" ||
     pathname === "/manifest.webmanifest" ||
     pathname === "/offline" ||
+    pathname === "/offline.html" ||
+    pathname === "/sw.js" ||
     pathname.startsWith("/icons/")
   ) {
     return NextResponse.next();
@@ -350,6 +352,6 @@ export const config = {
      * - /api/health (health check endpoint)
      * - /manifest.webmanifest, /offline, /icons/* (exact PWA exclusions)
      */
-    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$|api/health|manifest\\.webmanifest|manifest\\.json|site\\.webmanifest|offline|icons/.*|.*\\.(?:xml|txt)$).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$|api/health|manifest\\.webmanifest|manifest\\.json|site\\.webmanifest|offline|sw\\.js|icons/.*|.*\\.(?:xml|txt)$).*)",
   ],
 };
