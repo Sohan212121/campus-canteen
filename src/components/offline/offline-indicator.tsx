@@ -8,7 +8,7 @@ import {
   ReachabilityController,
   ReachabilityStatus,
   isStudentRoute,
-} from "@/lib/offline-game";
+} from "@/lib/offline-reachability";
 
 // Lazy-load game component only when user clicks "Play a game"
 const LazyOfflineGame = lazy(() =>

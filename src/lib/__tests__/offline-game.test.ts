@@ -8,16 +8,18 @@ import {
   createSeededRandom,
   spawnNextObstacle,
   getObstacleDimensions,
+  GROUND_Y,
+  BURGER_HEIGHT_NORMAL,
+  BURGER_HEIGHT_DUCK,
+} from "../offline-game";
+import {
   getOfflineHighScore,
   saveOfflineHighScore,
   HIGH_SCORE_STORAGE_KEY,
   isStudentRoute,
   ReachabilityController,
   performReachabilityProbe,
-  GROUND_Y,
-  BURGER_HEIGHT_NORMAL,
-  BURGER_HEIGHT_DUCK,
-} from "../offline-game";
+} from "../offline-reachability";
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -364,5 +366,23 @@ describe("Static Architecture & Security Boundaries", () => {
     expect(content).not.toContain("StudentBottomNav");
     expect(content).not.toContain("StudentHeader");
     expect(content).not.toContain("StudentInstallPrompt");
+  });
+
+  it("enforces one-way import architecture: offline-indicator and offline-reachability do NOT import offline-game", () => {
+    const indicatorPath = path.resolve(__dirname, "../../components/offline/offline-indicator.tsx");
+    const reachabilityPath = path.resolve(__dirname, "../offline-reachability.ts");
+    const gamePath = path.resolve(__dirname, "../offline-game.ts");
+
+    const indicatorContent = fs.readFileSync(indicatorPath, "utf-8");
+    const reachabilityContent = fs.readFileSync(reachabilityPath, "utf-8");
+    const gameContent = fs.readFileSync(gamePath, "utf-8");
+
+    // Indicator must NOT statically import from offline-game (uses offline-reachability instead)
+    expect(indicatorContent).not.toMatch(/from\s+["'].*offline-game["']/);
+    // Reachability must NOT import from offline-game
+    expect(reachabilityContent).not.toMatch(/from\s+["'].*offline-game["']/);
+
+    // One-way: offline-game CAN import from offline-reachability
+    expect(gameContent).toContain("offline-reachability");
   });
 });
