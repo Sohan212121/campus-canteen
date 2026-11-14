@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import fs from "fs";
 import path from "path";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { OfflineGameErrorBoundary } from "../../components/offline/offline-game-boundary";
 import {
   createInitialGameState,
   updateGameState,
@@ -19,6 +22,7 @@ import {
   isStudentRoute,
   ReachabilityController,
   performReachabilityProbe,
+  shouldPrefetchOfflineGame,
 } from "../offline-reachability";
 
 const localStorageMock = (() => {
@@ -384,5 +388,196 @@ describe("Static Architecture & Security Boundaries", () => {
 
     // One-way: offline-game CAN import from offline-reachability
     expect(gameContent).toContain("offline-reachability");
+
+    // OfflineGameErrorBoundary must NOT import from offline-game
+    const boundaryPath = path.resolve(__dirname, "../../components/offline/offline-game-boundary.tsx");
+    const boundaryContent = fs.readFileSync(boundaryPath, "utf-8");
+    expect(boundaryContent).not.toMatch(/from\s+["'].*offline-game["']/);
+  });
+});
+
+describe("Offline Game Prefetch Gating (shouldPrefetchOfflineGame)", () => {
+  it("allows prefetch when online, visible, normal network, on a student route", () => {
+    expect(
+      shouldPrefetchOfflineGame({
+        online: true,
+        visible: true,
+        saveData: false,
+        effectiveType: "4g",
+        pathname: "/menu",
+      })
+    ).toBe(true);
+
+    // Positional signature support
+    expect(shouldPrefetchOfflineGame(true, true, false, "4g", "/menu")).toBe(true);
+    expect(shouldPrefetchOfflineGame(true, true, false, "3g", "/orders")).toBe(true);
+    expect(shouldPrefetchOfflineGame(true, true, false, "4g", "student")).toBe(true);
+  });
+
+  it("blocks prefetch when offline", () => {
+    expect(
+      shouldPrefetchOfflineGame({
+        online: false,
+        visible: true,
+        saveData: false,
+        effectiveType: "4g",
+        pathname: "/menu",
+      })
+    ).toBe(false);
+    expect(shouldPrefetchOfflineGame(false, true, false, "4g", "/menu")).toBe(false);
+  });
+
+  it("blocks prefetch when document is hidden", () => {
+    expect(
+      shouldPrefetchOfflineGame({
+        online: true,
+        visible: false,
+        saveData: false,
+        effectiveType: "4g",
+        pathname: "/menu",
+      })
+    ).toBe(false);
+    expect(shouldPrefetchOfflineGame(true, false, false, "4g", "/menu")).toBe(false);
+  });
+
+  it("blocks prefetch when saveData is enabled", () => {
+    expect(
+      shouldPrefetchOfflineGame({
+        online: true,
+        visible: true,
+        saveData: true,
+        effectiveType: "4g",
+        pathname: "/menu",
+      })
+    ).toBe(false);
+    expect(shouldPrefetchOfflineGame(true, true, true, "4g", "/menu")).toBe(false);
+  });
+
+  it("blocks prefetch on slow network connections (slow-2g, 2g)", () => {
+    expect(
+      shouldPrefetchOfflineGame({
+        online: true,
+        visible: true,
+        saveData: false,
+        effectiveType: "slow-2g",
+        pathname: "/menu",
+      })
+    ).toBe(false);
+    expect(
+      shouldPrefetchOfflineGame({
+        online: true,
+        visible: true,
+        saveData: false,
+        effectiveType: "2g",
+        pathname: "/menu",
+      })
+    ).toBe(false);
+
+    expect(shouldPrefetchOfflineGame(true, true, false, "2g", "/menu")).toBe(false);
+    expect(shouldPrefetchOfflineGame(true, true, false, "slow-2g", "/menu")).toBe(false);
+  });
+
+  it("blocks prefetch on staff, admin, auth, and /offline routes", () => {
+    const blockedRoutes = [
+      "/staff",
+      "/staff/pickup",
+      "/admin",
+      "/admin/orders",
+      "/login",
+      "/signup",
+      "/forgot-password",
+      "/set-password",
+      "/auth/confirm",
+      "/offline",
+      "staff",
+      "admin",
+      "auth",
+    ];
+
+    for (const route of blockedRoutes) {
+      expect(
+        shouldPrefetchOfflineGame({
+          online: true,
+          visible: true,
+          saveData: false,
+          effectiveType: "4g",
+          pathname: route,
+        })
+      ).toBe(false);
+    }
+  });
+});
+
+describe("OfflineGameErrorBoundary & Chunk Load Protection", () => {
+  it("renders children when no chunk load or render error occurs", () => {
+    const element = React.createElement(
+      OfflineGameErrorBoundary,
+      { onClose: vi.fn() },
+      React.createElement("div", { id: "child-game" }, "Game Running")
+    );
+    const html = renderToStaticMarkup(element);
+    expect(html).toContain("Game Running");
+    expect(html).not.toContain("The game could not load");
+  });
+
+  it("catches chunk load failure, does not throw, and displays the exact compact fallback message", () => {
+    const boundary = new OfflineGameErrorBoundary({ onClose: vi.fn(), children: null });
+    expect(boundary.state.hasError).toBe(false);
+
+    // Simulate getDerivedStateFromError when ChunkLoadError occurs
+    const nextState = OfflineGameErrorBoundary.getDerivedStateFromError();
+    expect(nextState).toEqual({ hasError: true });
+
+    boundary.state = nextState;
+    const output = boundary.render();
+    const html = renderToStaticMarkup(output as React.ReactElement);
+
+    expect(html).toContain(
+      "The game could not load. It needs a connection the first time, so try again when you are back online."
+    );
+    expect(html).toContain("Close");
+  });
+
+  it("calls onClose and resets error state when Close button is tapped", () => {
+    const onClose = vi.fn();
+    const boundary = new OfflineGameErrorBoundary({ onClose, children: null });
+    boundary.state = { hasError: true };
+
+    // In unit test environment without full React DOM reconciler, mock class updater
+    (boundary as unknown as { updater: unknown }).updater = {
+      enqueueSetState: (_inst: unknown, partialState: unknown) => {
+        Object.assign(
+          boundary.state,
+          typeof partialState === "function"
+            ? (partialState as (s: unknown) => unknown)(boundary.state)
+            : partialState
+        );
+      },
+      enqueueForceUpdate: () => {},
+      isMounted: () => true,
+    };
+
+    boundary.handleClose();
+
+    expect(boundary.state.hasError).toBe(false);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("verifies LazyOfflineGame is wrapped by OfflineGameErrorBoundary in indicator and /offline page", () => {
+    const indicatorPath = path.resolve(__dirname, "../../components/offline/offline-indicator.tsx");
+    const offlinePagePath = path.resolve(__dirname, "../../app/offline/page.tsx");
+
+    const indicatorContent = fs.readFileSync(indicatorPath, "utf-8");
+    const pageContent = fs.readFileSync(offlinePagePath, "utf-8");
+
+    expect(indicatorContent).toContain("OfflineGameErrorBoundary");
+    expect(indicatorContent).toMatch(
+      /<OfflineGameErrorBoundary[\s\S]*?<Suspense[\s\S]*?<LazyOfflineGame[\s\S]*?<\/Suspense>[\s\S]*?<\/OfflineGameErrorBoundary>/
+    );
+
+    expect(pageContent).toContain("OfflineGameErrorBoundary");
+    expect(pageContent).toMatch(
+      /<OfflineGameErrorBoundary[\s\S]*?<Suspense[\s\S]*?<LazyOfflineGame[\s\S]*?<\/Suspense>[\s\S]*?<\/OfflineGameErrorBoundary>/
+    );
   });
 });

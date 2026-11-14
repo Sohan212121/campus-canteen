@@ -8,7 +8,16 @@ import {
   ReachabilityController,
   ReachabilityStatus,
   isStudentRoute,
+  shouldPrefetchOfflineGame,
 } from "@/lib/offline-reachability";
+import { OfflineGameErrorBoundary } from "./offline-game-boundary";
+
+// Track once-per-session prefetch
+let hasPrefetchedGame = false;
+
+export function _resetPrefetchForTesting() {
+  hasPrefetchedGame = false;
+}
 
 // Lazy-load game component only when user clicks "Play a game"
 const LazyOfflineGame = lazy(() =>
@@ -79,6 +88,58 @@ export function OfflineIndicator() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [controller]);
+
+  // Idle prefetch: after the app has been mounted and visible for a few seconds,
+  // prefetch the offline game chunk once per session when online & not constrained.
+  useEffect(() => {
+    if (hasPrefetchedGame) return;
+
+    const timer = setTimeout(() => {
+      const isDocVisible = typeof document !== "undefined" ? !document.hidden : false;
+      const nav =
+        typeof navigator !== "undefined"
+          ? (navigator as unknown as {
+              onLine?: boolean;
+              connection?: { saveData?: boolean; effectiveType?: string };
+            })
+          : undefined;
+
+      const isOnline = nav?.onLine ?? status === "online";
+      const saveData = nav?.connection?.saveData;
+      const effectiveType = nav?.connection?.effectiveType;
+
+      if (
+        !shouldPrefetchOfflineGame({
+          online: isOnline,
+          visible: isDocVisible,
+          saveData,
+          effectiveType,
+          pathname,
+        })
+      ) {
+        return;
+      }
+
+      const schedule =
+        typeof window !== "undefined" && "requestIdleCallback" in window
+          ? (cb: () => void) =>
+              (
+                window as unknown as { requestIdleCallback: (fn: () => void) => number }
+              ).requestIdleCallback(cb)
+          : (cb: () => void) => setTimeout(cb, 50);
+
+      schedule(() => {
+        if (hasPrefetchedGame) return;
+        hasPrefetchedGame = true;
+        // Warm the browser module cache once per session; swallow any network rejections
+        import("./offline-game-canvas").catch(() => {
+          // Silent swallow
+        });
+      });
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, [status, pathname]);
 
   // Handle escape key to dismiss modal
   useEffect(() => {
@@ -302,16 +363,18 @@ export function OfflineIndicator() {
               <div className="w-12" /> {/* balance spacing */}
             </div>
 
-            <Suspense
-              fallback={
-                <div className="w-full h-[180px] flex items-center justify-center bg-card rounded-xl text-xs text-muted-foreground">
-                  <RefreshCw className="w-5 h-5 animate-spin mr-2" />
-                  Loading mini game...
-                </div>
-              }
-            >
-              <LazyOfflineGame />
-            </Suspense>
+            <OfflineGameErrorBoundary onClose={() => setShowGame(false)}>
+              <Suspense
+                fallback={
+                  <div className="w-full h-[180px] flex items-center justify-center bg-card rounded-xl text-xs text-muted-foreground">
+                    <RefreshCw className="w-5 h-5 animate-spin mr-2" />
+                    Loading mini game...
+                  </div>
+                }
+              >
+                <LazyOfflineGame />
+              </Suspense>
+            </OfflineGameErrorBoundary>
           </div>
         )}
       </div>

@@ -3,6 +3,7 @@
 import { useState, lazy, Suspense } from "react";
 import Link from "next/link";
 import { RefreshCw, Gamepad2, ArrowLeft } from "lucide-react";
+import { OfflineGameErrorBoundary } from "@/components/offline/offline-game-boundary";
 
 const LazyOfflineGame = lazy(() =>
   import("@/components/offline/offline-game-canvas").then((mod) => ({ default: mod.OfflineGameCanvas }))
@@ -118,16 +119,18 @@ export default function OfflinePage() {
               <div className="w-12" />
             </div>
 
-            <Suspense
-              fallback={
-                <div className="w-full h-[180px] flex items-center justify-center bg-card rounded-xl text-xs text-muted-foreground">
-                  <RefreshCw className="w-5 h-5 animate-spin mr-2" />
-                  Loading mini game...
-                </div>
-              }
-            >
-              <LazyOfflineGame />
-            </Suspense>
+            <OfflineGameErrorBoundary onClose={() => setShowGame(false)}>
+              <Suspense
+                fallback={
+                  <div className="w-full h-[180px] flex items-center justify-center bg-card rounded-xl text-xs text-muted-foreground">
+                    <RefreshCw className="w-5 h-5 animate-spin mr-2" />
+                    Loading mini game...
+                  </div>
+                }
+              >
+                <LazyOfflineGame />
+              </Suspense>
+            </OfflineGameErrorBoundary>
           </div>
         )}
       </div>

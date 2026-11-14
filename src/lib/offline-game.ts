@@ -32,6 +32,7 @@ import {
   type ProbeOptions,
   performReachabilityProbe,
   ReachabilityController,
+  shouldPrefetchOfflineGame,
 } from "./offline-reachability";
 
 export {
@@ -43,6 +44,7 @@ export {
   type ProbeOptions,
   performReachabilityProbe,
   ReachabilityController,
+  shouldPrefetchOfflineGame,
 };
 
 export type ObstacleType = "drink" | "trays";

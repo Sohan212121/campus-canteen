@@ -248,3 +248,97 @@ export class ReachabilityController {
   }
 }
 
+// ============================================================================
+// 4. OFFLINE GAME PREFETCH GATING
+// ============================================================================
+
+export interface PrefetchGatingParams {
+  online: boolean;
+  visible: boolean;
+  saveData?: boolean | null;
+  effectiveType?: string | null;
+  pathname?: string | null;
+  routeType?: string | null;
+}
+
+/**
+ * Pure function determining whether the offline mini-game chunk should be prefetched.
+ *
+ * Rules:
+ * - Must be online.
+ * - Must be visible (document not hidden).
+ * - Skip if navigator.connection.saveData is true.
+ * - Skip on slow connections ("slow-2g" or "2g").
+ * - Prefetch ONLY on student routes; NEVER on auth, staff, admin, or /offline routes.
+ */
+export function shouldPrefetchOfflineGame(params: PrefetchGatingParams): boolean;
+export function shouldPrefetchOfflineGame(
+  online: boolean,
+  visible: boolean,
+  saveData?: boolean | null,
+  effectiveType?: string | null,
+  routeOrPathname?: string | null
+): boolean;
+export function shouldPrefetchOfflineGame(
+  first: boolean | PrefetchGatingParams,
+  visible?: boolean,
+  saveData?: boolean | null,
+  effectiveType?: string | null,
+  routeOrPathname?: string | null
+): boolean {
+  let isOnline: boolean;
+  let isVis: boolean;
+  let sData: boolean | null | undefined;
+  let effType: string | null | undefined;
+  let route: string | null | undefined;
+
+  if (typeof first === "object" && first !== null) {
+    isOnline = Boolean(first.online);
+    isVis = Boolean(first.visible);
+    sData = first.saveData;
+    effType = first.effectiveType;
+    route = first.pathname ?? first.routeType;
+  } else {
+    isOnline = Boolean(first);
+    isVis = Boolean(visible);
+    sData = saveData;
+    effType = effectiveType;
+    route = routeOrPathname;
+  }
+
+  // 1. Must be online
+  if (!isOnline) return false;
+
+  // 2. Must be visible
+  if (!isVis) return false;
+
+  // 3. Skip if user requested data-saver
+  if (sData === true) return false;
+
+  // 4. Skip on slow network connections
+  if (effType === "slow-2g" || effType === "2g") return false;
+
+  // 5. Route scoping: ONLY student routes, NEVER auth, staff, admin, or /offline
+  if (!route) return false;
+  const normalized = route.trim();
+  if (normalized === "student") return true;
+  if (
+    normalized === "staff" ||
+    normalized === "admin" ||
+    normalized === "auth" ||
+    normalized.startsWith("/staff") ||
+    normalized.startsWith("/admin") ||
+    normalized.startsWith("/auth") ||
+    normalized === "/login" ||
+    normalized === "/signup" ||
+    normalized === "/forgot-password" ||
+    normalized === "/set-password" ||
+    normalized === "/offline"
+  ) {
+    return false;
+  }
+
+  return isStudentRoute(normalized);
+}
+
+
