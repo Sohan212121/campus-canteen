@@ -353,4 +353,98 @@ describe("useAvatarSignedUrl / AvatarUrlManager", () => {
     expect(manager.getState().avatarUrl).toBeNull();
     expect(manager.getState().showAvatarImage).toBe(false);
   });
+
+  it("14. manager.getState returns the same object reference on repeated calls with no state change", () => {
+    const manager = new AvatarUrlManager({
+      initialAvatarUrl: "https://example.com/avatar.jpg",
+      nowFn: () => BASE_TIME,
+    });
+
+    const ref1 = manager.getState();
+    const ref2 = manager.getState();
+    expect(ref1).toBe(ref2); // Exact referential equality
+
+    // Prop sync with identical URL should NOT change reference
+    manager.syncPropUrl("https://example.com/avatar.jpg");
+    const ref3 = manager.getState();
+    expect(ref3).toBe(ref1);
+
+    // Stale check without reaching stale age should NOT change reference
+    manager.handleBackgroundResume();
+    const ref4 = manager.getState();
+    expect(ref4).toBe(ref1);
+  });
+
+  it("15. manager.getServerSnapshot returns the same stable frozen reference on repeated calls", () => {
+    const manager = new AvatarUrlManager({
+      initialAvatarUrl: "https://example.com/avatar.jpg",
+      nowFn: () => BASE_TIME,
+    });
+
+    const snap1 = manager.getServerSnapshot();
+    const snap2 = manager.getServerSnapshot();
+    expect(snap1).toBe(snap2); // Exact referential equality
+    expect(Object.isFrozen(snap1)).toBe(true);
+    expect(snap1).toEqual({
+      avatarUrl: "https://example.com/avatar.jpg",
+      imgError: false,
+      showAvatarImage: true,
+    });
+
+    // Also holds for null initial avatar
+    const nullManager = new AvatarUrlManager({
+      initialAvatarUrl: null,
+      nowFn: () => BASE_TIME,
+    });
+    expect(nullManager.getServerSnapshot()).toBe(nullManager.getServerSnapshot());
+    expect(nullManager.getServerSnapshot().avatarUrl).toBeNull();
+    expect(nullManager.getServerSnapshot().showAvatarImage).toBe(false);
+  });
+
+  it("16. a state change produces a new object reference", () => {
+    const manager = new AvatarUrlManager({
+      initialAvatarUrl: "https://example.com/avatar-1.jpg",
+      nowFn: () => BASE_TIME,
+    });
+
+    const initialRef = manager.getState();
+
+    // 1. setAvatarUrlDirectly produces new reference
+    manager.setAvatarUrlDirectly("https://example.com/avatar-2.jpg");
+    const directRef = manager.getState();
+    expect(directRef).not.toBe(initialRef);
+    expect(directRef.avatarUrl).toBe("https://example.com/avatar-2.jpg");
+
+    // 2. syncPropUrl with a different URL produces new reference
+    manager.syncPropUrl("https://example.com/avatar-3.jpg");
+    const syncRef = manager.getState();
+    expect(syncRef).not.toBe(directRef);
+    expect(syncRef.avatarUrl).toBe("https://example.com/avatar-3.jpg");
+
+    // 3. Removal produces new reference
+    manager.syncPropUrl(null, false);
+    const removalRef = manager.getState();
+    expect(removalRef).not.toBe(syncRef);
+    expect(removalRef.avatarUrl).toBeNull();
+    expect(removalRef.showAvatarImage).toBe(false);
+  });
+
+  it("17. syncPropUrl updates state without notifying subscribers during render", () => {
+    const manager = new AvatarUrlManager({
+      initialAvatarUrl: "https://example.com/avatar-1.jpg",
+      nowFn: () => BASE_TIME,
+    });
+
+    const listener = vi.fn();
+    manager.subscribe(listener);
+
+    // syncPropUrl during render should update state but NOT notify
+    manager.syncPropUrl("https://example.com/avatar-2.jpg");
+    expect(manager.getState().avatarUrl).toBe("https://example.com/avatar-2.jpg");
+    expect(listener).not.toHaveBeenCalled();
+
+    // In contrast, asynchronous setAvatarUrlDirectly DOES notify subscribers
+    manager.setAvatarUrlDirectly("https://example.com/avatar-3.jpg");
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
 });

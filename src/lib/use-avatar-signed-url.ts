@@ -23,6 +23,7 @@ export class AvatarUrlManager {
   private avatarUrl: string | null;
   private imgError: boolean;
   private state: AvatarUrlState;
+  private readonly serverSnapshot: AvatarUrlState;
   private issuedAt: number;
   private lastBackgroundRefresh: number = 0;
   private inFlightPromise: Promise<string | null> | null = null;
@@ -47,10 +48,19 @@ export class AvatarUrlManager {
       imgError: this.imgError,
       showAvatarImage: Boolean(this.avatarUrl && !this.imgError),
     };
+    this.serverSnapshot = Object.freeze({
+      avatarUrl: this.avatarUrl,
+      imgError: false,
+      showAvatarImage: Boolean(this.avatarUrl),
+    });
   }
 
   public getState = (): AvatarUrlState => {
     return this.state;
+  };
+
+  public getServerSnapshot = (): AvatarUrlState => {
+    return this.serverSnapshot;
   };
 
   public subscribe = (listener: () => void): (() => void) => {
@@ -66,7 +76,7 @@ export class AvatarUrlManager {
     }
   }
 
-  private updateState(avatarUrl: string | null, imgError: boolean) {
+  private updateState(avatarUrl: string | null, imgError: boolean, notifyListeners: boolean = true) {
     if (this.state.avatarUrl === avatarUrl && this.state.imgError === imgError) {
       return;
     }
@@ -77,7 +87,9 @@ export class AvatarUrlManager {
       imgError,
       showAvatarImage: Boolean(avatarUrl && !imgError),
     };
-    this.notify();
+    if (notifyListeners) {
+      this.notify();
+    }
   }
 
   public syncPropUrl(newPropUrl: string | null, timedOut: boolean = false) {
@@ -93,7 +105,7 @@ export class AvatarUrlManager {
       this.prevPropUrl = newPropUrl;
       this.urlVersion += 1;
       this.issuedAt = newPropUrl ? this.nowFn() : 0;
-      this.updateState(newPropUrl, false);
+      this.updateState(newPropUrl, false, false);
     }
   }
 
@@ -277,11 +289,7 @@ export function useAvatarSignedUrl({
   const state = useSyncExternalStore(
     manager.subscribe,
     manager.getState,
-    () => ({
-      avatarUrl: initialAvatarUrl,
-      imgError: false,
-      showAvatarImage: Boolean(initialAvatarUrl),
-    })
+    manager.getServerSnapshot
   );
 
   useEffect(() => {
