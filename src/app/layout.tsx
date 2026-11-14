@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { OfflineIndicator } from "@/components/offline/offline-indicator";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -57,6 +58,7 @@ export default function RootLayout({
         >
           {children}
           <Toaster position="top-center" />
+          <OfflineIndicator />
         </ThemeProvider>
       </body>
     </html>
