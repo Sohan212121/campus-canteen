@@ -19,9 +19,22 @@ export const BURGER_HEIGHT_DUCK = 20;
 
 export const GRAVITY = 0.78;
 export const JUMP_VELOCITY = -11.5;
+export const INITIAL_SPEED = 2.5; // ~60% of original 4.2 base speed
 export const BASE_SPEED = 4.2;
 export const MAX_SPEED = 8.5;
 export const REDUCED_MOTION_SPEED = 3.6;
+
+// Speed ramp: smoothly ramps from INITIAL_SPEED to MAX_SPEED over 75 seconds (at 60 FPS = 4,500 frames / score)
+export const SPEED_RAMP_DURATION_SEC = 75;
+export const TARGET_FPS = 60;
+export const SPEED_RAMP_FRAMES = SPEED_RAMP_DURATION_SEC * TARGET_FPS; // 4500 frames
+
+// Grace period: player runs 320px (at least 120 frames = 2.0s with speed ramp) before the first obstacle spawns
+export const FIRST_OBSTACLE_DISTANCE = 320;
+
+// Jump arc dynamics: at GRAVITY=0.78 and JUMP_VELOCITY=-11.5, player stays airborne for 31 frames.
+export const JUMP_AIRBORNE_FRAMES = 31;
+export const JUMP_SAFETY_MARGIN_PX = 50;
 
 import {
   HIGH_SCORE_STORAGE_KEY,
@@ -131,10 +144,50 @@ export function getObstacleDimensions(type: ObstacleType, size: ObstacleSize): {
   }
 }
 
+/**
+ * Calculates the current game speed as a deterministic, pure function of score (elapsed frames).
+ * Guaranteed to start at INITIAL_SPEED (2.5), be monotonically non-decreasing, and cap strictly at MAX_SPEED (8.5).
+ * Reaches MAX_SPEED at exactly SPEED_RAMP_FRAMES (4,500 frames = 75.0 seconds at 60 FPS).
+ */
+export function calculateGameSpeed(
+  score: number,
+  options?: { prefersReducedMotion?: boolean }
+): number {
+  if (options?.prefersReducedMotion) {
+    return REDUCED_MOTION_SPEED;
+  }
+  const progress = Math.min(Math.max(score, 0) / SPEED_RAMP_FRAMES, 1);
+  const rawSpeed = INITIAL_SPEED + (MAX_SPEED - INITIAL_SPEED) * progress;
+  return Math.min(Math.round(rawSpeed * 100) / 100, MAX_SPEED);
+}
+
+/**
+ * Calculates the minimum possible gap between two consecutive obstacles at a given speed and score.
+ *
+ * Mathematical guarantee:
+ * - At every speed from INITIAL_SPEED to MAX_SPEED:
+ *   minGap >= Math.ceil(JUMP_AIRBORNE_FRAMES * speed + JUMP_SAFETY_MARGIN_PX)
+ * - That guarantees the player can always complete a full jump arc over one obstacle,
+ *   land cleanly on the ground, and have ample safety margin before encountering the next obstacle.
+ * - Early in the run (score 0), a generous bonus gap (up to +100px) is added for beginner comfort.
+ */
+export function getMinObstacleGap(speed: number, score: number = 0): number {
+  const jumpArcDistance = JUMP_AIRBORNE_FRAMES * speed;
+  // Ensure the base gap is strictly larger than jumpArcDistance + JUMP_SAFETY_MARGIN_PX with an additional buffer
+  const safeBaseGap = Math.max(280, Math.ceil(jumpArcDistance + JUMP_SAFETY_MARGIN_PX + 12));
+
+  const progress = Math.min(Math.max(score, 0) / SPEED_RAMP_FRAMES, 1);
+  const earlyGapBonus = Math.round(100 * (1 - progress));
+
+  return safeBaseGap + earlyGapBonus;
+}
+
 export function spawnNextObstacle(
   rng: () => number,
   startX: number,
-  id: number
+  id: number,
+  speed: number = BASE_SPEED,
+  score: number = 0
 ): { obstacle: Obstacle; nextGap: number } {
   const type: ObstacleType = rng() > 0.5 ? "drink" : "trays";
   const sizeRoll = rng();
@@ -151,8 +204,8 @@ export function spawnNextObstacle(
     height: dims.height,
   };
 
-  // Gap between obstacles (220 to 380 pixels)
-  const nextGap = 220 + Math.floor(rng() * 160);
+  const minGap = getMinObstacleGap(speed, score);
+  const nextGap = minGap + Math.floor(rng() * 120);
   return { obstacle, nextGap };
 }
 
@@ -201,11 +254,11 @@ export function createInitialGameState(highScore: number = 0): GameState {
     obstacles: [],
     score: 0,
     highScore,
-    speed: BASE_SPEED,
+    speed: INITIAL_SPEED,
     isGameOver: false,
     isPlaying: false,
     distanceTraveled: 0,
-    nextObstacleDistance: 260,
+    nextObstacleDistance: FIRST_OBSTACLE_DISTANCE,
     lastObstacleId: 0,
   };
 }
@@ -220,7 +273,6 @@ export function updateGameState(
     return state;
   }
 
-  const reduced = options?.prefersReducedMotion ?? false;
   const player = { ...state.player };
 
   // Handle Ducking
@@ -253,10 +305,8 @@ export function updateGameState(
     }
   }
 
-  // Speed scaling (caps at MAX_SPEED, fixed if prefers-reduced-motion)
-  const speed = reduced
-    ? REDUCED_MOTION_SPEED
-    : Math.min(BASE_SPEED + Math.floor(state.score / 100) * 0.45, MAX_SPEED);
+  // Smooth, gradual speed ramp based on elapsed play score / time
+  const speed = calculateGameSpeed(state.score, options);
 
   // Advance obstacles
   const movedObstacles: Obstacle[] = [];
@@ -283,12 +333,18 @@ export function updateGameState(
 
   if (distanceTraveled >= nextObstacleDistance) {
     lastObstacleId += 1;
-    const { obstacle, nextGap } = spawnNextObstacle(rng, GAME_CANVAS_WIDTH + 20, lastObstacleId);
+    const { obstacle, nextGap } = spawnNextObstacle(
+      rng,
+      GAME_CANVAS_WIDTH + 20,
+      lastObstacleId,
+      speed,
+      state.score
+    );
     movedObstacles.push(obstacle);
     nextObstacleDistance = distanceTraveled + nextGap;
   }
 
-  // Score increments by 1 per ~6 frames
+  // Score increments by 1 per frame while playing
   const score = state.score + 1;
   const highScore = Math.max(state.highScore, score);
 

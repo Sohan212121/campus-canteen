@@ -6,7 +6,6 @@ import {
   GAME_CANVAS_HEIGHT,
   GROUND_Y,
   GameState,
-  BurgerPlayer,
   Obstacle,
   createInitialGameState,
   updateGameState,
@@ -14,6 +13,13 @@ import {
   getOfflineHighScore,
   saveOfflineHighScore,
 } from "@/lib/offline-game";
+import {
+  FOOD_CHARACTERS,
+  CharacterId,
+  getCharacterById,
+  getOfflineCharacter,
+  saveOfflineCharacter,
+} from "@/lib/offline-game-characters";
 import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 
 export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void }) {
@@ -22,6 +28,9 @@ export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void })
 
   const [gameStatus, setGameStatus] = useState<"idle" | "playing" | "game_over">("idle");
   const gameStatusRef = useRef<"idle" | "playing" | "game_over">("idle");
+
+  const [selectedCharacterId, setSelectedCharacterId] = useState<CharacterId>(() => getOfflineCharacter());
+  const characterIdRef = useRef<CharacterId>("burger");
 
   const stateRef = useRef<GameState | null>(null);
   const rngRef = useRef<() => number>(createSeededRandom(12345));
@@ -69,8 +78,9 @@ export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void })
       drawObstacle(ctx, obs, isDark);
     }
 
-    // Draw Burger Player
-    drawBurger(ctx, s.player, legCycleRef.current, isDark);
+    // Draw Selected Food Character Player
+    const activeChar = getCharacterById(characterIdRef.current);
+    activeChar.draw(ctx, s.player, legCycleRef.current, isDark);
 
     // Draw HUD: Score & High Score
     const scoreStr = String(s.score).padStart(5, "0");
@@ -104,12 +114,31 @@ export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void })
     }
   }, []);
 
-  // Initialize high score on mount
+  // Initialize high score and character on mount
   useEffect(() => {
     const high = getOfflineHighScore();
+    characterIdRef.current = getOfflineCharacter();
     stateRef.current = createInitialGameState(high);
     drawCanvas();
   }, [drawCanvas]);
+
+  // Cycle character left/right
+  const handleCycleCharacter = useCallback(
+    (direction: -1 | 1) => {
+      const currentIndex = FOOD_CHARACTERS.findIndex(
+        (c) => c.id === characterIdRef.current
+      );
+      const validIndex = currentIndex >= 0 ? currentIndex : 0;
+      const nextIndex =
+        (validIndex + direction + FOOD_CHARACTERS.length) % FOOD_CHARACTERS.length;
+      const nextChar = FOOD_CHARACTERS[nextIndex];
+      saveOfflineCharacter(nextChar.id);
+      characterIdRef.current = nextChar.id;
+      setSelectedCharacterId(nextChar.id);
+      drawCanvas();
+    },
+    [drawCanvas]
+  );
 
   // Restart / Start game
   const handleStartGame = useCallback(() => {
@@ -254,6 +283,58 @@ export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void })
         />
       </div>
 
+      {/* Character Picker: 44px touch targets, visible only on start/idle or game over */}
+      {gameStatus !== "playing" && (
+        <div
+          className="flex items-center justify-between w-full max-w-[375px] mt-2 px-2 py-1 bg-[#EFE8DA] dark:bg-[#151720] rounded-xl border border-[#D4C7B0]/70 dark:border-[#2A2E3D]/70 shadow-xs select-none"
+          role="region"
+          aria-label="Character Selection"
+        >
+          <button
+            type="button"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              handleCycleCharacter(-1);
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+            style={{ touchAction: "manipulation" }}
+            className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-sm font-bold text-[#181513] dark:text-[#E2E8F0] hover:bg-black/10 dark:hover:bg-white/10 active:scale-90 transition-transform cursor-pointer select-none"
+            aria-label="Previous character"
+          >
+            ◀
+          </button>
+          <div className="flex flex-col items-center justify-center min-h-[44px] px-3 select-none pointer-events-none">
+            <span className="text-[10px] uppercase tracking-wider text-[#78716C] dark:text-[#A1A1AA] font-semibold leading-tight">
+              Runner
+            </span>
+            <span className="text-xs font-bold text-[#181513] dark:text-[#F1F5F9] leading-tight">
+              {getCharacterById(selectedCharacterId).name}
+            </span>
+          </div>
+          <button
+            type="button"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              handleCycleCharacter(1);
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+            style={{ touchAction: "manipulation" }}
+            className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-sm font-bold text-[#181513] dark:text-[#E2E8F0] hover:bg-black/10 dark:hover:bg-white/10 active:scale-90 transition-transform cursor-pointer select-none"
+            aria-label="Next character"
+          >
+            ▶
+          </button>
+        </div>
+      )}
+
       {/* Touch action controls with instantaneous zero-latency pointerdown response */}
       <div className="flex items-center gap-3 mt-3 w-full max-w-[375px]">
         <button
@@ -296,90 +377,8 @@ export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void })
 }
 
 // ============================================================================
-// Canvas Geometric Drawing Helpers (Original Burger Character & Obstacles)
+// Canvas Geometric Drawing Helpers (Obstacles)
 // ============================================================================
-
-function drawBurger(
-  ctx: CanvasRenderingContext2D,
-  player: BurgerPlayer,
-  legCycle: number,
-  isDark: boolean
-) {
-  const { x, y, width, height, isGrounded, isDucking } = player;
-
-  ctx.save();
-  ctx.translate(x, y);
-
-  // Leg rendering when running / jumping
-  if (isGrounded && !isDucking) {
-    const legOffset = Math.sin(legCycle) * 3;
-    ctx.strokeStyle = isDark ? "#E2E8F0" : "#44403C";
-    ctx.lineWidth = 2.2;
-    ctx.lineCap = "round";
-
-    // Left leg
-    ctx.beginPath();
-    ctx.moveTo(width * 0.35, height - 2);
-    ctx.lineTo(width * 0.35 - legOffset, height + 4);
-    ctx.stroke();
-
-    // Right leg
-    ctx.beginPath();
-    ctx.moveTo(width * 0.65, height - 2);
-    ctx.lineTo(width * 0.65 + legOffset, height + 4);
-    ctx.stroke();
-  }
-
-  // 1. Bottom Bun
-  ctx.fillStyle = isDark ? "#E5A93C" : "#D48B30";
-  ctx.beginPath();
-  ctx.roundRect(0, height * 0.72, width, height * 0.28, [0, 0, 5, 5]);
-  ctx.fill();
-
-  // 2. Patty
-  ctx.fillStyle = isDark ? "#6E361A" : "#4E210D";
-  ctx.beginPath();
-  ctx.roundRect(2, height * 0.52, width - 4, height * 0.22, 3);
-  ctx.fill();
-
-  // 3. Cheese layer
-  ctx.fillStyle = "#F59E0B";
-  ctx.beginPath();
-  ctx.moveTo(3, height * 0.52);
-  ctx.lineTo(width - 3, height * 0.52);
-  ctx.lineTo(width * 0.6, height * 0.62);
-  ctx.lineTo(width * 0.45, height * 0.53);
-  ctx.closePath();
-  ctx.fill();
-
-  // 4. Wavy Lettuce
-  ctx.fillStyle = "#22C55E";
-  ctx.beginPath();
-  ctx.roundRect(1, height * 0.4, width - 2, height * 0.14, 2);
-  ctx.fill();
-
-  // 5. Top Bun (Dome)
-  ctx.fillStyle = isDark ? "#F59E0B" : "#E08F2A";
-  ctx.beginPath();
-  ctx.roundRect(0, 0, width, height * 0.42, [10, 10, 2, 2]);
-  ctx.fill();
-
-  // Sesame seeds on top bun
-  ctx.fillStyle = "#FEF3C7";
-  const seeds = [
-    [width * 0.3, height * 0.16],
-    [width * 0.52, height * 0.12],
-    [width * 0.7, height * 0.18],
-    [width * 0.4, height * 0.26],
-  ];
-  for (const [sx, sy] of seeds) {
-    ctx.beginPath();
-    ctx.ellipse(sx, sy, 1.4, 0.8, -0.3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.restore();
-}
 
 function drawObstacle(ctx: CanvasRenderingContext2D, obs: Obstacle, isDark: boolean) {
   ctx.save();

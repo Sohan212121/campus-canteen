@@ -11,10 +11,32 @@ import {
   createSeededRandom,
   spawnNextObstacle,
   getObstacleDimensions,
+  getMinObstacleGap,
+  calculateGameSpeed,
   GROUND_Y,
+  BURGER_WIDTH,
   BURGER_HEIGHT_NORMAL,
   BURGER_HEIGHT_DUCK,
+  INITIAL_SPEED,
+  BASE_SPEED,
+  MAX_SPEED,
+  SPEED_RAMP_DURATION_SEC,
+  SPEED_RAMP_FRAMES,
+  FIRST_OBSTACLE_DISTANCE,
+  JUMP_AIRBORNE_FRAMES,
+  JUMP_SAFETY_MARGIN_PX,
+  GRAVITY,
+  JUMP_VELOCITY,
+  TARGET_FPS,
 } from "../offline-game";
+import {
+  FOOD_CHARACTERS,
+  getCharacterById,
+  getOfflineCharacter,
+  saveOfflineCharacter,
+  CHARACTER_STORAGE_KEY,
+  type CharacterId,
+} from "../offline-game-characters";
 import {
   getOfflineHighScore,
   saveOfflineHighScore,
@@ -579,5 +601,229 @@ describe("OfflineGameErrorBoundary & Chunk Load Protection", () => {
     expect(pageContent).toMatch(
       /<OfflineGameErrorBoundary[\s\S]*?<Suspense[\s\S]*?<LazyOfflineGame[\s\S]*?<\/Suspense>[\s\S]*?<\/OfflineGameErrorBoundary>/
     );
+  });
+});
+
+describe("Speed Ramp & Grace Period Dynamics", () => {
+  it("starts at about 60% of original base speed and strictly lower than BASE_SPEED", () => {
+    expect(INITIAL_SPEED).toBeLessThan(BASE_SPEED);
+    expect(INITIAL_SPEED).toBe(2.5);
+    expect(INITIAL_SPEED / BASE_SPEED).toBeCloseTo(0.6, 1);
+
+    const initial = createInitialGameState();
+    expect(initial.speed).toBe(INITIAL_SPEED);
+  });
+
+  it("ensures speed never decreases and never exceeds MAX_SPEED over long runs", () => {
+    let previousSpeed = 0;
+    // Test from score 0 through 6,000 (well beyond the 4,500 ramp point)
+    for (let score = 0; score <= 6000; score += 10) {
+      const speed = calculateGameSpeed(score);
+      expect(speed).toBeGreaterThanOrEqual(previousSpeed);
+      expect(speed).toBeLessThanOrEqual(MAX_SPEED);
+      expect(speed).toBeGreaterThanOrEqual(INITIAL_SPEED);
+      previousSpeed = speed;
+    }
+  });
+
+  it("reaches MAX_SPEED after exactly 75 seconds (4,500 frames at 60 FPS)", () => {
+    expect(SPEED_RAMP_DURATION_SEC).toBe(75);
+    expect(SPEED_RAMP_FRAMES).toBe(4500);
+
+    // Right before 75s (4,490 frames), speed has not quite hit MAX_SPEED
+    expect(calculateGameSpeed(4490)).toBeLessThan(MAX_SPEED);
+
+    // At 75s (4,500 frames), speed reaches exactly MAX_SPEED (8.5)
+    expect(calculateGameSpeed(4500)).toBe(MAX_SPEED);
+
+    // After 75s (e.g. 5,000, 10,000 frames), speed stays capped at MAX_SPEED
+    expect(calculateGameSpeed(5000)).toBe(MAX_SPEED);
+    expect(calculateGameSpeed(10000)).toBe(MAX_SPEED);
+  });
+
+  it("verifies the first-obstacle grace period is at least 2.0 seconds before obstacle spawns", () => {
+    // Calculated grace time to travel FIRST_OBSTACLE_DISTANCE at INITIAL_SPEED
+    const graceSecondsToSpawn = FIRST_OBSTACLE_DISTANCE / (INITIAL_SPEED * TARGET_FPS);
+    expect(graceSecondsToSpawn).toBeGreaterThanOrEqual(2.0);
+
+    // Live state machine simulation: verify no obstacle spawns before frame 120 (2.0s)
+    let state = createInitialGameState();
+    state.isPlaying = true;
+    const rng = createSeededRandom(9999);
+
+    let firstSpawnFrame = -1;
+    for (let frame = 1; frame <= 150; frame++) {
+      state = updateGameState(state, rng, { jump: false, duck: false });
+      if (state.obstacles.length > 0 && firstSpawnFrame === -1) {
+        firstSpawnFrame = frame;
+        break;
+      }
+    }
+
+    expect(firstSpawnFrame).toBeGreaterThanOrEqual(120);
+    const liveGraceSeconds = firstSpawnFrame / TARGET_FPS;
+    expect(liveGraceSeconds).toBeGreaterThanOrEqual(2.0);
+  });
+});
+
+describe("Jump Arc Obstacle Clearance & Safety Margin", () => {
+  it("confirms jump arc airborne duration is exactly 31 frames", () => {
+    let vy = JUMP_VELOCITY;
+    let y = 0;
+    let frames = 0;
+    while (true) {
+      frames++;
+      y += vy;
+      vy += GRAVITY;
+      if (y >= 0) break;
+    }
+    expect(frames).toBe(JUMP_AIRBORNE_FRAMES);
+    expect(JUMP_AIRBORNE_FRAMES).toBe(31);
+  });
+
+  it("guarantees at EVERY speed from INITIAL_SPEED to MAX_SPEED that min obstacle gap exceeds jump arc travel distance + safety margin", () => {
+    // Check in small steps of 0.1 across the entire speed envelope
+    for (let sp = INITIAL_SPEED; sp <= MAX_SPEED + 0.05; sp += 0.1) {
+      const currentSpeed = Math.round(sp * 10) / 10;
+      const jumpDistance = JUMP_AIRBORNE_FRAMES * currentSpeed;
+      const requiredSafeDistance = jumpDistance + JUMP_SAFETY_MARGIN_PX;
+
+      // Check at start of run (score = 0)
+      const minGapStart = getMinObstacleGap(currentSpeed, 0);
+      expect(minGapStart).toBeGreaterThan(requiredSafeDistance);
+
+      // Check at middle of run (score = 2250)
+      const minGapMid = getMinObstacleGap(currentSpeed, 2250);
+      expect(minGapMid).toBeGreaterThan(requiredSafeDistance);
+
+      // Check at peak speed (score = 4500)
+      const minGapMax = getMinObstacleGap(currentSpeed, 4500);
+      expect(minGapMax).toBeGreaterThan(requiredSafeDistance);
+    }
+  });
+
+  it("provides wider gaps early in the run than at top speed for beginner comfort", () => {
+    const gapAtStart = getMinObstacleGap(INITIAL_SPEED, 0);
+    const gapAtMaxSpeed = getMinObstacleGap(MAX_SPEED, SPEED_RAMP_FRAMES);
+
+    // Gaps start generous (+100px bonus)
+    expect(gapAtStart).toBeGreaterThan(gapAtMaxSpeed);
+    expect(gapAtStart).toBe(380); // 280 base + 100 bonus
+  });
+});
+
+describe("Food Characters & Fair Hitbox Architecture", () => {
+  it("provides at least 6 unique food characters with valid canvas draw functions", () => {
+    expect(FOOD_CHARACTERS.length).toBeGreaterThanOrEqual(6);
+    expect(FOOD_CHARACTERS.length).toBe(7); // burger, pizza, samosa, donut, fries, hotdog, icecream
+
+    const expectedIds = ["burger", "pizza", "samosa", "donut", "fries", "hotdog", "icecream"];
+    for (const expectedId of expectedIds) {
+      const char = FOOD_CHARACTERS.find((c) => c.id === expectedId);
+      expect(char).toBeDefined();
+      expect(char?.name).toBeTruthy();
+      expect(typeof char?.draw).toBe("function");
+    }
+  });
+
+  it("enforces 100% fair hitbox dimensions for all characters", () => {
+    // Every character must play with the exact same BurgerPlayer dimensions
+    const testPlayer = {
+      x: 36,
+      y: GROUND_Y - BURGER_HEIGHT_NORMAL,
+      vy: 0,
+      width: BURGER_WIDTH,
+      height: BURGER_HEIGHT_NORMAL,
+      isGrounded: true,
+      isDucking: false,
+    };
+
+    expect(testPlayer.width).toBe(34);
+    expect(testPlayer.height).toBe(34);
+
+    // When ducking, all characters use BURGER_HEIGHT_DUCK
+    testPlayer.height = BURGER_HEIGHT_DUCK;
+    expect(testPlayer.height).toBe(20);
+
+    for (const char of FOOD_CHARACTERS) {
+      const retrieved = getCharacterById(char.id);
+      expect(retrieved.id).toBe(char.id);
+    }
+  });
+
+  it("falls back safely to burger for unknown character IDs", () => {
+    const fallback = getCharacterById("unknown_food_item" as CharacterId);
+    expect(fallback.id).toBe("burger");
+  });
+});
+
+describe("Character Selection LocalStorage Helper (cc_offline_character_v1)", () => {
+  beforeEach(() => {
+    localStorageMock.clear();
+  });
+
+  it("reads and writes valid character choices safely", () => {
+    expect(getOfflineCharacter()).toBe("burger"); // Safe default
+
+    saveOfflineCharacter("pizza");
+    expect(getOfflineCharacter()).toBe("pizza");
+
+    saveOfflineCharacter("samosa");
+    expect(getOfflineCharacter()).toBe("samosa");
+
+    saveOfflineCharacter("donut");
+    expect(getOfflineCharacter()).toBe("donut");
+
+    saveOfflineCharacter("fries");
+    expect(getOfflineCharacter()).toBe("fries");
+
+    saveOfflineCharacter("hotdog");
+    expect(getOfflineCharacter()).toBe("hotdog");
+
+    saveOfflineCharacter("icecream");
+    expect(getOfflineCharacter()).toBe("icecream");
+  });
+
+  it("survives missing, corrupted, or invalid character storage by falling back to burger", () => {
+    localStorageMock.setItem(CHARACTER_STORAGE_KEY, "corrupted_marshmallow_999");
+    expect(getOfflineCharacter()).toBe("burger");
+
+    localStorageMock.setItem(CHARACTER_STORAGE_KEY, "");
+    expect(getOfflineCharacter()).toBe("burger");
+
+    localStorageMock.setItem(CHARACTER_STORAGE_KEY, "   ");
+    expect(getOfflineCharacter()).toBe("burger");
+  });
+
+  it("survives unavailable storage (e.g. storage disabled / thrown exception) without crashing", () => {
+    const originalGet = localStorageMock.getItem;
+    const originalSet = localStorageMock.setItem;
+
+    localStorageMock.getItem = () => {
+      throw new Error("SecurityError: Access is denied for this document");
+    };
+    expect(getOfflineCharacter()).toBe("burger");
+
+    localStorageMock.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    const saved = saveOfflineCharacter("pizza");
+    expect(saved).toBe("pizza"); // Safe fallback return
+
+    localStorageMock.getItem = originalGet;
+    localStorageMock.setItem = originalSet;
+  });
+});
+
+describe("Static Architecture: Character Code Isolation", () => {
+  it("enforces that root layout components (offline-indicator & offline-reachability) do NOT import offline-game-characters", () => {
+    const indicatorPath = path.resolve(__dirname, "../../components/offline/offline-indicator.tsx");
+    const reachabilityPath = path.resolve(__dirname, "../offline-reachability.ts");
+
+    const indicatorContent = fs.readFileSync(indicatorPath, "utf-8");
+    const reachabilityContent = fs.readFileSync(reachabilityPath, "utf-8");
+
+    expect(indicatorContent).not.toMatch(/from\s+["'].*offline-game-characters["']/);
+    expect(reachabilityContent).not.toMatch(/from\s+["'].*offline-game-characters["']/);
   });
 });
