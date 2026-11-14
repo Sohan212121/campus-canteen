@@ -55,6 +55,6 @@ self.addEventListener("activate", (event) => {
 2. Commit and deploy to production (Vercel).
 3. Because `next.config.ts` enforces `Cache-Control: no-cache, no-store, must-revalidate` on `/sw.js`, user browsers and TWAs will fetch the updated `sw.js` on their next visit.
 4. As soon as the tombstone activates:
-   - All offline caches (`campbite-offline-v1`) are deleted.
+   - All offline caches (`campbite-offline-v2` and earlier versions) are deleted.
    - `self.registration.unregister()` permanently removes the worker from the browser.
    - Any open tabs are refreshed to run cleanly without a service worker.

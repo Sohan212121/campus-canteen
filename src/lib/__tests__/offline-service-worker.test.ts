@@ -2,6 +2,20 @@ import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
 import path from "path";
 import { isAuthOrExemptPath } from "../../components/offline/sw-register";
+import {
+  OFFLINE_CACHE_NAME,
+  OFFLINE_URL,
+  OFFLINE_SHELL_MARKER,
+  isBypassedPath,
+  isEligibleNavigationRequest,
+  isStaleCacheName,
+} from "../offline-service-worker";
+import {
+  JUMP_TARGET_DISTANCE_START,
+  JUMP_TARGET_DISTANCE_END,
+  JUMP_PEAK_HEIGHT,
+  FAST_FALL_MULTIPLIER,
+} from "../offline-game";
 import { proxy } from "../../proxy";
 import { type NextRequest } from "next/server";
 
@@ -11,55 +25,101 @@ describe("Offline Service Worker Static Architecture & Invariants", () => {
   const offlineHtmlPath = path.join(rootDir, "public", "offline.html");
   const killSwitchDocPath = path.join(rootDir, "docs", "OFFLINE_SERVICE_WORKER_KILL_SWITCH.md");
 
-  it("verifies public/sw.js exists and precaches ONLY /offline.html", () => {
+  it("verifies public/sw.js exists and precaches ONLY /offline.html and static icons", () => {
     expect(fs.existsSync(swPath)).toBe(true);
     const swContent = fs.readFileSync(swPath, "utf-8");
 
-    // Must define cache name and marker
-    expect(swContent).toContain("campbite-offline-v1");
-    expect(swContent).toContain("CAMPBITE_OFFLINE_SHELL_V1");
-    expect(swContent).toContain("/offline.html");
+    // Must define bumped cache name and marker
+    expect(swContent).toContain("campbite-offline-v2");
+    expect(swContent).toContain("CAMPBITE_OFFLINE_SHELL_V2");
+    expect(swContent).toContain(OFFLINE_URL);
 
-    // Static test: sw.js must NOT put any dynamic request into the cache
+    // Static behavioural test: sw.js must NOT put any dynamic request into the cache
     expect(swContent).not.toMatch(/cache\.(put|add)\s*\(\s*event\.request/);
     expect(swContent).not.toMatch(/caches\.open\([^)]+\)\.then\([^)]*put\s*\([^)]*event\.request/);
 
-    // Static test: the ONLY URL cached must be OFFLINE_URL (/offline.html)
+    // Static behavioural test: the ONLY URLs put into cache are OFFLINE_URL and static icon paths
     const putCalls = swContent.match(/cache\.(put|add)\s*\([^)]+\)/g) || [];
     for (const call of putCalls) {
-      expect(call).toMatch(/OFFLINE_URL|"\/?offline\.html"/);
+      expect(call).toMatch(/OFFLINE_URL|iconUrl|"\/?offline\.html"/);
     }
+
+    // Static behavioural test: checks request method GET and navigation mode
+    expect(swContent).toContain('event.request.method !== "GET"');
+    expect(swContent).toContain('event.request.mode !== "navigate"');
+    expect(swContent).toContain("url.origin !== self.location.origin");
+
+    // Network timeout is set to about 15 seconds
+    expect(swContent).toMatch(/15000/);
   });
 
-  it("verifies public/offline.html exists, is self-contained, and stays under 100 KB", () => {
+  it("verifies public/offline.html exists, is self-contained, and stays under 150 KB", () => {
     expect(fs.existsSync(offlineHtmlPath)).toBe(true);
     const stats = fs.statSync(offlineHtmlPath);
     const content = fs.readFileSync(offlineHtmlPath, "utf-8");
 
-    // File size budget: strictly under 100 KB
-    expect(stats.size).toBeLessThan(100 * 1024);
-    expect(stats.size).toBeGreaterThan(10 * 1024); // contains embedded base64 artwork
+    // File size budget: strictly under 150 KB and has content (> 10 KB)
+    expect(stats.size).toBeLessThan(150 * 1024);
+    expect(stats.size).toBeGreaterThan(10 * 1024);
 
     // Contains mandatory verification marker
-    expect(content).toContain("<!-- CAMPBITE_OFFLINE_SHELL_V1 -->");
+    expect(content).toContain("<!-- CAMPBITE_OFFLINE_SHELL_V2 -->");
 
     // Contains offline reassurance and friendly wording
     expect(content).toContain("You're offline");
     expect(content).toContain("Orders you have already placed are safe.");
     expect(content).toContain("Retry Connection");
 
-    // Embeds both light and dark base64 data URIs preserving the official brand artwork
+    // Embeds both light and dark base64 data URIs preserving official brand artwork
     expect(content).toContain("data:image/png;base64,");
     expect(content).toContain('alt="C@MPBITE"');
 
-    // Theme detection: reads next-themes key "theme" in try/catch without writing to storage
+    // Theme detection: reads next-themes key "theme" in try/catch without writing to theme storage
     expect(content).toContain('localStorage.getItem("theme")');
-    expect(content).not.toContain("localStorage.setItem");
+    expect(content).not.toContain('localStorage.setItem("theme"');
 
     // Retry button throttles reloads to at most once per 5 seconds and handles "online" event
     expect(content).toContain("addEventListener");
     expect(content).toContain('"online"');
     expect(content).toContain("5000");
+  });
+
+  it("verifies the embedded offline game in public/offline.html matches exact jump constants from src/lib/offline-game.ts", () => {
+    const content = fs.readFileSync(offlineHtmlPath, "utf-8");
+
+    // Extract constants from embedded standalone script in public/offline.html
+    const startDistMatch = content.match(/JUMP_TARGET_DISTANCE_START\s*=\s*(\d+(?:\.\d+)?)/);
+    const endDistMatch = content.match(/JUMP_TARGET_DISTANCE_END\s*=\s*(\d+(?:\.\d+)?)/);
+    const peakHeightMatch = content.match(/JUMP_PEAK_HEIGHT\s*=\s*(\d+(?:\.\d+)?)/);
+    const fastFallMatch = content.match(/FAST_FALL_MULTIPLIER\s*=\s*(\d+(?:\.\d+)?)/);
+
+    expect(startDistMatch).not.toBeNull();
+    expect(endDistMatch).not.toBeNull();
+    expect(peakHeightMatch).not.toBeNull();
+    expect(fastFallMatch).not.toBeNull();
+
+    const htmlStartDist = parseFloat(startDistMatch![1]);
+    const htmlEndDist = parseFloat(endDistMatch![1]);
+    const htmlPeakHeight = parseFloat(peakHeightMatch![1]);
+    const htmlFastFall = parseFloat(fastFallMatch![1]);
+
+    // Fails if any constant differs from src/lib/offline-game.ts
+    expect(htmlStartDist).toBe(JUMP_TARGET_DISTANCE_START);
+    expect(htmlEndDist).toBe(JUMP_TARGET_DISTANCE_END);
+    expect(htmlPeakHeight).toBe(JUMP_PEAK_HEIGHT);
+    expect(htmlFastFall).toBe(FAST_FALL_MULTIPLIER);
+
+    // Verify expected physical numerical values
+    expect(htmlStartDist).toBe(205);
+    expect(htmlEndDist).toBe(126);
+    expect(htmlPeakHeight).toBe(86);
+    expect(htmlFastFall).toBe(2.2);
+
+    // Verify canvas and game controls exist in HTML
+    expect(content).toContain('id="offline-game-canvas"');
+    expect(content).toContain('id="play-game-btn"');
+    expect(content).toContain('id="close-game-btn"');
+    expect(content).toContain("cc_offline_highscore_v1");
   });
 
   it("verifies docs/OFFLINE_SERVICE_WORKER_KILL_SWITCH.md documents tombstone worker", () => {
@@ -69,29 +129,99 @@ describe("Offline Service Worker Static Architecture & Invariants", () => {
     expect(docContent).toContain("self.registration.unregister()");
     expect(docContent).toContain("caches.delete");
     expect(docContent).toContain("skipWaiting()");
+    expect(docContent).toContain("campbite-offline-v2");
+  });
+});
+
+describe("Pure Helper Functions: isEligibleNavigationRequest & isStaleCacheName", () => {
+  const origin = "https://example.com";
+
+  it("allows standard GET navigation requests on student routes", () => {
+    expect(
+      isEligibleNavigationRequest({ method: "GET", mode: "navigate", url: `${origin}/` }, origin)
+    ).toBe(true);
+    expect(
+      isEligibleNavigationRequest({ method: "GET", mode: "navigate", url: `${origin}/menu` }, origin)
+    ).toBe(true);
+    expect(
+      isEligibleNavigationRequest({ method: "GET", mode: "navigate", url: `${origin}/cart` }, origin)
+    ).toBe(true);
+    expect(
+      isEligibleNavigationRequest({ method: "GET", mode: "navigate", url: `${origin}/orders` }, origin)
+    ).toBe(true);
+  });
+
+  it("rejects non-GET requests", () => {
+    expect(
+      isEligibleNavigationRequest({ method: "POST", mode: "navigate", url: `${origin}/menu` }, origin)
+    ).toBe(false);
+    expect(
+      isEligibleNavigationRequest({ method: "PUT", mode: "navigate", url: `${origin}/cart` }, origin)
+    ).toBe(false);
+    expect(
+      isEligibleNavigationRequest({ method: "DELETE", mode: "navigate", url: `${origin}/orders` }, origin)
+    ).toBe(false);
+  });
+
+  it("rejects non-navigation requests (assets, api fetches, subresources)", () => {
+    expect(
+      isEligibleNavigationRequest({ method: "GET", mode: "cors", url: `${origin}/menu` }, origin)
+    ).toBe(false);
+    expect(
+      isEligibleNavigationRequest({ method: "GET", mode: "no-cors", url: `${origin}/image.png` }, origin)
+    ).toBe(false);
+    expect(
+      isEligibleNavigationRequest({ method: "GET", mode: "same-origin", url: `${origin}/script.js` }, origin)
+    ).toBe(false);
+  });
+
+  it("rejects cross-origin requests", () => {
+    expect(
+      isEligibleNavigationRequest(
+        { method: "GET", mode: "navigate", url: "https://evil.com/menu" },
+        origin
+      )
+    ).toBe(false);
+    expect(
+      isEligibleNavigationRequest(
+        { method: "GET", mode: "navigate", url: "https://auth.supabase.co/" },
+        origin
+      )
+    ).toBe(false);
+  });
+
+  it.each([
+    "/login",
+    "/signup",
+    "/forgot-password",
+    "/set-password",
+    "/auth",
+    "/auth/confirm",
+    "/auth/callback",
+    "/auth/deactivated",
+    "/api",
+    "/api/orders",
+    "/api/orders/123/pickup-code",
+    "/_next/data/123/menu.json",
+  ])("rejects bypassed auth, api, and data route: %s", (path) => {
+    expect(
+      isEligibleNavigationRequest(
+        { method: "GET", mode: "navigate", url: `${origin}${path}` },
+        origin
+      )
+    ).toBe(false);
+    expect(isBypassedPath(path)).toBe(true);
+  });
+
+  it("identifies stale cache names for automatic purging during activate", () => {
+    expect(isStaleCacheName("campbite-offline-v1", OFFLINE_CACHE_NAME)).toBe(true);
+    expect(isStaleCacheName("campbite-offline-v0", OFFLINE_CACHE_NAME)).toBe(true);
+    expect(isStaleCacheName("workbox-precache", OFFLINE_CACHE_NAME)).toBe(true);
+    expect(isStaleCacheName("campbite-offline-v2", OFFLINE_CACHE_NAME)).toBe(false);
   });
 });
 
 describe("Service Worker Filter & Bypass Rules", () => {
-  // Extract and simulate isBypassedPath logic from sw.js
-  function isBypassedPath(pathname: string): boolean {
-    const p = pathname.toLowerCase();
-    return (
-      p === "/login" ||
-      p.startsWith("/login/") ||
-      p === "/signup" ||
-      p.startsWith("/signup/") ||
-      p === "/forgot-password" ||
-      p.startsWith("/forgot-password/") ||
-      p === "/set-password" ||
-      p.startsWith("/set-password/") ||
-      p === "/auth" ||
-      p.startsWith("/auth/") ||
-      p === "/api" ||
-      p.startsWith("/api/")
-    );
-  }
-
   it.each([
     "/login",
     "/signup",
@@ -128,7 +258,7 @@ describe("Service Worker Precache Validation & Redirect Protection", () => {
       ok: true,
       redirected: true,
       headers: new Headers({ "content-type": "text/html" }),
-      clone: () => ({ text: async () => "CAMPBITE_OFFLINE_SHELL_V1" }),
+      clone: () => ({ text: async () => OFFLINE_SHELL_MARKER }),
     };
 
     const validate = (res: typeof mockRedirectedResponse) => {
@@ -146,7 +276,7 @@ describe("Service Worker Precache Validation & Redirect Protection", () => {
       status: 500,
       redirected: false,
       headers: new Headers({ "content-type": "text/html" }),
-      clone: () => ({ text: async () => "CAMPBITE_OFFLINE_SHELL_V1" }),
+      clone: () => ({ text: async () => OFFLINE_SHELL_MARKER }),
     };
 
     const validate = (res: typeof mock500Response) => {
@@ -166,7 +296,7 @@ describe("Service Worker Precache Validation & Redirect Protection", () => {
 
     const validateAsync = async (res: typeof mockMissingMarkerResponse) => {
       const text = await res.clone().text();
-      if (!text.includes("CAMPBITE_OFFLINE_SHELL_V1")) {
+      if (!text.includes(OFFLINE_SHELL_MARKER)) {
         throw new Error("Precache rejected: missing marker string");
       }
     };
@@ -223,7 +353,6 @@ describe("Proxy Bypass Integration for Service Worker Assets", () => {
   it("passes /sw.js through without redirecting even when user is signed out", async () => {
     const req = createMockRequest("/sw.js");
     const res = await proxy(req);
-    // Location header must be null (not redirected to /login)
     expect(res.headers.get("location")).toBeNull();
   });
 
