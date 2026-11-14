@@ -24,6 +24,14 @@ export const BASE_SPEED = 4.2;
 export const MAX_SPEED = 8.5;
 export const REDUCED_MOTION_SPEED = 3.6;
 
+// Tunable variable jump arc constants (inverse scaling: longer jump at start, snappier/shorter at high speed)
+export const JUMP_TARGET_DISTANCE_START = 205; // Tunable: 195 to 210 px (at INITIAL_SPEED)
+export const JUMP_TARGET_DISTANCE_END = 126;   // Tunable: 122 to 135 px (at MAX_SPEED)
+export const JUMP_PEAK_HEIGHT = 86;            // Target peak height in pixels (matches baseline ~85-90px)
+export const FAST_FALL_MULTIPLIER = 2.2;       // Downward gravity multiplier when duck is held in air
+export const OBSTACLE_MAX_WIDTH = 38;          // Widest obstacle (large trays: 38px)
+export const JUMP_SAFETY_MARGIN_PX = 40;       // Safety margin added to gap clearance
+
 // Speed ramp: smoothly ramps from INITIAL_SPEED to MAX_SPEED over 75 seconds (at 60 FPS = 4,500 frames / score)
 export const SPEED_RAMP_DURATION_SEC = 75;
 export const TARGET_FPS = 60;
@@ -32,9 +40,8 @@ export const SPEED_RAMP_FRAMES = SPEED_RAMP_DURATION_SEC * TARGET_FPS; // 4500 f
 // Grace period: player runs 320px (at least 120 frames = 2.0s with speed ramp) before the first obstacle spawns
 export const FIRST_OBSTACLE_DISTANCE = 320;
 
-// Jump arc dynamics: at GRAVITY=0.78 and JUMP_VELOCITY=-11.5, player stays airborne for 31 frames.
+// Legacy baseline reference airtime
 export const JUMP_AIRBORNE_FRAMES = 31;
-export const JUMP_SAFETY_MARGIN_PX = 50;
 
 import {
   HIGH_SCORE_STORAGE_KEY,
@@ -81,6 +88,7 @@ export interface BurgerPlayer {
   height: number;
   isGrounded: boolean;
   isDucking: boolean;
+  jumpGravity: number;
 }
 
 export interface GameState {
@@ -162,19 +170,51 @@ export function calculateGameSpeed(
 }
 
 /**
+ * Target horizontal jump distance as a smooth, continuous linear function of current speed.
+ * Starts longer at INITIAL_SPEED (205px) and shortens smoothly to (126px) at MAX_SPEED.
+ */
+export function getTargetJumpDistance(speed: number): number {
+  const clampedSpeed = Math.min(Math.max(speed, INITIAL_SPEED), MAX_SPEED);
+  const progress = (clampedSpeed - INITIAL_SPEED) / (MAX_SPEED - INITIAL_SPEED);
+  return (
+    JUMP_TARGET_DISTANCE_START -
+    (JUMP_TARGET_DISTANCE_START - JUMP_TARGET_DISTANCE_END) * progress
+  );
+}
+
+/**
+ * Derives initial jump velocity (v0 = 4H/T) and gravity (g = 8H/T^2) from the target
+ * peak height H and airtime T at the moment the jump starts.
+ */
+export function calculateJumpPhysics(speed: number): {
+  v0: number;
+  gravity: number;
+  targetAirtime: number;
+} {
+  const targetDistance = getTargetJumpDistance(speed);
+  const targetAirtime = targetDistance / Math.max(speed, 0.1);
+  const v0 = -(4 * JUMP_PEAK_HEIGHT) / targetAirtime;
+  const gravity = (8 * JUMP_PEAK_HEIGHT) / (targetAirtime * targetAirtime);
+  return { v0, gravity, targetAirtime };
+}
+
+/**
  * Calculates the minimum possible gap between two consecutive obstacles at a given speed and score.
  *
- * Mathematical guarantee:
+ * Mathematical & gameplay guarantee:
  * - At every speed from INITIAL_SPEED to MAX_SPEED:
- *   minGap >= Math.ceil(JUMP_AIRBORNE_FRAMES * speed + JUMP_SAFETY_MARGIN_PX)
- * - That guarantees the player can always complete a full jump arc over one obstacle,
- *   land cleanly on the ground, and have ample safety margin before encountering the next obstacle.
+ *   minGap >= jumpDistance + OBSTACLE_MAX_WIDTH + BURGER_WIDTH + JUMP_SAFETY_MARGIN_PX
+ * - Guarantees that even at peak jump distance, a player jumping over one obstacle will land
+ *   safely with ample margin before encountering the next obstacle.
+ * - Never smaller than the 280px base gap.
  * - Early in the run (score 0), a generous bonus gap (up to +100px) is added for beginner comfort.
  */
 export function getMinObstacleGap(speed: number, score: number = 0): number {
-  const jumpArcDistance = JUMP_AIRBORNE_FRAMES * speed;
-  // Ensure the base gap is strictly larger than jumpArcDistance + JUMP_SAFETY_MARGIN_PX with an additional buffer
-  const safeBaseGap = Math.max(280, Math.ceil(jumpArcDistance + JUMP_SAFETY_MARGIN_PX + 12));
+  const jumpDistance = getTargetJumpDistance(speed);
+  const clearanceRequired = Math.ceil(
+    jumpDistance + OBSTACLE_MAX_WIDTH + BURGER_WIDTH + JUMP_SAFETY_MARGIN_PX
+  );
+  const safeBaseGap = Math.max(280, clearanceRequired);
 
   const progress = Math.min(Math.max(score, 0) / SPEED_RAMP_FRAMES, 1);
   const earlyGapBonus = Math.round(100 * (1 - progress));
@@ -250,6 +290,7 @@ export function createInitialGameState(highScore: number = 0): GameState {
       height: BURGER_HEIGHT_NORMAL,
       isGrounded: true,
       isDucking: false,
+      jumpGravity: GRAVITY,
     },
     obstacles: [],
     score: 0,
@@ -287,13 +328,19 @@ export function updateGameState(
 
   // Handle Jump
   if (input.jump && player.isGrounded) {
-    player.vy = JUMP_VELOCITY;
+    const { v0, gravity } = calculateJumpPhysics(state.speed);
+    player.vy = v0;
+    player.jumpGravity = gravity;
     player.isGrounded = false;
   }
 
-  // Apply Gravity
+  // Apply Gravity & Fast-Fall
   if (!player.isGrounded) {
-    player.vy += GRAVITY;
+    // When duck is held while airborne, fast-fall accelerates downward descent
+    const effectiveGravity = input.duck
+      ? player.jumpGravity * FAST_FALL_MULTIPLIER
+      : player.jumpGravity;
+    player.vy += effectiveGravity;
     player.y += player.vy;
 
     // Check ground collision
@@ -302,6 +349,7 @@ export function updateGameState(
       player.y = targetGroundY;
       player.vy = 0;
       player.isGrounded = true;
+      player.jumpGravity = GRAVITY;
     }
   }
 

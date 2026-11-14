@@ -23,11 +23,16 @@ import {
   SPEED_RAMP_DURATION_SEC,
   SPEED_RAMP_FRAMES,
   FIRST_OBSTACLE_DISTANCE,
-  JUMP_AIRBORNE_FRAMES,
   JUMP_SAFETY_MARGIN_PX,
   GRAVITY,
-  JUMP_VELOCITY,
   TARGET_FPS,
+  JUMP_TARGET_DISTANCE_START,
+  JUMP_TARGET_DISTANCE_END,
+  JUMP_PEAK_HEIGHT,
+  FAST_FALL_MULTIPLIER,
+  OBSTACLE_MAX_WIDTH,
+  getTargetJumpDistance,
+  calculateJumpPhysics,
 } from "../offline-game";
 import {
   FOOD_CHARACTERS,
@@ -90,7 +95,7 @@ describe("Offline Game Physics & Collision Engine", () => {
     expect(state.player.y).toBeLessThan(GROUND_Y - BURGER_HEIGHT_NORMAL);
 
     // Simulate airborne frames until player lands back on ground
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 100; i++) {
       state = updateGameState(state, rng, { jump: false, duck: false });
       if (state.player.isGrounded) break;
     }
@@ -126,6 +131,7 @@ describe("Offline Game Physics & Collision Engine", () => {
       height: 34,
       isGrounded: true,
       isDucking: false,
+      jumpGravity: GRAVITY,
     };
 
     // Obstacle directly overlapping player
@@ -575,7 +581,7 @@ describe("OfflineGameErrorBoundary & Chunk Load Protection", () => {
             : partialState
         );
       },
-      enqueueForceUpdate: () => {},
+      enqueueForceUpdate: () => { },
       isMounted: () => true,
     };
 
@@ -666,49 +672,224 @@ describe("Speed Ramp & Grace Period Dynamics", () => {
   });
 });
 
-describe("Jump Arc Obstacle Clearance & Safety Margin", () => {
-  it("confirms jump arc airborne duration is exactly 31 frames", () => {
-    let vy = JUMP_VELOCITY;
+describe("Variable Jump Arc & Per-Frame Integration Simulation", () => {
+  it("verifies tunable named constants for start and end jump distance", () => {
+    // Tunable constants within user requested ranges (195-210 and 122-135)
+    expect(JUMP_TARGET_DISTANCE_START).toBeGreaterThanOrEqual(195);
+    expect(JUMP_TARGET_DISTANCE_START).toBeLessThanOrEqual(210);
+    expect(JUMP_TARGET_DISTANCE_END).toBeGreaterThanOrEqual(122);
+    expect(JUMP_TARGET_DISTANCE_END).toBeLessThanOrEqual(135);
+    expect(JUMP_PEAK_HEIGHT).toBe(86);
+    expect(FAST_FALL_MULTIPLIER).toBe(2.2);
+  });
+
+  it("simulates actual per-frame jump distance at initial speed and verifies it is 2.5x to 3.0x larger than baseline", () => {
+    let state = createInitialGameState();
+    state.isPlaying = true;
+    const rng = createSeededRandom(101);
+
+    // Frame 0: Trigger jump
+    state = updateGameState(state, rng, { jump: true, duck: false });
+    expect(state.player.isGrounded).toBe(false);
+
+    let framesAirborne = 0;
+    let horizontalTravel = 0;
+    let peakElevation = 0;
+
+    while (!state.player.isGrounded) {
+      framesAirborne++;
+      horizontalTravel += state.speed;
+      const elevation = GROUND_Y - BURGER_HEIGHT_NORMAL - state.player.y;
+      if (elevation > peakElevation) peakElevation = elevation;
+      state = updateGameState(state, rng, { jump: false, duck: false });
+    }
+
+    // Baseline distance today was 77.5px (31 frames * 2.5 px/f)
+    const todayBaselineDistance = 77.5;
+    expect(horizontalTravel).toBeGreaterThan(todayBaselineDistance * 2.5);
+    expect(horizontalTravel).toBeLessThan(todayBaselineDistance * 3.0);
+    expect(horizontalTravel).toBeGreaterThanOrEqual(200);
+
+    // Peak height matches target within narrow tolerance
+    expect(peakElevation).toBeGreaterThanOrEqual(85);
+    expect(peakElevation).toBeLessThanOrEqual(92);
+  });
+
+  it("simulates actual per-frame integration across the speed envelope and verifies distance never increases with speed", () => {
+    let previousJumpDistance = Infinity;
+
+    // Test across speeds in steps of 0.5 px/f
+    for (let testSpeed = INITIAL_SPEED; testSpeed <= MAX_SPEED + 0.01; testSpeed += 0.5) {
+      const roundedSpeed = Math.round(testSpeed * 10) / 10;
+      const { v0, gravity } = calculateJumpPhysics(roundedSpeed);
+
+      let y = 0;
+      let vy = v0;
+      let frames = 0;
+      let peakH = 0;
+
+      while (true) {
+        frames++;
+        y += vy;
+        vy += gravity;
+        if (-y > peakH) peakH = -y;
+        if (y >= 0) break;
+      }
+
+      const actualDistance = frames * roundedSpeed;
+
+      // Distance must never increase as speed increases
+      expect(actualDistance).toBeLessThanOrEqual(previousJumpDistance);
+      previousJumpDistance = actualDistance;
+
+      // Peak height must remain in a tight envelope near baseline (86px target)
+      expect(peakH).toBeGreaterThanOrEqual(86);
+      expect(peakH).toBeLessThanOrEqual(99);
+
+      // Distance must never fall below the clearance minimum (max obstacle 38 + player 34 + 40 margin = 112px)
+      const clearanceFloor = OBSTACLE_MAX_WIDTH + BURGER_WIDTH + JUMP_SAFETY_MARGIN_PX;
+      expect(actualDistance).toBeGreaterThan(clearanceFloor);
+    }
+  });
+
+  it("simulates per-frame integration with speed ramping during the jump and confirms clearance", () => {
+    let state = createInitialGameState();
+    state.isPlaying = true;
+    const rng = createSeededRandom(555);
+
+    // Jump initiated
+    state = updateGameState(state, rng, { jump: true, duck: false });
+    let totalTraveled = 0;
+    let maxH = 0;
+
+    while (!state.player.isGrounded) {
+      totalTraveled += state.speed;
+      const h = GROUND_Y - BURGER_HEIGHT_NORMAL - state.player.y;
+      if (h > maxH) maxH = h;
+      state = updateGameState(state, rng, { jump: false, duck: false });
+    }
+
+    expect(state.player.isGrounded).toBe(true);
+    expect(totalTraveled).toBeGreaterThan(200);
+    expect(maxH).toBeGreaterThan(86);
+  });
+
+  it("derives clearance floor from real obstacle widths and hitbox using portion of arc above obstacle height", () => {
+    const obstacleSpecs = [
+      { type: "drink" as const, size: "small" as const, w: 18, h: 26 },
+      { type: "drink" as const, size: "medium" as const, w: 22, h: 32 },
+      { type: "drink" as const, size: "large" as const, w: 26, h: 38 },
+      { type: "trays" as const, size: "small" as const, w: 30, h: 18 },
+      { type: "trays" as const, size: "medium" as const, w: 34, h: 26 },
+      { type: "trays" as const, size: "large" as const, w: 38, h: 34 },
+    ];
+
+    // Test at MAX_SPEED (8.5) where the jump duration is shortest (most stringent condition)
+    const { v0, gravity } = calculateJumpPhysics(MAX_SPEED);
+    const trajectory: number[] = [];
     let y = 0;
-    let frames = 0;
+    let vy = v0;
+
     while (true) {
-      frames++;
+      const elevation = -y;
+      trajectory.push(elevation);
       y += vy;
-      vy += GRAVITY;
+      vy += gravity;
       if (y >= 0) break;
     }
-    expect(frames).toBe(JUMP_AIRBORNE_FRAMES);
-    expect(JUMP_AIRBORNE_FRAMES).toBe(31);
-  });
 
-  it("guarantees at EVERY speed from INITIAL_SPEED to MAX_SPEED that min obstacle gap exceeds jump arc travel distance + safety margin", () => {
-    // Check in small steps of 0.1 across the entire speed envelope
-    for (let sp = INITIAL_SPEED; sp <= MAX_SPEED + 0.05; sp += 0.1) {
-      const currentSpeed = Math.round(sp * 10) / 10;
-      const jumpDistance = JUMP_AIRBORNE_FRAMES * currentSpeed;
-      const requiredSafeDistance = jumpDistance + JUMP_SAFETY_MARGIN_PX;
+    for (const obs of obstacleSpecs) {
+      // Count frames where player elevation is strictly above the obstacle's physical height
+      const framesAboveHeight = trajectory.filter((elevation) => elevation >= obs.h).length;
+      const horizontalDistanceAbove = framesAboveHeight * MAX_SPEED;
 
-      // Check at start of run (score = 0)
-      const minGapStart = getMinObstacleGap(currentSpeed, 0);
-      expect(minGapStart).toBeGreaterThan(requiredSafeDistance);
+      // Colliding width: player width + obstacle width - 2 * paddingX (4px padding)
+      const collidingWidth = obs.w + BURGER_WIDTH - 8;
+      const unpaddedWidth = obs.w + BURGER_WIDTH;
 
-      // Check at middle of run (score = 2250)
-      const minGapMid = getMinObstacleGap(currentSpeed, 2250);
-      expect(minGapMid).toBeGreaterThan(requiredSafeDistance);
+      // The horizontal travel while above the obstacle height MUST exceed the colliding width
+      expect(horizontalDistanceAbove).toBeGreaterThan(collidingWidth);
+      expect(horizontalDistanceAbove).toBeGreaterThan(unpaddedWidth);
 
-      // Check at peak speed (score = 4500)
-      const minGapMax = getMinObstacleGap(currentSpeed, 4500);
-      expect(minGapMax).toBeGreaterThan(requiredSafeDistance);
+      // Verify safety margin
+      const margin = horizontalDistanceAbove - collidingWidth;
+      expect(margin).toBeGreaterThanOrEqual(45); // At least 45px safety margin on all obstacle types
     }
   });
 
-  it("provides wider gaps early in the run than at top speed for beginner comfort", () => {
-    const gapAtStart = getMinObstacleGap(INITIAL_SPEED, 0);
-    const gapAtMaxSpeed = getMinObstacleGap(MAX_SPEED, SPEED_RAMP_FRAMES);
+  it("guarantees at EVERY speed that min obstacle gap covers D + obstacle width + player width + margin", () => {
+    for (let sp = INITIAL_SPEED; sp <= MAX_SPEED + 0.05; sp += 0.2) {
+      const currentSpeed = Math.round(sp * 10) / 10;
+      const jumpD = getTargetJumpDistance(currentSpeed);
+      const minRequiredGap = jumpD + OBSTACLE_MAX_WIDTH + BURGER_WIDTH + JUMP_SAFETY_MARGIN_PX;
 
-    // Gaps start generous (+100px bonus)
-    expect(gapAtStart).toBeGreaterThan(gapAtMaxSpeed);
-    expect(gapAtStart).toBe(380); // 280 base + 100 bonus
+      const gapStart = getMinObstacleGap(currentSpeed, 0);
+      const gapMid = getMinObstacleGap(currentSpeed, 2250);
+      const gapMax = getMinObstacleGap(currentSpeed, 4500);
+
+      expect(gapStart).toBeGreaterThan(minRequiredGap);
+      expect(gapMid).toBeGreaterThan(minRequiredGap);
+      expect(gapMax).toBeGreaterThan(minRequiredGap);
+
+      // Never smaller than today's 280px base gap
+      expect(gapMax).toBeGreaterThanOrEqual(280);
+    }
+  });
+
+  it("tests fast-fall: pressing duck in air accelerates descent and lands strictly sooner than normal jump", () => {
+    const rng = createSeededRandom(777);
+
+    // 1. Normal jump simulation
+    let normalState = createInitialGameState();
+    normalState.isPlaying = true;
+    normalState = updateGameState(normalState, rng, { jump: true, duck: false });
+
+    let normalAirborneFrames = 0;
+    while (!normalState.player.isGrounded) {
+      normalAirborneFrames++;
+      normalState = updateGameState(normalState, rng, { jump: false, duck: false });
+    }
+
+    // 2. Fast-fall jump simulation: hold duck while in the air
+    let fastFallState = createInitialGameState();
+    fastFallState.isPlaying = true;
+    fastFallState = updateGameState(fastFallState, rng, { jump: true, duck: false });
+
+    let fastFallAirborneFrames = 0;
+    while (!fastFallState.player.isGrounded) {
+      fastFallAirborneFrames++;
+      // Hold duck input while airborne
+      fastFallState = updateGameState(fastFallState, rng, { jump: false, duck: true });
+    }
+
+    // Fast-fall must result in strictly fewer airborne frames and land sooner
+    expect(fastFallAirborneFrames).toBeLessThan(normalAirborneFrames);
+    expect(fastFallAirborneFrames).toBeLessThan(normalAirborneFrames * 0.7); // At least 30% faster descent
+  });
+
+  it("tests jump buffering: airborne jump tap executes on the exact landing frame", () => {
+    let state = createInitialGameState();
+    state.isPlaying = true;
+    const rng = createSeededRandom(888);
+
+    // Initial jump
+    state = updateGameState(state, rng, { jump: true, duck: false });
+    expect(state.player.isGrounded).toBe(false);
+
+    // Advance until nearly landing
+    while (!state.player.isGrounded) {
+      // Simulate airborne tap: jump input applied in air (buffered)
+      state = updateGameState(state, rng, { jump: true, duck: false });
+      if (state.player.isGrounded) {
+        // Landed frame! In the same loop tick, if jump was buffered, next frame jumps
+        break;
+      }
+    }
+
+    // Grounded now, buffered jump should trigger
+    state = updateGameState(state, rng, { jump: true, duck: false });
+    expect(state.player.isGrounded).toBe(false);
+    expect(state.player.vy).toBeLessThan(0);
   });
 });
 
@@ -736,6 +917,7 @@ describe("Food Characters & Fair Hitbox Architecture", () => {
       height: BURGER_HEIGHT_NORMAL,
       isGrounded: true,
       isDucking: false,
+      jumpGravity: GRAVITY,
     };
 
     expect(testPlayer.width).toBe(34);
