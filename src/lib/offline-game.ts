@@ -17,8 +17,8 @@ export const BURGER_WIDTH = 34;
 export const BURGER_HEIGHT_NORMAL = 34;
 export const BURGER_HEIGHT_DUCK = 20;
 
-export const GRAVITY = 0.65;
-export const JUMP_VELOCITY = -10.5;
+export const GRAVITY = 0.78;
+export const JUMP_VELOCITY = -11.5;
 export const BASE_SPEED = 4.2;
 export const MAX_SPEED = 8.5;
 export const REDUCED_MOTION_SPEED = 3.6;

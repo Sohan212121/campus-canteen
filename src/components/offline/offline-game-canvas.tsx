@@ -28,6 +28,8 @@ export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void })
   const animFrameIdRef = useRef<number | null>(null);
   const inputRef = useRef<{ jump: boolean; duck: boolean }>({ jump: false, duck: false });
   const legCycleRef = useRef<number>(0);
+  const lastJumpTimeRef = useRef<number>(0);
+  const JUMP_BUFFER_MS = 220;
 
   // Canvas Drawing Routine
   const drawCanvas = useCallback(() => {
@@ -121,16 +123,14 @@ export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void })
     onGameStart?.();
   }, [onGameStart]);
 
-  // Jump trigger
+  // Jump trigger with instant response & jump buffering
   const triggerJump = useCallback(() => {
     if (gameStatusRef.current !== "playing") {
       handleStartGame();
       return;
     }
+    lastJumpTimeRef.current = Date.now();
     inputRef.current.jump = true;
-    setTimeout(() => {
-      inputRef.current.jump = false;
-    }, 120);
   }, [handleStartGame]);
 
   // Keyboard controls with scroll protection ONLY while playing
@@ -185,10 +185,25 @@ export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void })
     const loop = () => {
       const current = stateRef.current;
       if (current && current.isPlaying && !current.isGameOver) {
+        const now = Date.now();
+        const isJumpBuffered = now - lastJumpTimeRef.current <= JUMP_BUFFER_MS;
+        if (isJumpBuffered) {
+          inputRef.current.jump = true;
+        }
+
+        const wasGrounded = current.player.isGrounded;
         legCycleRef.current = (legCycleRef.current + 0.25) % (Math.PI * 2);
         const next = updateGameState(current, rngRef.current, inputRef.current, {
           prefersReducedMotion,
         });
+
+        // Consume jump buffer immediately once the jump has executed from ground
+        if (wasGrounded && !next.player.isGrounded) {
+          lastJumpTimeRef.current = 0;
+          inputRef.current.jump = false;
+        } else if (!isJumpBuffered) {
+          inputRef.current.jump = false;
+        }
 
         if (next.isGameOver) {
           saveOfflineHighScore(next.score);
@@ -210,10 +225,17 @@ export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void })
   }, [drawCanvas, prefersReducedMotion]);
 
   return (
-    <div className="w-full flex flex-col items-center select-none">
+    <div className="w-full flex flex-col items-center select-none touch-manipulation">
       <div
-        className="relative w-full max-w-[375px] rounded-xl overflow-hidden border border-[#D4C7B0] dark:border-[#2A2E3D] bg-[#F7F2E8] dark:bg-[#0B0D13] shadow-inner cursor-pointer"
-        onClick={triggerJump}
+        className="relative w-full max-w-[375px] rounded-xl overflow-hidden border border-[#D4C7B0] dark:border-[#2A2E3D] bg-[#F7F2E8] dark:bg-[#0B0D13] shadow-inner cursor-pointer select-none touch-manipulation"
+        style={{ touchAction: "manipulation" }}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          triggerJump();
+        }}
+        onClick={(e) => {
+          e.preventDefault();
+        }}
         role="button"
         tabIndex={0}
         aria-label={
@@ -228,22 +250,31 @@ export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void })
           ref={canvasRef}
           width={GAME_CANVAS_WIDTH}
           height={GAME_CANVAS_HEIGHT}
-          className="w-full h-auto block"
+          className="w-full h-auto block select-none pointer-events-none"
         />
       </div>
 
-      {/* Touch action controls for smartphone safety */}
+      {/* Touch action controls with instantaneous zero-latency pointerdown response */}
       <div className="flex items-center gap-3 mt-3 w-full max-w-[375px]">
         <button
           type="button"
-          onClick={triggerJump}
-          className="flex-1 h-11 min-h-[44px] rounded-xl bg-[#D9531E] dark:bg-[#FACC15] text-white dark:text-[#090A0F] font-bold text-xs flex items-center justify-center shadow-xs active:scale-95 transition-transform cursor-pointer"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            triggerJump();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+          }}
+          style={{ touchAction: "manipulation" }}
+          className="flex-1 h-11 min-h-[44px] rounded-xl bg-[#D9531E] dark:bg-[#FACC15] text-white dark:text-[#090A0F] font-bold text-xs flex items-center justify-center shadow-xs active:scale-95 transition-transform duration-75 cursor-pointer select-none touch-manipulation"
         >
           {gameStatus === "game_over" ? "RETRY GAME" : gameStatus === "idle" ? "START GAME" : "JUMP"}
         </button>
         <button
           type="button"
-          onPointerDown={() => {
+          style={{ touchAction: "manipulation" }}
+          onPointerDown={(e) => {
+            e.preventDefault();
             inputRef.current.duck = true;
           }}
           onPointerUp={() => {
@@ -252,7 +283,10 @@ export function OfflineGameCanvas({ onGameStart }: { onGameStart?: () => void })
           onPointerLeave={() => {
             inputRef.current.duck = false;
           }}
-          className="w-20 h-11 min-h-[44px] rounded-xl bg-[#E6DEC9] dark:bg-[#1A1C24] text-[#181513] dark:text-[#E2E8F0] font-semibold text-xs flex items-center justify-center shadow-xs active:scale-95 transition-transform cursor-pointer"
+          onClick={(e) => {
+            e.preventDefault();
+          }}
+          className="w-20 h-11 min-h-[44px] rounded-xl bg-[#E6DEC9] dark:bg-[#1A1C24] text-[#181513] dark:text-[#E2E8F0] font-semibold text-xs flex items-center justify-center shadow-xs active:scale-95 transition-transform duration-75 cursor-pointer select-none touch-manipulation"
         >
           DUCK
         </button>
